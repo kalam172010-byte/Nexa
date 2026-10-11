@@ -1,0 +1,6 @@
+{
+  "name": "Nexa Panel - Gaming Digital Reseller Platform",
+  "description": "High-performance gaming digital product and reseller panel with instant key delivery, automated UPI wallet deposits, multi-tier durations, and complete administration system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

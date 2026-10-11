@@ -1,0 +1,154 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Admin authorization check: bootstrapped runtime admin or registered admin role
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'kalam172010@gmail.com' && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN')
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- CONNECTION HEALTH CHECK ---
+    match /test/{testId} {
+      allow get: if true;
+    }
+
+    // --- USERS COLLECTION ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+
+      // Create own profile upon registration
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        incoming().id == userId &&
+        incoming().email is string &&
+        incoming().email.size() <= 256 &&
+        incoming().username is string &&
+        incoming().username.size() <= 64 &&
+        // New users cannot elevate themselves to ADMIN
+        (incoming().role == 'USER' || incoming().role == 'RESELLER' || isAdmin()) &&
+        incoming().balance is number &&
+        incoming().balance >= 0;
+
+      // Update: user can update specific profile info, while admin can update role & balance
+      allow update: if (
+        (isOwner(userId) &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['username', 'twoFactorEnabled', 'updatedAt']) &&
+         incoming().username is string &&
+         incoming().username.size() <= 64) ||
+        (isAdmin() &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['role', 'balance', 'isBanned', 'updatedAt', 'username']))
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // --- PRODUCTS COLLECTION ---
+    match /products/{productId} {
+      allow get, list: if true; // Public store catalog
+      allow create, update, delete: if isAdmin();
+    }
+
+    // --- PRODUCT VARIANTS COLLECTION ---
+    match /productVariants/{variantId} {
+      allow get, list: if true; // Public duration options
+      allow create, update, delete: if isAdmin();
+    }
+
+    // --- DIGITAL KEYS INVENTORY ---
+    match /digitalKeys/{keyId} {
+      // User can only read digital keys assigned directly to their uid
+      allow get: if isSignedIn() && (existing().assignedUserId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.assignedUserId == request.auth.uid || isAdmin());
+      allow create, delete: if isAdmin();
+      // User can mark an assigned key as USED
+      allow update: if (
+        (isSignedIn() &&
+         existing().assignedUserId == request.auth.uid &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['isUsed', 'status', 'assignedAt']) &&
+         incoming().status in ['ACTIVE', 'USED']) ||
+        isAdmin()
+      );
+    }
+
+    // --- ORDERS COLLECTION ---
+    match /orders/{orderId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // --- TRANSACTIONS COLLECTION ---
+    match /transactions/{transactionId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+
+    // --- DEPOSITS COLLECTION ---
+    match /deposits/{depositId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
+      allow update: if (
+        (isSignedIn() &&
+         existing().userId == request.auth.uid &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['upiRefNumber'])) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // --- SUPPORT TICKETS ---
+    match /supportTickets/{ticketId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
+      allow update: if (
+        (isSignedIn() &&
+         existing().userId == request.auth.uid &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // --- SUPPORT MESSAGES ---
+    match /supportMessages/{messageId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && (incoming().senderId == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+  }
+}

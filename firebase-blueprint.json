@@ -1,0 +1,213 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role, wallet balance, and account metadata.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 64 },
+        "email": { "type": "string", "format": "email", "maxLength": 256 },
+        "role": { "type": "string", "enum": ["USER", "RESELLER", "ADMIN"] },
+        "balance": { "type": "number" },
+        "referralCode": { "type": "string", "maxLength": 32 },
+        "twoFactorEnabled": { "type": "boolean" },
+        "isBanned": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "username", "email", "role", "balance"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Gaming panel or software digital product.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "game": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "maxLength": 64 },
+        "badge": { "type": "string", "maxLength": 32 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "game", "isActive"]
+    },
+    "ProductVariant": {
+      "title": "ProductVariant",
+      "description": "Duration option and pricing tier for a product.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "productId": { "type": "string", "maxLength": 64 },
+        "durationLabel": { "type": "string", "maxLength": 64 },
+        "durationHours": { "type": "number" },
+        "price": { "type": "number" },
+        "resellerPrice": { "type": "number" },
+        "stockCount": { "type": "number" },
+        "externalPid": { "type": "string", "maxLength": 128 },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "productId", "durationLabel", "price", "resellerPrice"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Completed digital key purchase order.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 64 },
+        "variantId": { "type": "string", "maxLength": 64 },
+        "productName": { "type": "string", "maxLength": 128 },
+        "durationLabel": { "type": "string", "maxLength": 64 },
+        "price": { "type": "number" },
+        "status": { "type": "string", "enum": ["COMPLETED", "PENDING", "FAILED"] },
+        "keyCode": { "type": "string", "maxLength": 256 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "productId", "variantId", "price", "status"]
+    },
+    "DigitalKey": {
+      "title": "DigitalKey",
+      "description": "Stock inventory and user-assigned digital license key.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "productId": { "type": "string", "maxLength": 64 },
+        "variantId": { "type": "string", "maxLength": 64 },
+        "keyCode": { "type": "string", "maxLength": 256 },
+        "isUsed": { "type": "boolean" },
+        "assignedUserId": { "type": "string", "maxLength": 128 },
+        "assignedOrderId": { "type": "string", "maxLength": 64 },
+        "assignedAt": { "type": "string" },
+        "expiresAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "USED", "EXPIRED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "productId", "variantId", "keyCode", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Wallet balance activity audit record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["DEPOSIT", "PURCHASE", "REFUND", "COMMISSION"] },
+        "amount": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "description": { "type": "string", "maxLength": 256 },
+        "referenceId": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["SUCCESS", "PENDING", "FAILED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "type", "amount", "status"]
+    },
+    "Deposit": {
+      "title": "Deposit",
+      "description": "UPI wallet deposit request.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "fee": { "type": "number" },
+        "method": { "type": "string", "enum": ["UPI_QR", "ADMIN_SUPPORT"] },
+        "transactionId": { "type": "string", "maxLength": 64 },
+        "gatewayOrderId": { "type": "string", "maxLength": 64 },
+        "qrUrl": { "type": "string", "maxLength": 512 },
+        "checkoutUrl": { "type": "string", "maxLength": 512 },
+        "upiIntent": { "type": "string", "maxLength": 512 },
+        "upiRefNumber": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "SUCCESS", "FAILED", "EXPIRED"] },
+        "expiresAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "amount", "method", "status"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Customer service issue inquiry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 64 },
+        "subject": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "enum": ["Key", "Deposit", "Account", "Reseller", "Other"] },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Urgent"] },
+        "status": { "type": "string", "enum": ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "subject", "category", "status"]
+    },
+    "SupportMessage": {
+      "title": "SupportMessage",
+      "description": "Conversation message inside a support ticket.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "ticketId": { "type": "string", "maxLength": 64 },
+        "senderId": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 64 },
+        "senderRole": { "type": "string", "enum": ["USER", "ADMIN", "SUPPORT"] },
+        "message": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "ticketId", "senderId", "message"]
+    },
+    "TestConnection": {
+      "title": "TestConnection",
+      "description": "Connectivity health check document",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "maxLength": 32 }
+      }
+    }
+  },
+  "firestore": {
+    "/test/{testId}": {
+      "schema": "TestConnection",
+      "description": "Public health check endpoint to validate Firestore connection"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles indexed by their auth UID"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Gaming digital panels catalog"
+    },
+    "/productVariants/{variantId}": {
+      "schema": "ProductVariant",
+      "description": "Pricing duration variants for catalog products"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Completed digital key purchase orders"
+    },
+    "/digitalKeys/{keyId}": {
+      "schema": "DigitalKey",
+      "description": "Inventory and user assigned game panel keys"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Wallet ledger transaction records"
+    },
+    "/deposits/{depositId}": {
+      "schema": "Deposit",
+      "description": "Payment gateway and UPI deposit records"
+    },
+    "/supportTickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Customer support tickets"
+    },
+    "/supportMessages/{messageId}": {
+      "schema": "SupportMessage",
+      "description": "Messages linked to support tickets"
+    }
+  }
+}

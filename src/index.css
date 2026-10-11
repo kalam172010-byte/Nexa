@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Outfit', 'Syne', 'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    letter-spacing: -0.015em;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #070709;
+    color: #f8fafc;
+    font-weight: 700;
+    line-height: 1.5;
+    transition: background-color 0.3s ease;
+  }
+
+  /* Dynamic Background modes */
+  html[data-bg="oled-black"] body {
+    background-color: #000000;
+  }
+  html[data-bg="midnight-void"] body {
+    background-color: #040407;
+  }
+  html[data-bg="deep-slate"] body {
+    background-color: #070709;
+  }
+
+  /* Dynamic Border Radius modes */
+  html[data-radius="sharp"] * {
+    --tw-rounded: 4px;
+  }
+  html[data-radius="sharp"] .rounded-2xl,
+  html[data-radius="sharp"] .rounded-3xl,
+  html[data-radius="sharp"] .rounded-xl {
+    border-radius: 4px !important;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: var(--font-display);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+  }
+
+  .font-mono, code, .tabular-nums {
+    font-family: var(--font-mono);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  button, input, select, textarea {
+    font-family: inherit;
+    font-weight: 700;
+  }
+
+  /* Make bold elements extra punchy */
+  strong, b, .font-bold {
+    font-weight: 800;
+  }
+
+  .font-black, .font-extrabold {
+    font-weight: 900;
+  }
+}
+
+/* Custom cyber scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d0d12;
+}
+::-webkit-scrollbar-thumb {
+  background: #232332;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #e11d48;
+}
+
+/* Cyber card borders & subtle glowing effects */
+.cyber-card {
+  background: linear-gradient(180deg, rgba(20, 20, 30, 0.7) 0%, rgba(13, 13, 18, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+}
+
+.cyber-card-active {
+  background: linear-gradient(180deg, rgba(244, 63, 94, 0.12) 0%, rgba(18, 12, 20, 0.8) 100%);
+  border: 1px solid rgba(244, 63, 94, 0.45);
+  box-shadow: 0 0 25px -5px rgba(244, 63, 94, 0.25);
+}
+
+.glow-crimson {
+  box-shadow: 0 0 20px -3px rgba(244, 63, 94, 0.35);
+}
+
+.glow-crimson-sm {
+  box-shadow: 0 0 10px -2px rgba(244, 63, 94, 0.3);
+}
+
+/* Animation utilities */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+/* Hide scrollbars for horizontal carousels while keeping functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
