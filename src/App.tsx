@@ -96,14 +96,21 @@ const MainLayout: React.FC = () => {
           currentPage={currentPage}
         />
 
-        {/* Live News Marquee Ticker */}
+        {/* Live News Smooth Ticker */}
         {siteConfig.isMarqueeEnabled && siteConfig.marqueeText && (
-          <div className="w-full bg-[#0d0d14] border-b border-white/5 py-1 px-3 overflow-hidden flex items-center gap-2 text-[11px] font-mono font-bold text-slate-300">
-            <span className="shrink-0 text-rose-400 font-extrabold flex items-center gap-1 uppercase text-[10px]">
-              <Sparkles className="w-3 h-3 animate-spin" />
-              <span>LIVE:</span>
+          <div className="w-full bg-[#0d0d14] border-b border-white/5 py-1.5 px-3 overflow-hidden flex items-center gap-2.5 text-[11px] font-mono font-bold text-slate-300 select-none">
+            <span className="shrink-0 text-rose-400 font-extrabold flex items-center gap-1 uppercase text-[10px] bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md">
+              <Sparkles className="w-3 h-3 text-rose-400" />
+              <span>LIVE</span>
             </span>
-            {React.createElement('marquee', { className: 'w-full' }, siteConfig.marqueeText)}
+            <div className="overflow-hidden whitespace-nowrap flex-1">
+              <div className="animate-smooth-ticker flex gap-8 items-center cursor-default">
+                <span>{siteConfig.marqueeText}</span>
+                <span className="text-rose-500 font-black">·</span>
+                <span>{siteConfig.marqueeText}</span>
+                <span className="text-rose-500 font-black">·</span>
+              </div>
+            </div>
           </div>
         )}
 

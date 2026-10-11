@@ -350,16 +350,25 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                 className="bg-[#0b0b12] border border-white/10 rounded-3xl overflow-hidden shadow-2xl shadow-black/80 hover:border-rose-500/30 transition-all duration-300"
               >
                 {/* Product Banner Container */}
-                <div className="relative aspect-[16/8] sm:aspect-[16/7] w-full bg-slate-900 overflow-hidden">
+                <div className="relative aspect-[16/8] sm:aspect-[16/7] w-full bg-[#10101a] overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-rose-950/40 via-[#10101a] to-[#070709] flex items-center justify-center pointer-events-none">
+                    <span className="font-display font-black text-3xl sm:text-4xl text-rose-500/20 uppercase tracking-widest select-none">
+                      {product.game || 'NEXA'}
+                    </span>
+                  </div>
                   <img
                     src={
                       product.imageUrl ||
                       'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80'
                     }
                     alt={product.name}
-                    className="w-full h-full object-cover opacity-85 hover:scale-105 transition-transform duration-700"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                    className="w-full h-full object-cover opacity-85 hover:scale-105 transition-transform duration-700 relative z-0"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b12] via-transparent to-black/60" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b12] via-transparent to-black/60 z-1" />
 
                   {/* Top Badges */}
                   <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">

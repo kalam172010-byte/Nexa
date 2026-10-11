@@ -27,7 +27,7 @@ service cloud.firestore {
     // Admin authorization check: bootstrapped runtime admin or registered admin role
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email == 'kalam172010@gmail.com' && request.auth.token.email_verified == true) ||
+        ((request.auth.token.email == 'kalam172010@gmail.com' || request.auth.token.email == 'kalamkalam1234kd@gmail.com') && request.auth.token.email_verified == true) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN')
       );

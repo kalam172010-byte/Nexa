@@ -45,12 +45,12 @@
       "email": "kalam172010@gmail.com",
       "passwordHash": "",
       "role": "ADMIN",
-      "balance": 1004,
+      "balance": 154,
       "referralCode": "NXC8A9FC",
       "twoFactorEnabled": false,
       "isBanned": false,
       "createdAt": "2026-10-03T07:23:04.943Z",
-      "updatedAt": "2026-10-04T16:35:35.256Z",
+      "updatedAt": "2026-10-11T14:36:21.181Z",
       "apiKey": "nexa_live_8ab3e7c3646b1fa5a108a63bec284025"
     },
     {
@@ -102,42 +102,6 @@
   ],
   "productVariants": [
     {
-      "id": "VAR-549667",
-      "productId": "PROD-BALA-01",
-      "durationLabel": "1 Day",
-      "durationHours": 24,
-      "price": 50,
-      "resellerPrice": 38,
-      "stockCount": 0,
-      "externalPid": "65",
-      "externalDuration": "1 DaYs Apkmod Safe",
-      "isActive": true
-    },
-    {
-      "id": "VAR-587878",
-      "productId": "PROD-BALA-01",
-      "durationLabel": "1 Day",
-      "durationHours": 24,
-      "price": 50,
-      "resellerPrice": 38,
-      "stockCount": 0,
-      "externalPid": "65",
-      "externalDuration": "1 DaYs Apkmod Safe",
-      "isActive": true
-    },
-    {
-      "id": "VAR-209943",
-      "productId": "PROD-042859",
-      "durationLabel": "1 Day",
-      "durationHours": 24,
-      "price": 50,
-      "resellerPrice": 38,
-      "stockCount": 0,
-      "externalPid": "65",
-      "externalDuration": "1 DaYs Apkmod Safe",
-      "isActive": true
-    },
-    {
       "id": "VAR-499189",
       "productId": "PROD-499177",
       "durationLabel": "60 Days",
@@ -175,6 +139,18 @@
       "expiresAt": "2026-10-04T15:31:57.472Z",
       "status": "ACTIVE",
       "createdAt": "2026-10-03T15:31:57.472Z"
+    },
+    {
+      "id": "KEY-1791729381183-0-876c",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "keyCode": "NEXA-EXT-2D68462A-BF9F483F",
+      "isUsed": true,
+      "status": "USED",
+      "assignedUserId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "assignedOrderId": "ORD-EXT-1791729381181-A2DC",
+      "assignedAt": "2026-10-11T14:36:21.183Z",
+      "createdAt": "2026-10-11T14:36:21.183Z"
     }
   ],
   "orders": [
@@ -190,9 +166,32 @@
       "deliveredKeyCode": "HGCH-1DA-78DF6F-8E6196",
       "status": "COMPLETED",
       "createdAt": "2026-10-03T15:31:57.473Z"
+    },
+    {
+      "id": "ORD-EXT-1791729381181-A2DC",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "NEXA VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 850,
+      "deliveredKeyId": "ORD-EXT-1791729381181-A2DC",
+      "deliveredKeyCode": "NEXA-EXT-2D68462A-BF9F483F",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-11T14:36:21.184Z"
     }
   ],
   "transactions": [
+    {
+      "id": "TXN-1791729381181-261FD4",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "type": "PURCHASE",
+      "amount": -850,
+      "description": "External API Purchase (1x): NEXA VIP AIMBOT FF OB55 (60 Days)",
+      "referenceId": "ORD-EXT-1791729381181-A2DC",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-11T14:36:21.181Z"
+    },
     {
       "id": "TXN-1791131827551-A6B3B0",
       "userId": "USR-101",
@@ -858,6 +857,24 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1791729381185-35ce71",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "username": "kalam_kalam",
+      "action": "RESELLER_API_KEY_SUCCESS",
+      "details": "External API generated 1x keys for NEXA VIP AIMBOT FF OB55 (60 Days) | Total: ₹850",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-11T14:36:21.185Z"
+    },
+    {
+      "id": "LOG-1791728722831-fe0ed1",
+      "userId": "USR-001",
+      "username": "nexa_admin",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-11T14:25:22.831Z"
+    },
     {
       "id": "LOG-1791131827553-efc972",
       "userId": "USR-101",

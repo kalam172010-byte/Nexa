@@ -13,6 +13,7 @@
     text-rendering: optimizeLegibility;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     letter-spacing: -0.015em;
+    scroll-behavior: smooth;
   }
 
   body {
@@ -22,6 +23,8 @@
     font-weight: 700;
     line-height: 1.5;
     transition: background-color 0.3s ease;
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* Dynamic Background modes */
@@ -129,3 +132,25 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Smooth continuous news ticker */
+@keyframes continuousTicker {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-smooth-ticker {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: continuousTicker 28s linear infinite;
+  will-change: transform;
+}
+
+.animate-smooth-ticker:hover {
+  animation-play-state: paused;
+}
+

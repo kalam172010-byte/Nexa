@@ -153,7 +153,12 @@ export class AuthController {
       const normalizedEmail = email.trim().toLowerCase();
       let user = db.users.find(u => u.id === uid || u.email.toLowerCase() === normalizedEmail);
 
-      const isAdminEmail = normalizedEmail === 'kalam172010@gmail.com';
+      const ADMIN_EMAILS = [
+        'kalamkalam1234kd@gmail.com',
+        'kalam172010@gmail.com',
+        'admin@example.com',
+      ];
+      const isAdminEmail = ADMIN_EMAILS.includes(normalizedEmail);
 
       if (!user) {
         const username = displayName

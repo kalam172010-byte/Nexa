@@ -80,6 +80,10 @@ export class Database {
         if (!parsed.siteConfig || !parsed.siteConfig.siteTitle) {
           parsed.siteConfig = this.getDefaultSiteConfig();
         }
+        if (Array.isArray(parsed.products) && Array.isArray(parsed.productVariants)) {
+          const productIds = new Set(parsed.products.map((p: any) => p.id));
+          parsed.productVariants = parsed.productVariants.filter((v: any) => productIds.has(v.productId));
+        }
         return parsed;
       } catch (err) {
         console.error('Failed to parse database file, reinitializing', err);

@@ -34,6 +34,16 @@ async function startServer() {
   // Mount backend REST APIs
   app.use('/api', apiRouter);
 
+  // Support external reseller panel calls directly on root /reseller_v1.php or /api/reseller/buy
+  app.all('/reseller_v1.php', (req, res, next) => {
+    req.url = '/reseller_v1.php';
+    apiRouter(req, res, next);
+  });
+  app.all('/api/reseller/buy', (req, res, next) => {
+    req.url = '/v1/reseller/buy';
+    apiRouter(req, res, next);
+  });
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', service: 'Nexa Panel API', timestamp: new Date().toISOString() });

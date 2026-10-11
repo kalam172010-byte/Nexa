@@ -103,15 +103,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await syncUserWithBackend(firebaseUser);
         } catch (err) {
           console.error('Error during Firebase auth state synchronization:', err);
-          setUser(null);
-          setToken(null);
-          localStorage.removeItem('nexa_auth_token');
+          const storedToken = localStorage.getItem('nexa_auth_token');
+          if (storedToken) {
+            try {
+              const data = await api.getMe();
+              if (data?.user) {
+                setUser(data.user);
+                setToken(storedToken);
+              } else {
+                setUser(null);
+                setToken(null);
+                localStorage.removeItem('nexa_auth_token');
+              }
+            } catch {
+              setUser(null);
+              setToken(null);
+              localStorage.removeItem('nexa_auth_token');
+            }
+          } else {
+            setUser(null);
+            setToken(null);
+          }
         }
       } else {
-        // When not signed in via Firebase, strictly require user to log in first
-        setUser(null);
-        setToken(null);
-        localStorage.removeItem('nexa_auth_token');
+        // If no Firebase user, check if we have a valid backend session token (e.g., Demo or password login)
+        const storedToken = localStorage.getItem('nexa_auth_token');
+        if (storedToken) {
+          try {
+            const data = await api.getMe();
+            if (data?.user) {
+              setUser(data.user);
+              setToken(storedToken);
+            } else {
+              setUser(null);
+              setToken(null);
+              localStorage.removeItem('nexa_auth_token');
+            }
+          } catch {
+            setUser(null);
+            setToken(null);
+            localStorage.removeItem('nexa_auth_token');
+          }
+        } else {
+          setUser(null);
+          setToken(null);
+        }
       }
       setIsLoading(false);
     });
