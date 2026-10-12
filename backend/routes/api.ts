@@ -15,8 +15,11 @@ const router = Router();
 // --- Auth Routes ---
 router.post('/auth/register', AuthController.register);
 router.post('/auth/login', AuthController.login);
+router.post('/auth/otp/send', AuthController.sendOtp);
+router.post('/auth/otp/verify', AuthController.verifyOtp);
+router.get('/auth/email-status', AuthController.getEmailStatus);
 router.post('/auth/firebase-sync', AuthController.firebaseSync);
-router.post('/auth/demo-login', AuthController.quickDemoLogin);
+router.post('/auth/reset-password', AuthController.resetPassword);
 router.get('/auth/me', authenticate as any, AuthController.getCurrentUser as any);
 router.post('/auth/change-password', authenticate as any, AuthController.changePassword as any);
 router.post('/auth/toggle-2fa', authenticate as any, AuthController.toggleTwoFactor as any);
@@ -85,6 +88,7 @@ router.get('/admin/users', ...adminGuard, AdminController.getUsers as any);
 router.patch('/admin/users/:id/role', ...adminGuard, AdminController.updateUserRole as any);
 router.post('/admin/users/:id/adjust-balance', ...adminGuard, AdminController.adjustUserBalance as any);
 router.patch('/admin/users/:id/ban', ...adminGuard, AdminController.toggleUserBan as any);
+router.patch('/admin/users/:id/password', ...adminGuard, AdminController.resetUserPassword as any);
 
 router.post('/admin/products', ...adminGuard, AdminController.createProduct as any);
 router.post('/admin/products/auto-assign-pids', ...adminGuard, AdminController.autoAssignPids as any);
@@ -120,6 +124,15 @@ router.post('/admin/settings/reseller/generate-test', ...adminGuard, AdminContro
 router.get('/admin/settings/site', ...adminGuard, AdminController.getSiteSettings as any);
 router.patch('/admin/settings/site', ...adminGuard, AdminController.updateSiteSettings as any);
 
+// --- Admin Email & IMAP/SMTP Setup Settings ---
+router.get('/admin/settings/email', ...adminGuard, AdminController.getEmailSettings as any);
+router.patch('/admin/settings/email', ...adminGuard, AdminController.updateEmailSettings as any);
+router.post('/admin/settings/email/test', ...adminGuard, AdminController.testEmailConnection as any);
+
 router.get('/admin/logs', ...adminGuard, AdminController.getActivityLogs as any);
+
+// --- Database Backup & Migration Routes ---
+router.get('/admin/database/export', ...adminGuard, AdminController.exportDatabase as any);
+router.post('/admin/database/import', ...adminGuard, AdminController.importDatabase as any);
 
 export default router;

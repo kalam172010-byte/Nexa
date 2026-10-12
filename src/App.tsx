@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
 import { ToastProvider } from './context/ToastContext.js';
 import { SiteProvider, useSite } from './context/SiteContext.js';
@@ -12,7 +12,7 @@ import { Sidebar } from './components/Sidebar.js';
 import { BottomNav } from './components/BottomNav.js';
 import { SideDrawer } from './components/SideDrawer.js';
 import { ResellerUpgradeModal } from './components/ResellerUpgradeModal.js';
-import { Megaphone, MessageSquare, ExternalLink, Sparkles } from 'lucide-react';
+import { Megaphone, MessageSquare, ExternalLink, Sparkles, ChevronRight, LayoutDashboard } from 'lucide-react';
 
 // Pages
 import { DashboardPage } from './pages/DashboardPage.js';
@@ -27,6 +27,20 @@ import { ResellerApiPage } from './pages/ResellerApiPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { AuthPage } from './pages/AuthPage.js';
 
+const PAGE_TITLES: Record<string, string> = {
+  dashboard: 'Dashboard',
+  deposit: 'Add Funds & Wallet',
+  buy: 'Buy Free Fire Keys',
+  keys: 'My License Keys',
+  history: 'Order History',
+  tickets: 'Support Tickets',
+  refer: 'Refer & Earn',
+  profile: 'My Account & Profile',
+  api: 'Reseller API Documentation',
+  admin: 'Admin Control Panel',
+  auth: 'Login & Register',
+};
+
 const MainLayout: React.FC = () => {
   const { user, isLoading, role } = useAuth();
   const { siteConfig } = useSite();
@@ -34,11 +48,31 @@ const MainLayout: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isUpgradeOpen, setIsUpgradeOpen] = useState<boolean>(false);
 
+  // Sync document title with current active page and site title (e.g. Dashboard • KALAM FF PANEL)
+  useEffect(() => {
+    const pageName = PAGE_TITLES[currentPage] || 'Dashboard';
+    const siteName = siteConfig.siteTitle || 'KALAM FF PANEL';
+    document.title = `${pageName} • ${siteName}`;
+  }, [currentPage, siteConfig.siteTitle]);
+
+  // Read URL hash on initial mount and respond to browser Back/Forward buttons
+  useEffect(() => {
+    const syncFromHash = () => {
+      const hash = window.location.hash.replace('#', '').trim();
+      if (hash && PAGE_TITLES[hash]) {
+        setCurrentPage(hash);
+      }
+    };
+    syncFromHash();
+    window.addEventListener('hashchange', syncFromHash);
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500/20 to-red-600/30 border border-rose-500/40 text-rose-400 flex items-center justify-center font-display font-black text-xl animate-pulse shadow-[0_0_25px_rgba(244,63,94,0.4)]">
-          {siteConfig.siteTitle ? siteConfig.siteTitle.slice(0, 2).toUpperCase() : 'NX'}
+          {siteConfig.siteTitle ? siteConfig.siteTitle.slice(0, 2).toUpperCase() : 'KF'}
         </div>
         <div className="font-mono text-xs text-slate-400 tracking-widest uppercase animate-pulse">
           INITIALIZING {siteConfig.siteTitle.toUpperCase()}...
@@ -55,9 +89,11 @@ const MainLayout: React.FC = () => {
   const handleNavigate = (pageId: string) => {
     if (!user) {
       setCurrentPage('auth');
+      window.location.hash = 'auth';
       return;
     }
     setCurrentPage(pageId);
+    window.location.hash = pageId;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -114,8 +150,33 @@ const MainLayout: React.FC = () => {
           </div>
         )}
 
+        {/* Interactive Breadcrumb & Active Page Bar */}
+        <div className="w-full bg-[#08080d]/85 border-b border-white/5 px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between text-xs backdrop-blur-md">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+            <button
+              onClick={() => handleNavigate('dashboard')}
+              className="text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5 font-mono text-[11px] shrink-0 group"
+              title="Return to Dashboard"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-rose-500 group-hover:scale-110 transition-transform" />
+              <span>{siteConfig.siteTitle || 'KALAM FF PANEL'}</span>
+            </button>
+            <ChevronRight className="w-3 h-3 text-slate-600 shrink-0" />
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 font-display font-bold uppercase tracking-wider text-[11px] shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{PAGE_TITLES[currentPage] || currentPage.toUpperCase()}</span>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono text-slate-400 shrink-0">
+            <span className="text-slate-400">ACTIVE:</span>
+            <span className="text-rose-300 font-bold bg-white/[0.04] border border-white/10 px-2 py-0.5 rounded text-[10px] uppercase tracking-wider">
+              #{currentPage}
+            </span>
+          </div>
+        </div>
+
         {/* Page Content Viewport */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 md:pb-8 max-w-7xl w-full mx-auto">
           {currentPage === 'dashboard' && (
             <DashboardPage
               onNavigate={handleNavigate}

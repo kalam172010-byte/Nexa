@@ -6,6 +6,8 @@ import { KeyService } from '../services/keyService';
 import { WalletService } from '../services/walletService';
 import { PaymentGatewayAdapter } from '../services/paymentAdapter';
 import { ResellerApiService } from '../services/resellerApi';
+import { emailService } from '../services/emailService';
+import { hashPassword } from '../db/seed';
 import { Product, ProductVariant } from '../models/types';
 
 export class AdminController {
@@ -72,14 +74,27 @@ export class AdminController {
     try {
       const { search } = req.query;
       let users = db.users.map(({ passwordHash: _, ...safeUser }) => {
+        const fullUser = db.users.find(u => u.id === safeUser.id);
         const userOrders = db.orders.filter(o => o.userId === safeUser.id);
         const userDeposits = db.deposits.filter(d => d.userId === safeUser.id && d.status === 'SUCCESS');
         const userKeys = db.digitalKeys.filter(k => k.assignedUserId === safeUser.id);
         const totalSpent = userOrders.reduce((sum, o) => sum + (o.pricePaid || 0), 0);
         const totalDeposited = userDeposits.reduce((sum, d) => sum + (d.amount || 0), 0);
 
+        const hasPassword = Boolean(fullUser?.passwordHash);
+        const isGoogleUser = !hasPassword && Boolean(fullUser?.id && fullUser.id.length > 20 && !fullUser.id.startsWith('USR-'));
+        const authProvider = hasPassword
+          ? 'password'
+          : isGoogleUser
+          ? 'google.com'
+          : 'email_otp';
+
         return {
           ...safeUser,
+          hasPassword,
+          authProvider,
+          providerDisplay: hasPassword ? 'Email & Password' : isGoogleUser ? 'Google Account' : 'Email OTP',
+          passwordStatus: hasPassword ? 'Encrypted (SHA-256 / Firebase Standard)' : 'None (OAuth / OTP Only)',
           totalOrdersCount: userOrders.length,
           totalSpent,
           totalDeposited,
@@ -187,6 +202,42 @@ export class AdminController {
       res.json({ message: `User ${target.isBanned ? 'suspended' : 'reactivated'}.`, isBanned: target.isBanned });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to toggle ban status.' });
+    }
+  }
+
+  public static async resetUserPassword(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { newPassword } = req.body;
+
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 4) {
+        res.status(400).json({ error: 'New password must be at least 4 characters long.' });
+        return;
+      }
+
+      const target = db.users.find(u => u.id === id);
+      if (!target) {
+        res.status(404).json({ error: 'User not found.' });
+        return;
+      }
+
+      target.passwordHash = hashPassword(newPassword.trim());
+      target.updatedAt = new Date().toISOString();
+      db.save();
+
+      db.logActivity(
+        req.user?.id,
+        req.user?.username,
+        'ADMIN_PASSWORD_RESET',
+        `Admin updated password for user @${target.username} (${target.email})`
+      );
+
+      res.json({
+        success: true,
+        message: `Password for @${target.username} successfully updated to: ${newPassword.trim()}`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update user password.' });
     }
   }
 
@@ -869,6 +920,139 @@ export class AdminController {
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Upgrade failed.' });
+    }
+  }
+
+  // --- Email & IMAP/SMTP Setup ---
+  public static async getEmailSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const config = { ...db.emailConfig };
+      // Mask passwords for security
+      const safeConfig = {
+        ...config,
+        smtpPass: config.smtpPass ? (config.smtpPass.length > 4 ? `••••••••${config.smtpPass.slice(-4)}` : '••••••••') : '',
+        imapPass: config.imapPass ? (config.imapPass.length > 4 ? `••••••••${config.imapPass.slice(-4)}` : '••••••••') : '',
+        hasSmtpPass: Boolean(config.smtpPass && config.smtpPass.length > 0),
+        hasImapPass: Boolean(config.imapPass && config.imapPass.length > 0),
+      };
+      res.json({ config: safeConfig });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to fetch email settings.' });
+    }
+  }
+
+  public static async updateEmailSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const body = req.body;
+      const current = db.emailConfig;
+
+      const updatedData: any = {
+        ...body,
+      };
+
+      // Only update password if user passed a new unmasked password
+      if (!body.smtpPass || body.smtpPass.includes('••••')) {
+        delete updatedData.smtpPass;
+      }
+      if (!body.imapPass || body.imapPass.includes('••••')) {
+        delete updatedData.imapPass;
+      }
+
+      if (body.smtpPort) updatedData.smtpPort = Number(body.smtpPort);
+      if (body.imapPort) updatedData.imapPort = Number(body.imapPort);
+      if (body.otpExpiryMinutes) updatedData.otpExpiryMinutes = Number(body.otpExpiryMinutes);
+
+      const saved = db.updateEmailConfig(updatedData);
+
+      db.logActivity(
+        req.user?.id,
+        req.user?.username,
+        'EMAIL_CONFIG_UPDATE',
+        `Admin updated Email/IMAP/SMTP configuration: Sender=${saved.senderEmail}, Enabled=${saved.enabled}`
+      );
+
+      res.json({
+        message: 'Email & IMAP/SMTP settings saved successfully.',
+        config: {
+          ...saved,
+          smtpPass: saved.smtpPass ? '••••••••' : '',
+          imapPass: saved.imapPass ? '••••••••' : '',
+          hasSmtpPass: Boolean(saved.smtpPass),
+          hasImapPass: Boolean(saved.imapPass),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update email settings.' });
+    }
+  }
+
+  public static async testEmailConnection(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { testEmail, configOverride } = req.body;
+      const testResult = await emailService.testEmailConfiguration(configOverride, testEmail);
+
+      if (testResult.success) {
+        db.logActivity(
+          req.user?.id,
+          req.user?.username,
+          'EMAIL_TEST_SUCCESS',
+          `Successfully verified mail connection and sent test OTP to ${testEmail || db.emailConfig.senderEmail}`
+        );
+      } else {
+        db.logActivity(
+          req.user?.id,
+          req.user?.username,
+          'EMAIL_TEST_FAILED',
+          `Mail server test failed: ${testResult.message}`
+        );
+      }
+
+      res.json(testResult);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Email test execution failed.' });
+    }
+  }
+
+  public static async exportDatabase(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const data = db.getRawData();
+      const filename = `nexa_panel_backup_${new Date().toISOString().split('T')[0]}.json`;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      db.logActivity(req.user?.id, req.user?.username, 'DATABASE_BACKUP_DOWNLOAD', 'Admin exported full database snapshot');
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to export database.' });
+    }
+  }
+
+  public static async importDatabase(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const backupData = req.body;
+      if (!backupData || !Array.isArray(backupData.users)) {
+        res.status(400).json({ error: 'Invalid database backup structure. Expected JSON with users array.' });
+        return;
+      }
+
+      db.replaceData(backupData);
+      db.logActivity(
+        req.user?.id,
+        req.user?.username,
+        'DATABASE_RESTORE',
+        `Restored database snapshot with ${backupData.users.length} users and ${(backupData.orders || []).length} orders`
+      );
+
+      res.json({
+        message: 'Database snapshot successfully restored! All user balances, accounts, and orders are intact.',
+        stats: {
+          usersCount: db.users.length,
+          ordersCount: db.orders.length,
+          depositsCount: db.deposits.length,
+          keysCount: db.digitalKeys.length,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to restore database.' });
     }
   }
 }

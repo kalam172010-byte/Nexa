@@ -353,7 +353,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                 <div className="relative aspect-[16/8] sm:aspect-[16/7] w-full bg-[#10101a] overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-br from-rose-950/40 via-[#10101a] to-[#070709] flex items-center justify-center pointer-events-none">
                     <span className="font-display font-black text-3xl sm:text-4xl text-rose-500/20 uppercase tracking-widest select-none">
-                      {product.game || 'NEXA'}
+                      {product.game || 'FREE FIRE'}
                     </span>
                   </div>
                   <img

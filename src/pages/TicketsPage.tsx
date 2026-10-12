@@ -217,7 +217,7 @@ export const TicketsPage: React.FC = () => {
                     {isAdmin ? (
                       <span className="text-rose-400 font-bold flex items-center gap-1">
                         <ShieldCheck className="w-3 h-3" />
-                        NEXA SUPPORT
+                        KALAM FF SUPPORT
                       </span>
                     ) : (
                       <span>@{msg.senderName}</span>

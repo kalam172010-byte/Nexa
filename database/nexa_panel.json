@@ -11,7 +11,7 @@
       "twoFactorEnabled": false,
       "isBanned": false,
       "createdAt": "2026-10-03T07:21:44.786Z",
-      "updatedAt": "2026-10-04T16:37:07.551Z"
+      "updatedAt": "2026-10-12T12:36:53.965Z"
     },
     {
       "id": "USR-202",
@@ -43,7 +43,7 @@
       "id": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
       "username": "kalam_kalam",
       "email": "kalam172010@gmail.com",
-      "passwordHash": "",
+      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
       "role": "ADMIN",
       "balance": 154,
       "referralCode": "NXC8A9FC",
@@ -57,21 +57,61 @@
       "id": "4mkBZjUVhYW59O8sxLFQwH5IcU33",
       "username": "kalam_akash",
       "email": "kalamakash445@gmail.com",
-      "passwordHash": "",
+      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
       "role": "USER",
       "balance": 0,
       "referralCode": "NXB26378",
       "twoFactorEnabled": false,
       "isBanned": false,
       "createdAt": "2026-10-03T07:26:00.980Z",
-      "updatedAt": "2026-10-03T08:30:39.617Z",
+      "updatedAt": "2026-10-12T12:12:07.237Z",
       "apiKey": "nexa_live_b1a309dead689c294fbface0cdc666ca"
+    },
+    {
+      "id": "USR-1791767493056",
+      "username": "test_user_88",
+      "email": "test88@example.com",
+      "passwordHash": "047a79d51dcb325680253fd2f95cf7772e44d43f70cfc80b46ce646fc1c4f35c",
+      "role": "USER",
+      "balance": 0,
+      "referralCode": "NX531FB6",
+      "twoFactorEnabled": false,
+      "isBanned": false,
+      "createdAt": "2026-10-12T01:11:33.056Z",
+      "updatedAt": "2026-10-12T12:12:17.336Z"
+    },
+    {
+      "id": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "email": "kalamkalam1234kd@gmail.com",
+      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
+      "role": "ADMIN",
+      "balance": 5000,
+      "referralCode": "NXA73B8E",
+      "twoFactorEnabled": false,
+      "isBanned": false,
+      "createdAt": "2026-10-12T01:11:37.905Z",
+      "updatedAt": "2026-10-12T01:11:37.905Z",
+      "apiKey": "nexa_live_68b3acdb11737f8cdd646c17770d2e83"
+    },
+    {
+      "id": "USR-1791807997584",
+      "username": "newplayer77",
+      "email": "newplayer77@gmail.com",
+      "passwordHash": "",
+      "role": "USER",
+      "balance": 0,
+      "referralCode": "NXE3D3F5",
+      "twoFactorEnabled": false,
+      "isBanned": false,
+      "createdAt": "2026-10-12T12:26:37.584Z",
+      "updatedAt": "2026-10-12T12:26:37.584Z"
     }
   ],
   "products": [
     {
       "id": "PROD-499177",
-      "name": "NEXA VIP AIMBOT FF OB55",
+      "name": "KALAM VIP AIMBOT FF OB55",
       "game": "FREEFIRE",
       "description": "Auto aimbot and radar location",
       "category": "FREEFIRE",
@@ -816,28 +856,28 @@
     "defaultAndroidId": "0b9b969bc2e7997b"
   },
   "siteConfig": {
-    "siteTitle": "Nexa Panel",
-    "siteTagline": "Gaming Digital Reseller Platform",
+    "siteTitle": "KALAM FF PANEL",
+    "siteTagline": "Free Fire VIP Digital Keys & Reseller Panel",
     "logoUrl": "",
     "faviconUrl": "",
     "currencySymbol": "₹",
     "currencyCode": "INR",
-    "footerText": "The premier automated digital keys and panels reseller infrastructure.",
-    "copyrightText": "© 2026 Nexa Gaming Systems. All rights reserved.",
+    "footerText": "The premier automated Free Fire digital keys and panel reseller infrastructure.",
+    "copyrightText": "© 2026 KALAM FF PANEL. All rights reserved.",
     "accentTheme": "crimson",
     "backgroundStyle": "deep-slate",
     "glowIntensity": "vibrant",
     "borderRadius": "rounded",
     "fontStyle": "ultra-bold",
     "isAnnouncementEnabled": false,
-    "announcementText": "🔥 OB55 UPDATE ACTIVE! Automated Instant Digital Key Delivery 24/7 with Live Reseller API",
+    "announcementText": "🔥 OB55 UPDATE ACTIVE! Kalam FF Instant Digital Key Delivery 24/7 with Live Reseller API",
     "announcementType": "promo",
     "announcementLink": "",
     "isMarqueeEnabled": false,
-    "marqueeText": "⚡ Fast UPI Auto Deposit | Instant Digital Key Delivery | Non-Root & iOS Supported | 100% Anti-Ban Menus | 24/7 Live Support",
-    "heroTitle": "DOMINATE THE GAME WITH PRO DIGITAL PANELS",
+    "marqueeText": "⚡ Fast UPI Auto Deposit | Instant Free Fire Key Delivery | Non-Root & iOS Supported | 100% Anti-Ban Menus | 24/7 Live Support",
+    "heroTitle": "DOMINATE FREE FIRE WITH KALAM FF VIP PANEL",
     "heroSubtitle": "Instant Key Delivery · Automated Wallet Deposits · Wholesale VIP Pricing for Resellers",
-    "heroBadgeText": "OFFICIAL GAMING RESELLER PLATFORM",
+    "heroBadgeText": "OFFICIAL KALAM FF RESELLER PLATFORM",
     "telegramChannelUrl": "https://t.me/nexa_gaming_official",
     "telegramSupportUser": "@nexa_support_admin",
     "whatsappNumber": "+918056317218",
@@ -849,7 +889,7 @@
     "resellerUpgradePrice": 299,
     "referralCommissionPct": 5,
     "accountSafetyBalanceText": "Keep ₹500+ balance for account safety.",
-    "adminPanelTitle": "NEXA SYSTEM CONTROL PANEL",
+    "adminPanelTitle": "KALAM FF SYSTEM CONTROL PANEL",
     "adminHeaderNotice": "SUPER ADMIN LIVE REALTIME SESSION ACTIVE",
     "adminAccentColor": "#e11d48",
     "adminStatusBadge": "SUPER PRIVILEGES",
@@ -857,6 +897,228 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1791809714255-32a8d8",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DATABASE_BACKUP_DOWNLOAD",
+      "details": "Admin exported full database snapshot",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:55:14.255Z"
+    },
+    {
+      "id": "LOG-1791809705890-b8cba0",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:55:05.890Z"
+    },
+    {
+      "id": "LOG-1791808617739-510842",
+      "userId": "USR-101",
+      "username": "pro_gamer99",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:36:57.739Z"
+    },
+    {
+      "id": "LOG-1791808613965-60d0f8",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "ADMIN_PASSWORD_RESET",
+      "details": "Admin updated password for user @pro_gamer99 (user@example.com)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:36:53.965Z"
+    },
+    {
+      "id": "LOG-1791808606427-1ffbdd",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:36:46.427Z"
+    },
+    {
+      "id": "LOG-1791808508562-82a6f2",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Email Password or App Password is required to test SMTP connection.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:35:08.562Z"
+    },
+    {
+      "id": "LOG-1791808508159-01fcdd",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Email Password or App Password is required to test SMTP connection.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:35:08.159Z"
+    },
+    {
+      "id": "LOG-1791808283751-7e5e97",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:31:23.752Z"
+    },
+    {
+      "id": "LOG-1791808213292-6f8d1d",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:30:13.292Z"
+    },
+    {
+      "id": "LOG-1791808210949-073e78",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "OTP_LOGIN",
+      "details": "Logged in via Email OTP: kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:30:10.949Z"
+    },
+    {
+      "id": "LOG-1791808208737-cdcb3b",
+      "username": "kalamkalam1234kd@gmail.com",
+      "action": "EMAIL_OTP_SIMULATED",
+      "details": "No SMTP App Password configured in Admin Panel. Generated preview OTP code: 842922",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:30:08.737Z"
+    },
+    {
+      "id": "LOG-1791808010407-ae62b0",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Email Password or App Password is required to test SMTP connection.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:26:50.407Z"
+    },
+    {
+      "id": "LOG-1791808007010-8443ca",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=kalamkalam1234kd@gmail.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:26:47.010Z"
+    },
+    {
+      "id": "LOG-1791808000383-d898a8",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:26:40.383Z"
+    },
+    {
+      "id": "LOG-1791807997584-97f1ea",
+      "userId": "USR-1791807997584",
+      "username": "newplayer77",
+      "action": "OTP_SIGNUP",
+      "details": "Registered via Email OTP: newplayer77@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:26:37.584Z"
+    },
+    {
+      "id": "LOG-1791807994917-6c03a8",
+      "username": "newplayer77@gmail.com",
+      "action": "EMAIL_OTP_SIMULATED",
+      "details": "No SMTP App Password configured in Admin Panel. Generated preview OTP code: 726225",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:26:34.917Z"
+    },
+    {
+      "id": "LOG-1791807992000-96bb45",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "OTP_LOGIN",
+      "details": "Logged in via Email OTP: kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:26:32.000Z"
+    },
+    {
+      "id": "LOG-1791807989162-1fdb2d",
+      "username": "kalamkalam1234kd@gmail.com",
+      "action": "EMAIL_OTP_SIMULATED",
+      "details": "No SMTP App Password configured in Admin Panel. Generated preview OTP code: 986312",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:26:29.163Z"
+    },
+    {
+      "id": "LOG-1791807137336-8c3685",
+      "userId": "USR-1791767493056",
+      "username": "test_user_88",
+      "action": "PASSWORD_RESET",
+      "details": "User reset password successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:12:17.336Z"
+    },
+    {
+      "id": "LOG-1791807127237-54bd08",
+      "userId": "4mkBZjUVhYW59O8sxLFQwH5IcU33",
+      "username": "kalam_akash",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:12:07.237Z"
+    },
+    {
+      "id": "LOG-1791807122159-8f6c31",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T12:12:02.159Z"
+    },
+    {
+      "id": "LOG-1791767562876-58db62",
+      "userId": "USR-001",
+      "username": "nexa_admin",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T01:12:42.876Z"
+    },
+    {
+      "id": "LOG-1791767497905-16b3c3",
+      "userId": "sample_uid_1",
+      "username": "kalam_kd",
+      "action": "FIREBASE_AUTH_SIGNUP",
+      "details": "Registered via Firebase: kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T01:11:37.905Z"
+    },
+    {
+      "id": "LOG-1791767493056-b27f3c",
+      "userId": "USR-1791767493056",
+      "username": "test_user_88",
+      "action": "USER_REGISTER",
+      "details": "New user registered via referral: None",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T01:11:33.056Z"
+    },
+    {
+      "id": "LOG-1791767489807-33a03c",
+      "userId": "USR-001",
+      "username": "nexa_admin",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-12T01:11:29.807Z"
+    },
     {
       "id": "LOG-1791729381185-35ce71",
       "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
@@ -1936,5 +2198,23 @@
     "PROD-CARROM-05",
     "PROD-709750",
     "PROD-042859"
-  ]
+  ],
+  "emailConfig": {
+    "enabled": true,
+    "protocol": "smtp",
+    "senderEmail": "kalamkalam1234kd@gmail.com",
+    "senderName": "KALAM FF PANEL",
+    "smtpHost": "smtp.gmail.com",
+    "smtpPort": 587,
+    "secure": false,
+    "smtpUser": "kalamkalam1234kd@gmail.com",
+    "smtpPass": "",
+    "imapHost": "imap.gmail.com",
+    "imapPort": 993,
+    "imapUser": "kalamkalam1234kd@gmail.com",
+    "imapPass": "",
+    "imapSecure": true,
+    "otpExpiryMinutes": 10,
+    "allowOtpSignup": true
+  }
 }

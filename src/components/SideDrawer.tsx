@@ -39,7 +39,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
 
   const brandInitials = siteConfig.siteTitle
     ? siteConfig.siteTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
-    : 'NX';
+    : 'KF';
 
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
 
@@ -76,10 +76,10 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
             </div>
             <div>
               <div className="font-display font-black text-sm tracking-wider text-white uppercase truncate max-w-[140px]">
-                {siteConfig.siteTitle || 'NEXA PANEL'}
+                {siteConfig.siteTitle || 'KALAM FF PANEL'}
               </div>
               <div className="text-[10px] text-slate-400 font-mono uppercase truncate max-w-[140px]">
-                {siteConfig.siteTagline || 'GAMING RESELLER'}
+                {siteConfig.siteTagline || 'FREE FIRE RESELLER'}
               </div>
             </div>
           </div>
@@ -212,7 +212,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
 
         {/* Footer info */}
         <div className="p-3 border-t border-white/5 text-center text-[10px] text-slate-400 font-mono">
-          NEXA PANEL v2.4 · SECURE RESELLER
+          KALAM FF PANEL v2.4 · SECURE RESELLER
         </div>
       </div>
     </div>

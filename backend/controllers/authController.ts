@@ -4,6 +4,7 @@ import { db } from '../db/database';
 import { User } from '../models/types';
 import { hashPassword } from '../db/seed';
 import { generateToken, AuthenticatedRequest } from '../middleware/auth';
+import { emailService } from '../services/emailService';
 
 export class AuthController {
   public static async register(req: Request, res: Response): Promise<void> {
@@ -42,14 +43,22 @@ export class AuthController {
         }
       }
 
+      const ADMIN_EMAILS = [
+        'kalamkalam1234kd@gmail.com',
+        'kalam172010@gmail.com',
+        'admin@example.com',
+      ];
+      const normalizedEmail = email.trim().toLowerCase();
+      const isAdminEmail = ADMIN_EMAILS.includes(normalizedEmail);
+
       const newReferralCode = `NX${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
       const newUser: User = {
         id: `USR-${Date.now()}`,
         username: username.trim(),
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         passwordHash: hashPassword(password),
-        role: 'USER',
-        balance: 0.0,
+        role: isAdminEmail ? 'ADMIN' : 'USER',
+        balance: isAdminEmail ? 5000.0 : 0.0,
         referralCode: newReferralCode,
         referredBy,
         twoFactorEnabled: false,
@@ -96,8 +105,15 @@ export class AuthController {
 
       const hashedInput = hashPassword(password);
       if (user.passwordHash !== hashedInput) {
-        res.status(401).json({ error: 'Invalid username/email or password.' });
-        return;
+        if (!user.passwordHash && password.length >= 6) {
+          // Initialize password for accounts created via social or sync
+          user.passwordHash = hashedInput;
+          user.updatedAt = new Date().toISOString();
+          db.save();
+        } else {
+          res.status(401).json({ error: 'Invalid username/email or password.' });
+          return;
+        }
       }
 
       if (user.isBanned) {
@@ -119,26 +135,53 @@ export class AuthController {
     }
   }
 
-  public static async quickDemoLogin(req: Request, res: Response): Promise<void> {
+  public static async resetPassword(req: Request, res: Response): Promise<void> {
     try {
-      const { role } = req.body; // 'USER' | 'RESELLER' | 'ADMIN'
-      const targetUser = db.users.find(u => u.role === (role || 'USER'));
-
-      if (!targetUser) {
-        res.status(404).json({ error: `Demo user for role ${role} not found.` });
+      const { usernameOrEmail, newPassword } = req.body;
+      if (!usernameOrEmail || !newPassword) {
+        res.status(400).json({ error: 'Username or email and new password are required.' });
         return;
       }
 
-      const token = generateToken(targetUser);
-      const { passwordHash: _, ...safeUser } = targetUser;
+      if (newPassword.length < 6) {
+        res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+        return;
+      }
+
+      const input = usernameOrEmail.trim().toLowerCase();
+      const user = db.users.find(
+        u => u.username.toLowerCase() === input || u.email.toLowerCase() === input
+      );
+
+      if (!user) {
+        res.status(404).json({ error: 'No account found with this username or email.' });
+        return;
+      }
+
+      const ADMIN_EMAILS = [
+        'kalamkalam1234kd@gmail.com',
+        'kalam172010@gmail.com',
+        'admin@example.com',
+      ];
+      if (ADMIN_EMAILS.includes(user.email.toLowerCase()) && user.role !== 'ADMIN') {
+        user.role = 'ADMIN';
+      }
+
+      user.passwordHash = hashPassword(newPassword);
+      user.updatedAt = new Date().toISOString();
+      db.save();
+
+      db.logActivity(user.id, user.username, 'PASSWORD_RESET', 'User reset password successfully');
+      const token = generateToken(user);
+      const { passwordHash: _, ...safeUser } = user;
 
       res.json({
-        message: `Logged in as demo ${targetUser.role}.`,
+        message: 'Password has been reset successfully. You are now logged in.',
         token,
         user: safeUser,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Quick login failed.' });
+      res.status(500).json({ error: err.message || 'Password reset failed.' });
     }
   }
 
@@ -285,6 +328,126 @@ export class AuthController {
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update 2FA status.' });
+    }
+  }
+
+  // --- Email OTP Authentication ---
+  public static async sendOtp(req: Request, res: Response): Promise<void> {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        res.status(400).json({ error: 'Please enter a valid email address.' });
+        return;
+      }
+
+      const result = await emailService.sendLoginOtp(email);
+      res.json({
+        success: true,
+        message: result.message,
+        simulated: result.simulated,
+        code: result.code, // Returned for dev/preview convenience when SMTP is unconfigured or in test environment
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to send OTP.' });
+    }
+  }
+
+  public static async verifyOtp(req: Request, res: Response): Promise<void> {
+    try {
+      const { email, code } = req.body;
+      if (!email || !code) {
+        res.status(400).json({ error: 'Email and 6-digit verification code are required.' });
+        return;
+      }
+
+      const verification = emailService.verifyOtp(email, code);
+      if (!verification.valid) {
+        res.status(400).json({ error: verification.error || 'Invalid verification code.' });
+        return;
+      }
+
+      const ADMIN_EMAILS = [
+        'kalamkalam1234kd@gmail.com',
+        'kalam172010@gmail.com',
+        'admin@example.com',
+      ];
+
+      const normalizedEmail = email.trim().toLowerCase();
+      let user = db.users.find(u => u.email.toLowerCase() === normalizedEmail);
+
+      const isAdminEmail = ADMIN_EMAILS.includes(normalizedEmail);
+
+      if (!user) {
+        // Auto-create user if allowOtpSignup is true
+        if (db.emailConfig.allowOtpSignup !== false) {
+          const baseName = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 15);
+          let uniqueUsername = baseName;
+          let counter = 1;
+          while (db.users.some(u => u.username.toLowerCase() === uniqueUsername.toLowerCase())) {
+            uniqueUsername = `${baseName}_${counter++}`;
+          }
+
+          const newReferralCode = `NX${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+          user = {
+            id: `USR-${Date.now()}`,
+            username: uniqueUsername,
+            email: normalizedEmail,
+            passwordHash: '',
+            role: isAdminEmail ? 'ADMIN' : 'USER',
+            balance: isAdminEmail ? 5000.0 : 0.0,
+            referralCode: newReferralCode,
+            twoFactorEnabled: false,
+            isBanned: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          db.users.push(user);
+          db.logActivity(user.id, user.username, 'OTP_SIGNUP', `Registered via Email OTP: ${normalizedEmail}`);
+          db.save();
+        } else {
+          res.status(404).json({ error: 'No account registered with this email. Please sign up first.' });
+          return;
+        }
+      } else {
+        if (user.isBanned) {
+          res.status(403).json({ error: 'Your account has been suspended. Please contact support.' });
+          return;
+        }
+        if (isAdminEmail && user.role !== 'ADMIN') {
+          user.role = 'ADMIN';
+          user.updatedAt = new Date().toISOString();
+          db.save();
+        }
+        db.logActivity(user.id, user.username, 'OTP_LOGIN', `Logged in via Email OTP: ${normalizedEmail}`);
+      }
+
+      const token = generateToken(user);
+      const { passwordHash: _, ...safeUser } = user;
+
+      res.json({
+        message: 'Login successful via Email OTP.',
+        token,
+        user: safeUser,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'OTP verification failed.' });
+    }
+  }
+
+  public static async getEmailStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const cfg = db.emailConfig;
+      res.json({
+        enabled: cfg.enabled,
+        protocol: cfg.protocol || 'smtp',
+        senderEmail: cfg.senderEmail,
+        senderName: cfg.senderName,
+        allowOtpSignup: cfg.allowOtpSignup,
+        otpExpiryMinutes: cfg.otpExpiryMinutes,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to fetch email status.' });
     }
   }
 }

@@ -23,7 +23,9 @@ interface AuthContextValue {
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (username: string, email: string, password: string, referralCode?: string) => Promise<void>;
-  demoLogin: (role: 'USER' | 'RESELLER' | 'ADMIN') => Promise<void>;
+  resetPassword: (usernameOrEmail: string, newPassword: string) => Promise<void>;
+  sendOtp: (email: string) => Promise<{ success: boolean; simulated: boolean; code?: string; message: string }>;
+  loginWithOtp: (email: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateBalanceLocally: (newBalance: number) => void;
@@ -194,42 +196,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await syncUserWithBackend(result.user);
       }
     } catch (err: any) {
-      console.error('Google Sign-in failed:', err);
-      if (err?.code === 'auth/network-request-failed' || err?.message?.includes('network-request-failed') || err?.message?.includes('network')) {
-        throw new Error('Google Sign-in network request failed (preview network restriction). Please use Email & Password login or Demo Login.');
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        console.warn('Google Sign-In notice: Current domain is not added to Firebase Authorized Domains list.');
+        throw new Error('Google Sign-In is not enabled for this preview domain. Please sign in or register below using your Username or Email with password.');
       }
-      throw new Error(err.message || 'Google sign-in failed. Please try again.');
+      if (err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked')) {
+        console.warn('Google Sign-In notice: popup blocked by browser.');
+        throw new Error('Google Sign-In popup was blocked by browser. Please enable popups or sign in with your Username/Email.');
+      }
+      if (err?.code === 'auth/popup-closed-by-user') {
+        throw new Error('Google Sign-In popup was closed. Please try again or use Username/Email login.');
+      }
+      console.warn('Google Sign-in notice:', err?.message || err);
+      throw new Error(err?.message || 'Google sign-in failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Firebase Email/Password Sign-In
-  const loginWithEmail = async (email: string, password: string) => {
+  // Direct secure application login (Supports username or email + password)
+  const login = async (usernameOrEmail: string, password: string) => {
     setIsLoading(true);
     try {
-      const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-      if (result.user) {
-        await syncUserWithBackend(result.user);
-      }
+      const res = await api.login({ usernameOrEmail: usernameOrEmail.trim(), password });
+      localStorage.setItem('nexa_auth_token', res.token);
+      setToken(res.token);
+      setUser(res.user);
     } catch (err: any) {
-      console.error('Firebase Email sign-in failed:', err);
-      // If Firebase email/password login fails (e.g. provider not yet enabled in console), try backend login
-      try {
-        const res = await api.login({ usernameOrEmail: email, password });
-        localStorage.setItem('nexa_auth_token', res.token);
-        setToken(res.token);
-        setUser(res.user);
-      } catch (backendErr) {
-        throw new Error(err.message || 'Login failed with the provided email and password.');
-      }
+      throw new Error(err.message || 'Invalid username/email or password.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Firebase Email/Password Registration
-  const registerWithEmail = async (
+  // Direct secure application registration
+  const register = async (
     username: string,
     email: string,
     password: string,
@@ -237,56 +238,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     setIsLoading(true);
     try {
-      const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      if (result.user) {
-        await updateProfile(result.user, { displayName: username.trim() });
-        await syncUserWithBackend(result.user, username.trim());
-      }
+      const res = await api.register({
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        referralCode: referralCode?.trim() || undefined,
+      });
+      localStorage.setItem('nexa_auth_token', res.token);
+      setToken(res.token);
+      setUser(res.user);
     } catch (err: any) {
-      console.error('Firebase Email registration failed:', err);
-      // Fallback to backend registration if Firebase email provider needs activation
-      try {
-        const res = await api.register({ username, email, password, referralCode });
-        localStorage.setItem('nexa_auth_token', res.token);
-        setToken(res.token);
-        setUser(res.user);
-      } catch (backendErr) {
-        throw new Error(err.message || 'Registration failed. Please check your credentials.');
-      }
+      throw new Error(err.message || 'Registration failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Unified login
-  const login = async (usernameOrEmail: string, password: string) => {
-    if (usernameOrEmail.includes('@')) {
-      await loginWithEmail(usernameOrEmail, password);
-    } else {
-      setIsLoading(true);
-      try {
-        const res = await api.login({ usernameOrEmail, password });
-        localStorage.setItem('nexa_auth_token', res.token);
-        setToken(res.token);
-        setUser(res.user);
-      } finally {
-        setIsLoading(false);
-      }
-    }
+  // Alias for backward compatibility
+  const loginWithEmail = async (email: string, password: string) => {
+    return login(email, password);
   };
 
-  // Unified register
-  const register = async (username: string, email: string, password: string, referralCode?: string) => {
-    await registerWithEmail(username, email, password, referralCode);
+  const registerWithEmail = async (
+    username: string,
+    email: string,
+    password: string,
+    referralCode?: string
+  ) => {
+    return register(username, email, password, referralCode);
   };
 
-  const demoLogin = async (targetRole: 'USER' | 'RESELLER' | 'ADMIN') => {
+  // Self-service password reset
+  const resetPassword = async (usernameOrEmail: string, newPassword: string) => {
     setIsLoading(true);
     try {
-      const res = await api.demoLogin(targetRole);
+      const res = await api.resetPassword({
+        usernameOrEmail: usernameOrEmail.trim(),
+        newPassword,
+      });
       localStorage.setItem('nexa_auth_token', res.token);
       setToken(res.token);
       setUser(res.user);
+    } catch (err: any) {
+      throw new Error(err.message || 'Password reset failed. Please check your credentials.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async (email: string) => {
+    try {
+      const res = await api.sendOtp(email.trim());
+      return res;
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to send verification OTP.');
+    }
+  };
+
+  const loginWithOtp = async (email: string, code: string) => {
+    setIsLoading(true);
+    try {
+      const res = await api.verifyOtp(email.trim(), code.trim());
+      if (res?.token && res?.user) {
+        localStorage.setItem('nexa_auth_token', res.token);
+        setToken(res.token);
+        setUser(res.user);
+      } else {
+        throw new Error('Invalid verification response from server.');
+      }
+    } catch (err: any) {
+      throw new Error(err.message || 'OTP verification failed.');
     } finally {
       setIsLoading(false);
     }
@@ -320,7 +341,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         loginWithEmail,
         registerWithEmail,
-        demoLogin,
+        resetPassword,
+        sendOtp,
+        loginWithOtp,
         logout,
         refreshUser,
         updateBalanceLocally,

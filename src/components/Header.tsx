@@ -1,5 +1,19 @@
 import React from 'react';
-import { Menu, Wallet, User as UserIcon, Shield, Sparkles } from 'lucide-react';
+import {
+  Menu,
+  Wallet,
+  User as UserIcon,
+  Shield,
+  Sparkles,
+  LayoutDashboard,
+  ShoppingBag,
+  KeyRound,
+  History,
+  LifeBuoy,
+  Share2,
+  Terminal,
+  ShieldCheck,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useSite } from '../context/SiteContext.js';
 
@@ -9,21 +23,37 @@ interface HeaderProps {
   currentPage: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate }) => {
+const PAGE_META: Record<string, { label: string; icon: any }> = {
+  dashboard: { label: 'Dashboard', icon: LayoutDashboard },
+  deposit: { label: 'Deposit', icon: Wallet },
+  buy: { label: 'Buy Keys', icon: ShoppingBag },
+  keys: { label: 'My Keys', icon: KeyRound },
+  history: { label: 'History', icon: History },
+  tickets: { label: 'Support', icon: LifeBuoy },
+  refer: { label: 'Refer & Earn', icon: Share2 },
+  profile: { label: 'Profile', icon: UserIcon },
+  api: { label: 'Reseller API', icon: Terminal },
+  admin: { label: 'Admin Panel', icon: ShieldCheck },
+};
+
+export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate, currentPage }) => {
   const { user, balance, role } = useAuth();
   const { siteConfig } = useSite();
 
   const brandInitials = siteConfig.siteTitle
     ? siteConfig.siteTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
-    : 'NX';
+    : 'KF';
+
+  const activePageInfo = PAGE_META[currentPage] || { label: currentPage, icon: LayoutDashboard };
+  const ActiveIcon = activePageInfo.icon;
 
   return (
     <header className="sticky top-0 z-30 w-full h-14 bg-[#0a0a0f]/90 backdrop-blur-md border-b border-white/5 px-3 sm:px-6 flex items-center justify-between">
-      {/* Left zone: Hamburger menu + Brand emblem & status dot */}
-      <div className="flex items-center gap-3">
+      {/* Left zone: Hamburger menu + Brand emblem & status dot + Current Page Indicator */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
           onClick={onOpenDrawer}
-          className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-slate-300 hover:text-white transition-all border border-white/5"
+          className="w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-slate-300 hover:text-white transition-all border border-white/5"
           aria-label="Open Navigation Menu"
         >
           <Menu className="w-5 h-5 text-rose-500" />
@@ -31,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate }) => {
 
         <button
           onClick={() => onNavigate('dashboard')}
-          className="flex items-center gap-2 text-left group focus:outline-none"
+          className="flex items-center gap-2 text-left group focus:outline-none shrink-0"
         >
           <div className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500/20 to-red-600/30 border border-rose-500/40 text-rose-400 group-hover:border-rose-400 transition-all shadow-[0_0_12px_rgba(244,63,94,0.3)] overflow-hidden">
             {siteConfig.logoUrl ? (
@@ -42,10 +72,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate }) => {
             <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-[#070709] animate-pulse" />
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex flex-col hidden xs:flex">
             <div className="flex items-center gap-1.5">
               <span className="font-display font-black tracking-wider text-base text-white group-hover:text-rose-400 transition-colors uppercase">
-                {siteConfig.siteTitle || 'NEXA PANEL'}
+                {siteConfig.siteTitle || 'KALAM FF PANEL'}
               </span>
               {role === 'RESELLER' && (
                 <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold tracking-wider uppercase">
@@ -60,6 +90,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate }) => {
             </div>
           </div>
         </button>
+
+        {/* Current Active Page Pill / Indicator on Header */}
+        <div className="flex items-center gap-1.5 pl-2 sm:pl-3 border-l border-white/10 shrink-0">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-white shadow-[0_0_10px_rgba(244,63,94,0.2)]">
+            <ActiveIcon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <span className="font-display font-black text-[11px] sm:text-xs uppercase tracking-wider text-rose-200">
+              {activePageInfo.label}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Right zone: Live wallet balance & profile avatar */}

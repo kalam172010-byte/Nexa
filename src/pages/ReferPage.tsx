@@ -66,7 +66,7 @@ export const ReferPage: React.FC = () => {
           </h2>
 
           <p className="text-xs text-slate-300 leading-relaxed">
-            Invite players or reseller partners to Nexa Panel. Earn an automated 5% instant cash reward into your wallet on every single digital key purchase they make, lifetime!
+            Invite players or reseller partners to Kalam FF Panel. Earn an automated 5% instant cash reward into your wallet on every single digital key purchase they make, lifetime!
           </p>
         </div>
       </div>

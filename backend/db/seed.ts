@@ -54,7 +54,50 @@ export function seedDatabaseIfEmpty() {
       updatedAt: isoNow,
     };
 
-    db.users.push(user1, reseller1, admin1);
+    const kalamAdmin: User = {
+      id: 'USR-KALAM-ADMIN',
+      username: 'kalam',
+      email: 'kalamkalam1234kd@gmail.com',
+      passwordHash: hashPassword('admin123'),
+      role: 'ADMIN',
+      balance: 5000.0,
+      referralCode: 'NXKALAM1',
+      twoFactorEnabled: false,
+      isBanned: false,
+      createdAt: isoNow,
+      updatedAt: isoNow,
+    };
+
+    db.users.push(user1, reseller1, admin1, kalamAdmin);
+  }
+
+  // Ensure admin accounts are always present and have ADMIN privileges
+  const adminEmails = [
+    { email: 'kalamkalam1234kd@gmail.com', username: 'kalam', id: 'USR-KALAM-ADMIN' },
+    { email: 'kalam172010@gmail.com', username: 'kalam_kalam', id: 'tnqy7LYfgwgzYpoQGqljC4H6bKc2' },
+    { email: 'admin@example.com', username: 'nexa_admin', id: 'USR-001' },
+  ];
+
+  for (const adm of adminEmails) {
+    const existing = db.users.find(u => u.email.toLowerCase() === adm.email.toLowerCase());
+    if (existing) {
+      if (existing.role !== 'ADMIN') existing.role = 'ADMIN';
+      if (!existing.passwordHash) existing.passwordHash = hashPassword('admin123');
+    } else {
+      db.users.push({
+        id: adm.id,
+        username: adm.username,
+        email: adm.email,
+        passwordHash: hashPassword('admin123'),
+        role: 'ADMIN',
+        balance: 5000.0,
+        referralCode: `NX${adm.username.toUpperCase().slice(0, 6)}`,
+        twoFactorEnabled: false,
+        isBanned: false,
+        createdAt: isoNow,
+        updatedAt: isoNow,
+      });
+    }
   }
 
   // Populate official gaming key products so all users can see and buy keys

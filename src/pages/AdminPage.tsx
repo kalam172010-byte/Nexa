@@ -55,6 +55,11 @@ import {
   Save,
   RotateCcw,
   Sparkle,
+  Mail,
+  Inbox,
+  AtSign,
+  Lock,
+  Download,
 } from 'lucide-react';
 import { api } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
@@ -110,6 +115,7 @@ export const AdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     | 'dashboard'
     | 'customization'
+    | 'email'
     | 'users'
     | 'products'
     | 'variants'
@@ -119,6 +125,7 @@ export const AdminPage: React.FC = () => {
     | 'orders'
     | 'gateway'
     | 'reseller'
+    | 'backup'
     | 'logs'
   >('dashboard');
 
@@ -144,11 +151,40 @@ export const AdminPage: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [gatewayConfig, setGatewayConfig] = useState<any>({});
   const [resellerConfig, setResellerConfig] = useState<any>({});
+  const [emailConfig, setEmailConfig] = useState<any>({
+    enabled: true,
+    protocol: 'smtp',
+    senderEmail: 'kalamkalam1234kd@gmail.com',
+    senderName: 'KALAM FF PANEL',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 587,
+    secure: false,
+    smtpUser: 'kalamkalam1234kd@gmail.com',
+    smtpPass: '',
+    imapHost: 'imap.gmail.com',
+    imapPort: 993,
+    imapUser: 'kalamkalam1234kd@gmail.com',
+    imapPass: '',
+    imapSecure: true,
+    otpExpiryMinutes: 10,
+    allowOtpSignup: true,
+    hasSmtpPass: false,
+    hasImapPass: false,
+  });
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [testRecipientEmail, setTestRecipientEmail] = useState('kalamkalam1234kd@gmail.com');
+  const [emailTestResult, setEmailTestResult] = useState<any | null>(null);
+  const [showSmtpPass, setShowSmtpPass] = useState(false);
+  const [showImapPass, setShowImapPass] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // User Search & Real-time Details
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [selectedUserDetail, setSelectedUserDetail] = useState<any | null>(null);
+  const [passwordResetUser, setPasswordResetUser] = useState<any | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [isResettingPasswordLoading, setIsResettingPasswordLoading] = useState(false);
 
   // Modal / Form States
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -253,6 +289,12 @@ export const AdminPage: React.FC = () => {
   const [isTestingKeyGen, setIsTestingKeyGen] = useState(false);
   const [keyGenTestResult, setKeyGenTestResult] = useState<any | null>(null);
 
+  // Database Backup & Domain Migration states
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [restoreJsonInput, setRestoreJsonInput] = useState('');
+  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Payment Gateway live order test runner states
   const [testFgAmount, setTestFgAmount] = useState<number>(500.00);
   const [testFgCustomerName, setTestFgCustomerName] = useState('Ramesh Kumar');
@@ -275,6 +317,7 @@ export const AdminPage: React.FC = () => {
         gwRes,
         resRes,
         siteRes,
+        emailRes,
         logsRes,
       ] = await Promise.all([
         api.getAdminStats().catch(() => null),
@@ -286,6 +329,7 @@ export const AdminPage: React.FC = () => {
         api.getGatewaySettings().catch(() => ({ config: {} })),
         api.getResellerSettings().catch(() => ({ config: {} })),
         api.getSiteSettings().catch(() => ({ config: null })),
+        api.getEmailSettings().catch(() => ({ config: null })),
         api.getAdminLogs().catch(() => ({ logs: [] })),
       ]);
 
@@ -309,6 +353,12 @@ export const AdminPage: React.FC = () => {
       if (siteRes?.config) {
         setSiteForm(prev => ({ ...prev, ...siteRes.config }));
         updateSiteConfigLocally(siteRes.config);
+      }
+      if (emailRes?.config) {
+        setEmailConfig((prev: any) => ({ ...prev, ...emailRes.config }));
+        if (emailRes.config.senderEmail) {
+          setTestRecipientEmail(emailRes.config.senderEmail);
+        }
       }
       if (logsRes?.logs) setLogs(logsRes.logs);
     } catch (err: any) {
@@ -363,6 +413,61 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  // Quick Save for VIP Reseller Upgrade Price
+  const handleQuickSaveResellerUpgradePrice = async (price: number) => {
+    const updatedForm = { ...siteForm, resellerUpgradePrice: price };
+    setSiteForm(updatedForm);
+    updateSiteConfigLocally({ resellerUpgradePrice: price });
+    try {
+      await api.updateSiteSettings({ resellerUpgradePrice: price });
+      showToastSuccess('Reseller Upgrade Fee Updated!', `VIP Reseller Upgrade Fee is now set to ₹${price}`);
+    } catch (err: any) {
+      showToastError('Failed to update Reseller Upgrade Fee', err.message);
+    }
+  };
+
+  // Save Email & IMAP/SMTP Setup
+  const handleSaveEmailSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingEmail(true);
+    try {
+      const res = await api.updateEmailSettings(emailConfig);
+      if (res?.config) {
+        setEmailConfig((prev: any) => ({ ...prev, ...res.config }));
+      }
+      showToastSuccess('Email & IMAP/SMTP Settings Saved!', 'Mail server configuration updated successfully.');
+      loadAllAdminData();
+    } catch (err: any) {
+      showToastError('Failed to save email settings', err.message);
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
+  // Test Email & IMAP/SMTP Connection
+  const handleTestEmailConnection = async () => {
+    setIsTestingEmail(true);
+    setEmailTestResult(null);
+    try {
+      const targetEmail = testRecipientEmail.trim() || emailConfig.senderEmail;
+      const res = await api.testEmailConnection({
+        testEmail: targetEmail,
+        configOverride: emailConfig,
+      });
+      setEmailTestResult(res);
+      if (res.success) {
+        showToastSuccess('Test Email Dispatched!', res.message);
+      } else {
+        showToastError('Mail Connection Test Failed', res.message);
+      }
+    } catch (err: any) {
+      setEmailTestResult({ success: false, message: err.message });
+      showToastError('Mail Test Error', err.message);
+    } finally {
+      setIsTestingEmail(false);
+    }
+  };
+
   // Instant 1-Click Toggle for Product Under Maintenance
   const handleToggleProductMaintenance = async (product: Product) => {
     try {
@@ -387,28 +492,28 @@ export const AdminPage: React.FC = () => {
   // Reset to Default Factory Brand Settings
   const handleResetSiteDefaults = async () => {
     const defaults: SiteCustomizationConfig = {
-      siteTitle: 'Nexa Panel',
-      siteTagline: 'Gaming Digital Reseller Platform',
+      siteTitle: 'KALAM FF PANEL',
+      siteTagline: 'Free Fire VIP Digital Keys & Reseller Panel',
       logoUrl: '',
       faviconUrl: '',
       currencySymbol: '₹',
       currencyCode: 'INR',
-      footerText: 'The premier automated digital keys and panels reseller infrastructure.',
-      copyrightText: '© 2026 Nexa Gaming Systems. All rights reserved.',
+      footerText: 'The premier automated Free Fire digital keys and panel reseller infrastructure.',
+      copyrightText: '© 2026 KALAM FF PANEL. All rights reserved.',
       accentTheme: 'crimson',
       backgroundStyle: 'deep-slate',
       glowIntensity: 'vibrant',
       borderRadius: 'rounded',
       fontStyle: 'ultra-bold',
       isAnnouncementEnabled: true,
-      announcementText: '🔥 OB55 UPDATE ACTIVE! Automated Instant Digital Key Delivery 24/7 with Live Reseller API',
+      announcementText: '🔥 OB55 UPDATE ACTIVE! Kalam FF Instant Digital Key Delivery 24/7 with Live Reseller API',
       announcementType: 'promo',
       announcementLink: '',
       isMarqueeEnabled: true,
-      marqueeText: '⚡ Fast UPI Auto Deposit | Instant Digital Key Delivery | Non-Root & iOS Supported | 100% Anti-Ban Menus | 24/7 Live Support',
-      heroTitle: 'DOMINATE THE GAME WITH PRO DIGITAL PANELS',
+      marqueeText: '⚡ Fast UPI Auto Deposit | Instant Free Fire Key Delivery | Non-Root & iOS Supported | 100% Anti-Ban Menus | 24/7 Live Support',
+      heroTitle: 'DOMINATE FREE FIRE WITH KALAM FF VIP PANEL',
       heroSubtitle: 'Instant Key Delivery · Automated Wallet Deposits · Wholesale VIP Pricing for Resellers',
-      heroBadgeText: 'OFFICIAL GAMING RESELLER PLATFORM',
+      heroBadgeText: 'OFFICIAL KALAM FF RESELLER PLATFORM',
       telegramChannelUrl: 'https://t.me/nexa_gaming_official',
       telegramSupportUser: '@nexa_support_admin',
       whatsappNumber: '+918056317218',
@@ -420,7 +525,7 @@ export const AdminPage: React.FC = () => {
       resellerUpgradePrice: 299,
       referralCommissionPct: 5,
       accountSafetyBalanceText: 'Keep ₹500+ balance for account safety.',
-      adminPanelTitle: 'NEXA SYSTEM CONTROL PANEL',
+      adminPanelTitle: 'KALAM FF SYSTEM CONTROL PANEL',
       adminHeaderNotice: 'SUPER ADMIN LIVE REALTIME SESSION ACTIVE',
       adminAccentColor: '#e11d48',
       adminStatusBadge: 'SUPER PRIVILEGES',
@@ -449,7 +554,7 @@ export const AdminPage: React.FC = () => {
           adminAccentColor: '#e11d48',
           adminThemePreset: 'crimson-admin',
         }));
-        showToastSuccess('Applied Nexa Crimson Theme');
+        showToastSuccess('Applied Kalam Crimson Theme');
         break;
       case 'cyberpunk':
         setSiteForm(prev => ({
@@ -574,6 +679,25 @@ export const AdminPage: React.FC = () => {
       loadAllAdminData();
     } catch (err: any) {
       showToastError('Failed to toggle ban', err.message);
+    }
+  };
+
+  // Admin reset user password
+  const handleAdminResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordResetUser || !newPasswordInput.trim()) return;
+    setIsResettingPasswordLoading(true);
+    try {
+      const res = await api.adminResetPassword(passwordResetUser.id, newPasswordInput.trim());
+      showToastSuccess('Password Updated!', res.message || `New password set for @${passwordResetUser.username}`);
+      setPasswordResetUser(null);
+      setNewPasswordInput('');
+      const updated = await api.getAdminUsers(userSearchQuery || undefined);
+      if (updated?.users) setUsers(updated.users);
+    } catch (err: any) {
+      showToastError('Failed to update password', err.message);
+    } finally {
+      setIsResettingPasswordLoading(false);
     }
   };
 
@@ -1173,9 +1297,64 @@ export const AdminPage: React.FC = () => {
     setTestAndroidId(res);
   };
 
+  const handleExportDatabaseBackup = async () => {
+    setIsExportingBackup(true);
+    try {
+      const data = await api.exportDatabase();
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `kalam_ff_panel_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToastSuccess('Backup Downloaded', 'Full database snapshot downloaded successfully.');
+    } catch (err: any) {
+      showToastError('Backup Failed', err.message || 'Could not export database.');
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
+
+  const handleRestoreDatabase = async (jsonString: string) => {
+    setIsRestoringBackup(true);
+    try {
+      const parsed = JSON.parse(jsonString);
+      if (!parsed || !Array.isArray(parsed.users)) {
+        throw new Error('Invalid JSON format: Must contain users array.');
+      }
+      const res = await api.importDatabase(parsed);
+      showToastSuccess('Database Restored!', res.message || 'All user accounts and balances restored successfully.');
+      loadAllAdminData();
+      setRestoreJsonInput('');
+    } catch (err: any) {
+      showToastError('Restore Failed', err.message || 'Could not restore database.');
+    } finally {
+      setIsRestoringBackup(false);
+    }
+  };
+
+  const handleBackupFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const content = ev.target?.result as string;
+      if (content) {
+        await handleRestoreDatabase(content);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const navTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Activity },
     { id: 'customization', label: 'Customization & Branding', icon: Palette },
+    { id: 'backup', label: 'Domain & Backup Migration', icon: Database },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'products', label: 'Products', icon: ShoppingBag },
     { id: 'variants', label: 'Durations', icon: Layers },
@@ -1184,6 +1363,7 @@ export const AdminPage: React.FC = () => {
     { id: 'deposits', label: 'Deposits', icon: CreditCard },
     { id: 'orders', label: 'Orders', icon: FileText },
     { id: 'gateway', label: 'Payment Gateway', icon: Sliders },
+    { id: 'email', label: 'Email & IMAP/SMTP Setup', icon: Mail },
     { id: 'reseller', label: 'Upstream Provider (Banti Bhaiya)', icon: Radio },
     { id: 'logs', label: 'Logs', icon: Clock },
   ];
@@ -1373,7 +1553,7 @@ export const AdminPage: React.FC = () => {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
               {[
-                { id: 'crimson', label: '🌹 Nexa Crimson', color: 'bg-rose-600', border: 'border-rose-500/40' },
+                { id: 'crimson', label: '🌹 Kalam Crimson', color: 'bg-rose-600', border: 'border-rose-500/40' },
                 { id: 'cyberpunk', label: '⚡ Cyber Neon', color: 'bg-cyan-500', border: 'border-cyan-500/40' },
                 { id: 'emerald', label: '🟢 Matrix Green', color: 'bg-emerald-500', border: 'border-emerald-500/40' },
                 { id: 'amber', label: '👑 Royal Gold', color: 'bg-amber-500', border: 'border-amber-500/40' },
@@ -1514,7 +1694,7 @@ export const AdminPage: React.FC = () => {
                     type="text"
                     value={siteForm.siteTitle}
                     onChange={e => setSiteForm({ ...siteForm, siteTitle: e.target.value })}
-                    placeholder="Nexa Panel"
+                    placeholder="KALAM FF PANEL"
                     className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-display font-bold text-sm"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">Displays on header, browser tab, and sidebar</span>
@@ -1597,7 +1777,7 @@ export const AdminPage: React.FC = () => {
                     type="text"
                     value={siteForm.copyrightText || ''}
                     onChange={e => setSiteForm({ ...siteForm, copyrightText: e.target.value })}
-                    placeholder="© 2026 Nexa Gaming Systems. All rights reserved."
+                    placeholder="© 2026 KALAM FF PANEL. All rights reserved."
                     className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono text-xs"
                   />
                 </div>
@@ -2178,7 +2358,7 @@ export const AdminPage: React.FC = () => {
                     type="text"
                     value={siteForm.adminPanelTitle}
                     onChange={e => setSiteForm({ ...siteForm, adminPanelTitle: e.target.value })}
-                    placeholder="NEXA SYSTEM CONTROL PANEL"
+                    placeholder="KALAM FF SYSTEM CONTROL PANEL"
                     className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-display font-black text-sm uppercase"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">Displayed on the admin center top header</span>
@@ -2501,6 +2681,24 @@ export const AdminPage: React.FC = () => {
                                 Joined: {u.createdAt ? new Date(u.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'}
                               </span>
                             </div>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              {u.authProvider === 'google.com' ? (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/30 text-sky-300 font-mono flex items-center gap-1">
+                                  <Globe className="w-2.5 h-2.5 text-sky-400" />
+                                  <span>google.com (Google Sign-In)</span>
+                                </span>
+                              ) : u.hasPassword ? (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono flex items-center gap-1">
+                                  <Lock className="w-2.5 h-2.5 text-emerald-400" />
+                                  <span>password (Email &amp; Password Set)</span>
+                                </span>
+                              ) : (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/30 text-purple-300 font-mono flex items-center gap-1">
+                                  <Mail className="w-2.5 h-2.5 text-purple-400" />
+                                  <span>email_otp (OTP Login)</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -2564,6 +2762,17 @@ export const AdminPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-3.5 text-right space-x-1.5 whitespace-nowrap">
+                        <button
+                          onClick={() => {
+                            setPasswordResetUser(u);
+                            setNewPasswordInput('');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs font-semibold text-amber-300 transition-colors inline-flex items-center gap-1"
+                          title="Set or change password for this user"
+                        >
+                          <KeyRound className="w-3 h-3" />
+                          <span>Password</span>
+                        </button>
                         <button
                           onClick={() => {
                             setAdjustingUser(u);
@@ -3032,6 +3241,80 @@ export const AdminPage: React.FC = () => {
                 <Copy className="w-3.5 h-3.5" />
                 <span>Copy API URL</span>
               </button>
+            </div>
+          </div>
+
+          {/* VIP Reseller Upgrade Fee Control Card */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-500/10 via-[#0d0d14] to-black/40 border border-amber-500/30 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    VIP Reseller Upgrade Price Setting
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Set the exact wallet balance required for users to unlock VIP Reseller rates and API access.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400 uppercase font-mono">Current Live Fee:</span>
+                <span className="px-3 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono font-black text-sm">
+                  ₹{siteForm.resellerUpgradePrice || 299}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  Custom Upgrade Fee (₹)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={siteForm.resellerUpgradePrice}
+                    onChange={e => setSiteForm({ ...siteForm, resellerUpgradePrice: Math.max(0, Number(e.target.value)) })}
+                    className="w-full max-w-[200px] px-3.5 py-2 bg-white/[0.04] border border-white/10 rounded-xl text-white font-mono font-bold text-sm focus:outline-none focus:border-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSaveResellerUpgradePrice(siteForm.resellerUpgradePrice)}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-950/40 flex items-center gap-1.5 shrink-0"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Fee</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="sm:border-l sm:border-white/5 sm:pl-4">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  Quick Amount Presets
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[99, 199, 299, 499, 999].map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => handleQuickSaveResellerUpgradePrice(p)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                        siteForm.resellerUpgradePrice === p
+                          ? 'bg-amber-500 text-black'
+                          : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/5'
+                      }`}
+                    >
+                      ₹{p}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -4577,7 +4860,660 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB CONTENT: 10. SYSTEM ACTIVITY LOGS */}
+      {/* TAB CONTENT: 10. EMAIL & IMAP/SMTP SETUP */}
+      {activeTab === 'email' && (
+        <div className="space-y-6">
+          {/* Email Setup Header Banner */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-rose-950/40 via-[#0d0d14] to-red-950/30 border border-rose-500/40 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                  <Mail className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider">
+                      EMAIL &amp; IMAP/SMTP OTP SERVER SETUP
+                    </h3>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                        emailConfig.enabled
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                      }`}
+                    >
+                      {emailConfig.enabled ? '● OTP LOGIN ACTIVE' : '○ OTP LOGIN PAUSED'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Send automated 6-digit login verification codes directly from your personal or business email to users' inboxes.
+                  </p>
+                </div>
+              </div>
+
+              {/* Master Enable/Disable Toggle */}
+              <div className="flex items-center gap-3 bg-white/[0.03] p-2 rounded-2xl border border-white/5 self-start sm:self-auto">
+                <span className="text-xs font-bold text-slate-300">Email OTP Login:</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEmailConfig((prev: any) => ({ ...prev, enabled: !prev.enabled }))
+                  }
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    emailConfig.enabled ? 'bg-rose-600' : 'bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      emailConfig.enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Status Pill */}
+            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-white/5 text-xs">
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <AtSign className="w-3.5 h-3.5 text-rose-400" />
+                <span className="text-slate-400">Current Sender:</span>
+                <strong className="text-white font-mono">{emailConfig.senderEmail || 'Not set'}</strong>
+              </div>
+              <div className="text-slate-600">•</div>
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-slate-400">SMTP Host:</span>
+                <strong className="text-white font-mono">
+                  {emailConfig.smtpHost}:{emailConfig.smtpPort || 587}
+                </strong>
+              </div>
+              <div className="text-slate-600">•</div>
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck
+                  className={`w-3.5 h-3.5 ${
+                    emailConfig.hasSmtpPass ? 'text-emerald-400' : 'text-amber-400'
+                  }`}
+                />
+                <span className={emailConfig.hasSmtpPass ? 'text-emerald-300' : 'text-amber-300'}>
+                  {emailConfig.hasSmtpPass
+                    ? 'Password / App Key Saved'
+                    : 'App Password Required For Live Inbox Dispatch'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Mail Provider Presets */}
+          <div className="p-5 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-rose-400" />
+                <h4 className="font-display font-black text-xs text-white uppercase tracking-wider">
+                  ONE-CLICK EMAIL SERVER PRESETS
+                </h4>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono">
+                Click to auto-populate recommended host &amp; port settings
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Preset 1: Gmail */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailConfig((prev: any) => ({
+                    ...prev,
+                    protocol: 'smtp',
+                    smtpHost: 'smtp.gmail.com',
+                    smtpPort: 587,
+                    secure: false,
+                    imapHost: 'imap.gmail.com',
+                    imapPort: 993,
+                    imapSecure: true,
+                    smtpUser: prev.senderEmail || 'kalamkalam1234kd@gmail.com',
+                  }));
+                  showToastSuccess('Gmail Preset Loaded', 'SMTP: smtp.gmail.com:587 | IMAP: imap.gmail.com:993');
+                }}
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-rose-500/30 hover:border-rose-500/60 text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 group-hover:text-rose-400 transition-colors">
+                    <Mail className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Google / Gmail</span>
+                  </span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">
+                    RECOMMENDED
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">smtp.gmail.com:587</p>
+                <p className="text-[10px] text-slate-500 font-mono">imap.gmail.com:993</p>
+              </button>
+
+              {/* Preset 2: Microsoft Outlook */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailConfig((prev: any) => ({
+                    ...prev,
+                    protocol: 'smtp',
+                    smtpHost: 'smtp-mail.outlook.com',
+                    smtpPort: 587,
+                    secure: false,
+                    imapHost: 'outlook.office365.com',
+                    imapPort: 993,
+                    imapSecure: true,
+                  }));
+                  showToastSuccess('Outlook Preset Loaded');
+                }}
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-white/20 text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors">
+                    Microsoft Outlook
+                  </span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">
+                    Port 587
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">smtp-mail.outlook.com</p>
+                <p className="text-[10px] text-slate-500 font-mono">outlook.office365.com</p>
+              </button>
+
+              {/* Preset 3: Custom Webmail / cPanel */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailConfig((prev: any) => ({
+                    ...prev,
+                    protocol: 'imap_smtp',
+                    smtpHost: 'mail.nexapanel.com',
+                    smtpPort: 465,
+                    secure: true,
+                    imapHost: 'mail.nexapanel.com',
+                    imapPort: 993,
+                    imapSecure: true,
+                  }));
+                  showToastSuccess('cPanel / Webmail Preset Loaded');
+                }}
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-white/20 text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors">
+                    cPanel / Webmail (SSL)
+                  </span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                    Port 465
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">mail.yourdomain.com:465</p>
+                <p className="text-[10px] text-slate-500 font-mono">IMAP SSL: 993</p>
+              </button>
+
+              {/* Preset 4: Zoho Mail */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailConfig((prev: any) => ({
+                    ...prev,
+                    protocol: 'smtp',
+                    smtpHost: 'smtp.zoho.com',
+                    smtpPort: 465,
+                    secure: true,
+                    imapHost: 'imap.zoho.com',
+                    imapPort: 993,
+                    imapSecure: true,
+                  }));
+                  showToastSuccess('Zoho Mail Preset Loaded');
+                }}
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-white/20 text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors">
+                    Zoho Mail
+                  </span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                    Port 465
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">smtp.zoho.com:465</p>
+                <p className="text-[10px] text-slate-500 font-mono">imap.zoho.com:993</p>
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveEmailSettings} className="space-y-6">
+            {/* 1. SENDER IDENTITY CONFIGURATION ("My Email") */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-white/5">
+                <AtSign className="w-4 h-4 text-rose-400" />
+                <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                  1. SENDER IDENTITY ("MY EMAIL")
+                </h4>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    MY SENDER EMAIL (DISPATCH ADDRESS) *
+                  </label>
+                  <input
+                    type="email"
+                    value={emailConfig.senderEmail || ''}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, senderEmail: e.target.value }))
+                    }
+                    placeholder="e.g. kalamkalam1234kd@gmail.com"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    This is your personal or company email address from which OTP codes will be sent.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    SENDER DISPLAY NAME *
+                  </label>
+                  <input
+                    type="text"
+                    value={emailConfig.senderName || ''}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, senderName: e.target.value }))
+                    }
+                    placeholder="e.g. KALAM FF PANEL"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-bold focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Display name shown in user's email inbox header.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. OUTGOING SERVER (SMTP METHOD FOR SENDING OTPS) */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <Send className="w-4 h-4 text-rose-400" />
+                  <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    2. OUTGOING MAIL SERVER (SMTP SETUP)
+                  </h4>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Used to deliver OTP messages to user email
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    SMTP HOST *
+                  </label>
+                  <input
+                    type="text"
+                    value={emailConfig.smtpHost || ''}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, smtpHost: e.target.value }))
+                    }
+                    placeholder="smtp.gmail.com"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    SMTP PORT *
+                  </label>
+                  <input
+                    type="number"
+                    value={emailConfig.smtpPort || 587}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, smtpPort: Number(e.target.value) }))
+                    }
+                    placeholder="587"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    SECURITY / ENCRYPTION
+                  </label>
+                  <div className="flex items-center gap-3 pt-2">
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(emailConfig.secure)}
+                        onChange={e =>
+                          setEmailConfig((prev: any) => ({ ...prev, secure: e.target.checked }))
+                        }
+                        className="rounded border-white/20 bg-white/5 text-rose-600 focus:ring-rose-500"
+                      />
+                      <span>SSL/TLS (Port 465)</span>
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Unchecked = STARTTLS (Port 587). Checked = Direct SSL (Port 465).
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    SMTP USERNAME / LOGIN EMAIL
+                  </label>
+                  <input
+                    type="text"
+                    value={emailConfig.smtpUser || ''}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, smtpUser: e.target.value }))
+                    }
+                    placeholder="kalamkalam1234kd@gmail.com"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Leave blank to automatically use "My Sender Email".
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      EMAIL PASSWORD / GOOGLE APP PASSWORD *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowSmtpPass(!showSmtpPass)}
+                      className="text-[10px] text-rose-400 hover:text-rose-300 font-bold transition-colors cursor-pointer"
+                    >
+                      {showSmtpPass ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showSmtpPass ? 'text' : 'password'}
+                      value={emailConfig.smtpPass || ''}
+                      onChange={e =>
+                        setEmailConfig((prev: any) => ({ ...prev, smtpPass: e.target.value }))
+                      }
+                      placeholder={
+                        emailConfig.hasSmtpPass ? '•••••••• (Stored Securely)' : 'Enter 16-character App Password'
+                      }
+                      className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                    />
+                    <Lock className="w-4 h-4 text-slate-500 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                  <div className="p-2.5 mt-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-300">
+                    💡 <strong>For Gmail accounts:</strong> Turn ON 2-Step Verification in Google Account, then generate a 16-character <strong>App Password</strong> at{' '}
+                    <span className="font-mono text-white underline">myaccount.google.com/apppasswords</span>. Do not use your regular Google account password.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. INCOMING SERVER (IMAP SETUP METHOD) */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <Inbox className="w-4 h-4 text-rose-400" />
+                  <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    3. INCOMING MAIL SERVER (IMAP SETUP)
+                  </h4>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  IMAP protocol configuration for inbox verification &amp; sync
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    IMAP HOST
+                  </label>
+                  <input
+                    type="text"
+                    value={emailConfig.imapHost || ''}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, imapHost: e.target.value }))
+                    }
+                    placeholder="imap.gmail.com"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    IMAP PORT
+                  </label>
+                  <input
+                    type="number"
+                    value={emailConfig.imapPort || 993}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, imapPort: Number(e.target.value) }))
+                    }
+                    placeholder="993"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    IMAP SSL ENCRYPTION
+                  </label>
+                  <div className="flex items-center gap-3 pt-2">
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(emailConfig.imapSecure !== false)}
+                        onChange={e =>
+                          setEmailConfig((prev: any) => ({ ...prev, imapSecure: e.target.checked }))
+                        }
+                        className="rounded border-white/20 bg-white/5 text-rose-600 focus:ring-rose-500"
+                      />
+                      <span>IMAP SSL Enabled (Port 993)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    IMAP USERNAME
+                  </label>
+                  <input
+                    type="text"
+                    value={emailConfig.imapUser || ''}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, imapUser: e.target.value }))
+                    }
+                    placeholder="kalamkalam1234kd@gmail.com"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      IMAP PASSWORD
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowImapPass(!showImapPass)}
+                      className="text-[10px] text-rose-400 hover:text-rose-300 font-bold transition-colors cursor-pointer"
+                    >
+                      {showImapPass ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <input
+                    type={showImapPass ? 'text' : 'password'}
+                    value={emailConfig.imapPass || ''}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, imapPass: e.target.value }))
+                    }
+                    placeholder={
+                      emailConfig.hasImapPass ? '•••••••• (Stored Securely)' : 'Same as App Password'
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 4. OTP AUTHENTICATION POLICIES */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-white/5">
+                <ShieldCheck className="w-4 h-4 text-rose-400" />
+                <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                  4. OTP AUTHENTICATION POLICIES
+                </h4>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    OTP CODE EXPIRATION (MINUTES)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={emailConfig.otpExpiryMinutes || 10}
+                    onChange={e =>
+                      setEmailConfig((prev: any) => ({ ...prev, otpExpiryMinutes: Number(e.target.value) }))
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    How long each 6-digit verification code stays active (recommended: 10 mins).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    AUTO-SIGNUP NEW USERS ON OTP VERIFY
+                  </label>
+                  <div className="flex items-center gap-3 pt-2">
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(emailConfig.allowOtpSignup !== false)}
+                        onChange={e =>
+                          setEmailConfig((prev: any) => ({ ...prev, allowOtpSignup: e.target.checked }))
+                        }
+                        className="rounded border-white/20 bg-white/5 text-rose-600 focus:ring-rose-500"
+                      />
+                      <span>Automatically create account if user email is not yet registered</span>
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Enables friction-free 1-click registration for new visitors via Email OTP.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* SAVE BUTTON */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={isSavingEmail}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-display font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-950/50 flex items-center gap-2 cursor-pointer transition-all"
+              >
+                {isSavingEmail ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>SAVE EMAIL &amp; IMAP/SMTP SETTINGS</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* 5. LIVE TEST OTP EMAIL & CONNECTION VERIFICATION */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-emerald-400" />
+                <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                  5. LIVE TEST EMAIL &amp; SMTP/IMAP HANDSHAKE
+                </h4>
+              </div>
+              <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                TEST YOUR SETUP INSTANTLY
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Verify your SMTP connection and send a test OTP email right now to make sure messages arrive in the user's inbox with no issues.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <input
+                  type="email"
+                  value={testRecipientEmail}
+                  onChange={e => setTestRecipientEmail(e.target.value)}
+                  placeholder="Enter recipient email (e.g. kalamkalam1234kd@gmail.com)"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleTestEmailConnection}
+                disabled={isTestingEmail}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-50"
+              >
+                {isTestingEmail ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                <span>SEND TEST OTP EMAIL</span>
+              </button>
+            </div>
+
+            {/* Test Result Diagnostic Card */}
+            {emailTestResult && (
+              <div
+                className={`p-4 rounded-2xl border text-xs font-mono space-y-2 ${
+                  emailTestResult.success
+                    ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                    : 'bg-rose-950/30 border-rose-500/40 text-rose-200'
+                }`}
+              >
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  {emailTestResult.success ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>SMTP Handshake Successful!</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-rose-400" />
+                      <span>SMTP Connection Failed</span>
+                    </>
+                  )}
+                </div>
+                <p>{emailTestResult.message}</p>
+                {emailTestResult.details && (
+                  <pre className="p-3 rounded-xl bg-black/50 text-[11px] overflow-x-auto text-slate-300">
+                    {JSON.stringify(emailTestResult.details, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {activeTab === 'logs' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -4614,6 +5550,242 @@ export const AdminPage: React.FC = () => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB: DOMAIN & BACKUP MIGRATION */}
+      {activeTab === 'backup' && (
+        <div className="space-y-6">
+          {/* Reassurance Hero Banner */}
+          <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-950/40 via-[#0d0d14] to-cyan-950/40 border border-emerald-500/40 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
+                    100% Data Safety Guaranteed
+                  </span>
+                  <span className="text-[11px] font-mono text-emerald-400">Zero Balance Loss</span>
+                </div>
+                <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider">
+                  டொமைன் மாற்றினாலும் யூசர்களின் பேலன்ஸ் அழியாது!
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Domain URL என்பது உங்கள் தளத்தின் முகவரி (Address) மட்டுமே. யூசர்களின் பேலன்ஸ் (Wallet Balance), ஆர்டர்கள் (Orders) மற்றும் டிஜிட்டல் கீகள் (Digital Keys) அனைத்தும் உங்கள் சர்வர் டேட்டாபேஸில் (<code className="px-1 py-0.5 rounded bg-black/50 text-emerald-300 font-mono text-[11px]">database/nexa_panel.json</code>) பத்திரமாக சேமிக்கப்பட்டுள்ளன. நீங்கள் எத்தனை முறை டொமைனை மாற்றினாலும் அல்லது ஹோஸ்டிங்கை மாற்றினாலும் யூசர்களின் ஒரு பைசா கூட குறையாது.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Live Stats Pill */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/5">
+              <div className="p-3 rounded-xl bg-black/40 border border-white/5">
+                <span className="text-[10px] font-mono text-slate-400 block uppercase">Total Users</span>
+                <span className="text-base font-black text-white font-mono">{users.length} Users</span>
+              </div>
+              <div className="p-3 rounded-xl bg-black/40 border border-white/5">
+                <span className="text-[10px] font-mono text-slate-400 block uppercase">Total Balance Held</span>
+                <span className="text-base font-black text-emerald-400 font-mono">
+                  ₹{users.reduce((sum, u) => sum + (u.balance || 0), 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-black/40 border border-white/5">
+                <span className="text-[10px] font-mono text-slate-400 block uppercase">Total Orders</span>
+                <span className="text-base font-black text-cyan-400 font-mono">{orders.length} Orders</span>
+              </div>
+              <div className="p-3 rounded-xl bg-black/40 border border-white/5">
+                <span className="text-[10px] font-mono text-slate-400 block uppercase">Digital Keys</span>
+                <span className="text-base font-black text-rose-400 font-mono">{keys.length} Keys</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Backup & Restore Controls */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Box 1: 1-Click Backup Export */}
+            <div className="p-5 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center">
+                    <Download className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                      1-CLICK DATABASE BACKUP
+                    </h4>
+                    <span className="text-[11px] text-slate-400 font-mono">Download full snapshot (.json)</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  முழு டேட்டாபேஸ் தகவல்களையும் (யூசர்கள், பாஸ்வேர்டுகள், பேலன்ஸ், ஆர்டர்கள், கீகள், settings) ஒரே கிளிக்கில் கணினியில் சேமித்துக் கொள்ளலாம்.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleExportDatabaseBackup}
+                  disabled={isExportingBackup}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-950/50 transition-all disabled:opacity-50"
+                >
+                  <Download className={`w-4 h-4 ${isExportingBackup ? 'animate-bounce' : ''}`} />
+                  <span>{isExportingBackup ? 'Generating Backup...' : 'Download Database Snapshot (.json)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Box 2: 1-Click Backup Restore */}
+            <div className="p-5 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                      RESTORE DATABASE SNAPSHOT
+                    </h4>
+                    <span className="text-[11px] text-slate-400 font-mono">Upload previously downloaded backup</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  புதிய ஹோஸ்டிங் அல்லது புதிய டொமைனுக்கு மாறும்போது, நீங்கள் டவுன்லோட் செய்த பேக்கப் பைலை அப்லோட் செய்து அனைத்தையும் பழையபடி மீட்கலாம்.
+                </p>
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <input
+                  ref={backupFileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleBackupFileUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => backupFileInputRef.current?.click()}
+                  disabled={isRestoringBackup}
+                  className="w-full py-3 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4 text-cyan-400" />
+                  <span>{isRestoringBackup ? 'Restoring Database...' : 'Choose Backup File (.json) to Restore'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Hosting & Free Domain Deployment Guide */}
+          <div className="p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-5">
+            <div className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-rose-400" />
+              <h3 className="font-display font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                இலவச ஹோஸ்டிங் &amp; இலவச டொமைன் வழிகாட்டி (FREE HOSTING &amp; DOMAIN GUIDE)
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Hosting Guide */}
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <h4 className="font-bold text-white text-xs uppercase tracking-wide">
+                    1. எங்கே இலவசமாக ஹோஸ்ட் செய்யலாம்? (Free Hosting)
+                  </h4>
+                </div>
+
+                <div className="space-y-2.5 text-xs text-slate-300 leading-relaxed">
+                  <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <span className="font-bold text-emerald-300 font-mono text-[11px] block">
+                      A. Render.com (மிகவும் சிறந்தது - Best for Node.js)
+                    </span>
+                    <p className="text-[11px] text-slate-400">
+                      GitHub ரெபாசிட்டரியை இணைத்தால் தானாகவே deploy செய்து தரும். 100% இலவச Web Service tier உள்ளது. இலவசமாக <code className="text-white">yourname.onrender.com</code> டொமைனும் Free SSL-உம் கிடைக்கும்.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <span className="font-bold text-cyan-300 font-mono text-[11px] block">
+                      B. Railway.app &amp; Koyeb.com
+                    </span>
+                    <p className="text-[11px] text-slate-400">
+                      Node.js Express + React மிக வேகமாக இயங்கும். Free trial credits &amp; இலவச சப்டொமைன் வசதி உண்டு.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <span className="font-bold text-purple-300 font-mono text-[11px] block">
+                      C. Google Cloud Run (தற்போது இயங்கும் முறை)
+                    </span>
+                    <p className="text-[11px] text-slate-400">
+                      Google Cloud Run இலவசமாக மாதத்திற்கு 2 மில்லியன் requests தருகிறது. அதிவேக சர்வர் பாதுகாப்பு.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Free Domain Guide */}
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                  <h4 className="font-bold text-white text-xs uppercase tracking-wide">
+                    2. இலவச டொமைன் என்ன பண்ணலாம்? (Free Domain Options)
+                  </h4>
+                </div>
+
+                <div className="space-y-2.5 text-xs text-slate-300 leading-relaxed">
+                  <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <span className="font-bold text-cyan-300 font-mono text-[11px] block">
+                      விருப்பம் 1: ஹோஸ்டிங் தரும் இலவச Subdomain (100% Free Forever)
+                    </span>
+                    <p className="text-[11px] text-slate-400">
+                      Render (<code className="text-white">yourbrand.onrender.com</code>) அல்லது Vercel (<code className="text-white">yourbrand.vercel.app</code>) தரும் டொமைன் வாழ்நாள் முழுவதும் இலவசம். இதில் SSL தானாகவே வரும்.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <span className="font-bold text-emerald-300 font-mono text-[11px] block">
+                      விருப்பம் 2: DuckDNS.org (100% Free Custom Subdomain)
+                    </span>
+                    <p className="text-[11px] text-slate-400">
+                      <a href="https://www.duckdns.org" target="_blank" rel="noreferrer" className="text-emerald-400 underline">DuckDNS.org</a> தளத்தில் இலவசமாக <code className="text-white">yourbrand.duckdns.org</code> உருவாக்கி உங்கள் சர்வருடன் இணைக்கலாம்.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <span className="font-bold text-rose-300 font-mono text-[11px] block">
+                      விருப்பம் 3: மலிவான சொந்த டொமைன் (₹80 - ₹150 மட்டும்)
+                    </span>
+                    <p className="text-[11px] text-slate-400">
+                      தொழில்முறை தோற்றத்திற்கு <code className="text-white">.top</code>, <code className="text-white">.xyz</code> அல்லது <code className="text-white">.in</code> டொமைனை Cloudflare Registrar அல்லது Hostinger-ல் ₹80 - ₹150 கொடுத்து வாங்கினால் மிக பாதுகாப்பாக இருக்கும்.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step-by-Step Checklist */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/20 via-black/40 to-cyan-950/20 border border-white/5 space-y-3">
+              <h4 className="font-bold text-white text-xs uppercase tracking-wide flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>டொமைன் மாற்றும் போது செய்ய வேண்டிய 3 எளிய முறைகள் (Checklist):</span>
+              </h4>
+              <ol className="list-decimal list-inside space-y-1.5 text-xs text-slate-300">
+                <li>
+                  <strong className="text-white">டேட்டாபேஸ் பேக்கப்:</strong> மேலே உள்ள <span className="text-rose-400 font-bold">"Download Database Snapshot"</span> பட்டனை அழுத்தி ஒரு பேக்கப் டவுன்லோட் செய்து வைத்துக் கொள்ளுங்கள்.
+                </li>
+                <li>
+                  <strong className="text-white">புதிய டொமைனில் ஃபைல் சேமிப்பு:</strong> உங்கள் புதிய ஹோஸ்டிங் சர்வரில் <code className="text-emerald-300">database/nexa_panel.json</code> ஃபைல் அதே இடத்தில் இருப்பதை உறுதி செய்யுங்கள் (அல்லது இந்த பக்கத்தில் உள்ள Restore பட்டனை பயன்படுத்தி பேக்கப்பை அப்லோட் செய்யுங்கள்).
+                </li>
+                <li>
+                  <strong className="text-white">Firebase Google Login (தேவைப்பட்டால்):</strong> நீங்கள் Google Sign-In பயன்படுத்துகிறீர்கள் என்றால், Firebase Console ➔ Authentication ➔ Settings ➔ Authorized Domains பகுதிக்குச் சென்று உங்கள் புதிய டொமைனை Add செய்யுங்கள்.
+                </li>
+              </ol>
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 font-mono">
+                ✅ யூசர்கள் தங்கள் பழைய Email மற்றும் Password மூலமாகவே புதிய டொமைனில் லாகின் செய்யலாம். அவர்களின் பேலன்ஸ் மற்றும் ஆர்டர்கள் 100% அப்படியே இருக்கும்!
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -6050,7 +7222,7 @@ export const AdminPage: React.FC = () => {
                   rows={6}
                   value={bulkRawKeys}
                   onChange={e => setBulkRawKeys(e.target.value)}
-                  placeholder={`NEXA-PRO-8921-A99B\nNEXA-PRO-8922-K210\nNEXA-PRO-8923-Z718`}
+                  placeholder={`KALAM-PRO-8921-A99B\nKALAM-PRO-8922-K210\nKALAM-PRO-8923-Z718`}
                   required
                   className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono resize-none leading-relaxed"
                 />
@@ -6307,10 +7479,24 @@ export const AdminPage: React.FC = () => {
                 <div>Referral Code: <span className="text-amber-300 font-bold">{selectedUserDetail.referralCode || 'None'}</span></div>
                 <div>2FA Authentication: <span className={selectedUserDetail.twoFactorEnabled ? 'text-emerald-400' : 'text-slate-500'}>{selectedUserDetail.twoFactorEnabled ? 'ENABLED' : 'DISABLED'}</span></div>
                 <div>Account Status: <span className={!selectedUserDetail.isBanned ? 'text-emerald-400' : 'text-rose-400 font-bold'}>{!selectedUserDetail.isBanned ? 'ACTIVE' : 'SUSPENDED'}</span></div>
+                <div>Auth Provider: <span className="text-white font-bold">{selectedUserDetail.authProvider || 'password'} ({selectedUserDetail.providerDisplay || (selectedUserDetail.hasPassword ? 'Email & Password' : 'Google / OTP')})</span></div>
+                <div>Password Status: <span className={selectedUserDetail.hasPassword ? 'text-emerald-400 font-bold' : 'text-sky-300'}>{selectedUserDetail.hasPassword ? 'PASSWORD CREATED BY USER (ENCRYPTED SHA-256 HASH)' : 'NO PASSWORD (CONTINUE WITH GOOGLE / OTP)'}</span></div>
               </div>
             </div>
 
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPasswordResetUser(selectedUserDetail);
+                  setNewPasswordInput('');
+                  setSelectedUserDetail(null);
+                }}
+                className="px-3 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs transition-all flex items-center justify-center gap-1.5"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Set Password</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -6339,6 +7525,124 @@ export const AdminPage: React.FC = () => {
                 {selectedUserDetail.isBanned ? 'Unban' : 'Ban User'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RESET / CHANGE USER PASSWORD */}
+      {passwordResetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            onClick={() => !isResettingPasswordLoading && setPasswordResetUser(null)}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md"
+          />
+          <div className="relative w-full max-w-md bg-[#0d0d14] border border-amber-500/40 rounded-3xl p-6 shadow-2xl z-10 space-y-4 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    SET / RESET USER PASSWORD
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    User: @{passwordResetUser.username} ({passwordResetUser.email})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPasswordResetUser(null)}
+                className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Security Explanation Banner */}
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-200/90 text-[11px] leading-relaxed space-y-1.5">
+              <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Security Notice: Cryptographic Hashing</span>
+              </div>
+              <p>
+                User passwords are protected with <strong>one-way SHA-256 cryptographic hashing</strong>. For data privacy and security, original passwords cannot and should not be displayed in plaintext.
+              </p>
+              <p className="text-slate-300">
+                You can assign or set a <strong>new password</strong> for this user below. The new password will take effect immediately.
+              </p>
+            </div>
+
+            <form onSubmit={handleAdminResetPassword} className="space-y-3.5">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  NEW PASSWORD FOR @{passwordResetUser.username}
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-amber-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={newPasswordInput}
+                    onChange={e => setNewPasswordInput(e.target.value)}
+                    placeholder="Enter new password (e.g. user123 or kalam@2026)"
+                    required
+                    minLength={4}
+                    className="w-full pl-10 pr-24 py-2.5 bg-white/[0.04] border border-white/10 focus:border-amber-500 rounded-xl text-white font-mono font-medium focus:outline-none transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const randomPass = 'kl_' + Math.random().toString(36).substring(2, 8) + '@' + Math.floor(100 + Math.random() * 900);
+                      setNewPasswordInput(randomPass);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold transition-all cursor-pointer"
+                  >
+                    🎲 Generate
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                <span className="text-slate-500">Quick suggestions:</span>
+                {['pass123', 'gamer@2026', 'kalam1234'].map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setNewPasswordInput(p)}
+                    className="px-1.5 py-0.5 rounded bg-white/[0.04] hover:bg-white/10 text-slate-300 border border-white/5 transition-colors cursor-pointer"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isResettingPasswordLoading}
+                  onClick={() => setPasswordResetUser(null)}
+                  className="w-1/3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-slate-300 font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingPasswordLoading || newPasswordInput.trim().length < 4}
+                  className="w-2/3 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-amber-950/50 cursor-pointer disabled:opacity-50"
+                >
+                  {isResettingPasswordLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Update Password</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

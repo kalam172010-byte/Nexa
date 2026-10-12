@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ShieldCheck, Check, Sparkles, AlertTriangle, ArrowRight, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
+import { useSite } from '../context/SiteContext.js';
 import { api } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
 
@@ -16,10 +17,12 @@ export const ResellerUpgradeModal: React.FC<ResellerUpgradeModalProps> = ({
   onNavigateDeposit,
 }) => {
   const { balance, updateBalanceLocally, refreshUser } = useAuth();
+  const { siteConfig } = useSite();
   const { success: showToastSuccess, error: showToastError } = useToast();
   const [isUpgrading, setIsUpgrading] = useState(false);
 
-  const upgradePrice = 299.0;
+  const upgradePrice = Number(siteConfig.resellerUpgradePrice) || 299.0;
+  const currencySymbol = siteConfig.currencySymbol || '₹';
   const hasBalance = balance >= upgradePrice;
 
   const benefits = [
@@ -33,7 +36,7 @@ export const ResellerUpgradeModal: React.FC<ResellerUpgradeModalProps> = ({
 
   const handleUpgrade = async () => {
     if (!hasBalance) {
-      showToastError('Insufficient Balance', `Deposit ₹${(upgradePrice - balance).toFixed(2)} to upgrade.`);
+      showToastError('Insufficient Balance', `Deposit ${currencySymbol}${(upgradePrice - balance).toFixed(2)} to upgrade.`);
       return;
     }
 
@@ -92,7 +95,7 @@ export const ResellerUpgradeModal: React.FC<ResellerUpgradeModalProps> = ({
             <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
               One-Time Lifetime License
             </span>
-            <div className="text-2xl font-mono font-black text-white">₹{upgradePrice.toFixed(2)}</div>
+            <div className="text-2xl font-mono font-black text-white">{currencySymbol}{upgradePrice.toFixed(2)}</div>
           </div>
           <div className="text-right">
             <span className="text-[10px] text-slate-400 block">Your Wallet</span>
@@ -101,7 +104,7 @@ export const ResellerUpgradeModal: React.FC<ResellerUpgradeModalProps> = ({
                 hasBalance ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
-              ₹{balance.toFixed(2)}
+              {currencySymbol}{balance.toFixed(2)}
             </span>
           </div>
         </div>

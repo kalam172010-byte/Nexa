@@ -16,6 +16,7 @@ import {
   ResellerApiConfig,
   ActivityLog,
   SiteCustomizationConfig,
+  EmailConfig,
 } from '../models/types';
 
 interface DatabaseSchema {
@@ -34,6 +35,7 @@ interface DatabaseSchema {
   gatewayConfig: PaymentGatewayConfig;
   resellerConfig: ResellerApiConfig;
   siteConfig: SiteCustomizationConfig;
+  emailConfig?: EmailConfig;
   activityLogs: ActivityLog[];
 }
 
@@ -80,6 +82,9 @@ export class Database {
         if (!parsed.siteConfig || !parsed.siteConfig.siteTitle) {
           parsed.siteConfig = this.getDefaultSiteConfig();
         }
+        if (!parsed.emailConfig) {
+          parsed.emailConfig = this.getDefaultEmailConfig();
+        }
         if (Array.isArray(parsed.products) && Array.isArray(parsed.productVariants)) {
           const productIds = new Set(parsed.products.map((p: any) => p.id));
           parsed.productVariants = parsed.productVariants.filter((v: any) => productIds.has(v.productId));
@@ -94,28 +99,28 @@ export class Database {
 
   public getDefaultSiteConfig(): SiteCustomizationConfig {
     return {
-      siteTitle: 'Nexa Panel',
-      siteTagline: 'Gaming Digital Reseller Platform',
+      siteTitle: 'KALAM FF PANEL',
+      siteTagline: 'Free Fire VIP Digital Keys & Reseller Panel',
       logoUrl: '',
       faviconUrl: '',
       currencySymbol: '₹',
       currencyCode: 'INR',
-      footerText: 'The premier automated digital keys and panels reseller infrastructure.',
-      copyrightText: '© 2026 Nexa Gaming Systems. All rights reserved.',
+      footerText: 'The premier automated Free Fire digital keys and panel reseller infrastructure.',
+      copyrightText: '© 2026 Kalam FF Panel. All rights reserved.',
       accentTheme: 'crimson',
       backgroundStyle: 'deep-slate',
       glowIntensity: 'vibrant',
       borderRadius: 'rounded',
       fontStyle: 'ultra-bold',
       isAnnouncementEnabled: true,
-      announcementText: '🔥 OB55 UPDATE ACTIVE! Automated Instant Digital Key Delivery 24/7 with Live Reseller API',
+      announcementText: '🔥 OB55 UPDATE ACTIVE! Kalam FF Instant Digital Key Delivery 24/7 with Live Reseller API',
       announcementType: 'promo',
       announcementLink: '',
       isMarqueeEnabled: true,
-      marqueeText: '⚡ Fast UPI Auto Deposit | Instant Digital Key Delivery | Non-Root & iOS Supported | 100% Anti-Ban Menus | 24/7 Live Support',
-      heroTitle: 'DOMINATE THE GAME WITH PRO DIGITAL PANELS',
+      marqueeText: '⚡ Fast UPI Auto Deposit | Instant FF Key Delivery | Non-Root & iOS Supported | 100% Anti-Ban Menus | 24/7 Live Support',
+      heroTitle: 'DOMINATE FREE FIRE WITH KALAM FF VIP PANEL',
       heroSubtitle: 'Instant Key Delivery · Automated Wallet Deposits · Wholesale VIP Pricing for Resellers',
-      heroBadgeText: 'OFFICIAL GAMING RESELLER PLATFORM',
+      heroBadgeText: 'OFFICIAL KALAM FF RESELLER PLATFORM',
       telegramChannelUrl: 'https://t.me/nexa_gaming_official',
       telegramSupportUser: '@nexa_support_admin',
       whatsappNumber: '+918056317218',
@@ -127,12 +132,33 @@ export class Database {
       resellerUpgradePrice: 299,
       referralCommissionPct: 5,
       accountSafetyBalanceText: 'Keep ₹500+ balance for account safety.',
-      adminPanelTitle: 'NEXA SYSTEM CONTROL PANEL',
+      adminPanelTitle: 'KALAM FF SYSTEM CONTROL PANEL',
       adminHeaderNotice: 'SUPER ADMIN LIVE REALTIME SESSION ACTIVE',
       adminAccentColor: '#e11d48',
       adminStatusBadge: 'SUPER PRIVILEGES',
       adminThemePreset: 'crimson-admin',
       adminShortcutsEnabled: true,
+    };
+  }
+
+  public getDefaultEmailConfig(): EmailConfig {
+    return {
+      enabled: true,
+      protocol: 'smtp',
+      senderEmail: 'kalamkalam1234kd@gmail.com',
+      senderName: 'KALAM FF PANEL',
+      smtpHost: 'smtp.gmail.com',
+      smtpPort: 587,
+      secure: false,
+      smtpUser: 'kalamkalam1234kd@gmail.com',
+      smtpPass: '',
+      imapHost: 'imap.gmail.com',
+      imapPort: 993,
+      imapUser: 'kalamkalam1234kd@gmail.com',
+      imapPass: '',
+      imapSecure: true,
+      otpExpiryMinutes: 10,
+      allowOtpSignup: true,
     };
   }
 
@@ -178,6 +204,7 @@ export class Database {
         defaultAndroidId: '0b9b969bc2e7997b',
       },
       siteConfig: this.getDefaultSiteConfig(),
+      emailConfig: this.getDefaultEmailConfig(),
       activityLogs: [],
     };
   }
@@ -271,6 +298,12 @@ export class Database {
   public get gatewayConfig(): PaymentGatewayConfig { return this.data.gatewayConfig; }
   public get resellerConfig(): ResellerApiConfig { return this.data.resellerConfig; }
   public get siteConfig(): SiteCustomizationConfig { return this.data.siteConfig; }
+  public get emailConfig(): EmailConfig {
+    if (!this.data.emailConfig) {
+      this.data.emailConfig = this.getDefaultEmailConfig();
+    }
+    return this.data.emailConfig;
+  }
   public get activityLogs(): ActivityLog[] { return this.data.activityLogs; }
 
   public updateSiteConfig(config: Partial<SiteCustomizationConfig>): SiteCustomizationConfig {
@@ -280,6 +313,18 @@ export class Database {
     };
     this.save();
     return this.data.siteConfig;
+  }
+
+  public updateEmailConfig(config: Partial<EmailConfig>): EmailConfig {
+    if (!this.data.emailConfig) {
+      this.data.emailConfig = this.getDefaultEmailConfig();
+    }
+    this.data.emailConfig = {
+      ...this.data.emailConfig,
+      ...config,
+    };
+    this.save();
+    return this.data.emailConfig;
   }
 
   public logActivity(userId: string | undefined, username: string | undefined, action: string, details: string, ip: string = '127.0.0.1') {
@@ -297,6 +342,36 @@ export class Database {
       this.data.activityLogs.pop();
     }
     this.save();
+  }
+
+  public getRawData(): DatabaseSchema {
+    return JSON.parse(JSON.stringify(this.data));
+  }
+
+  public replaceData(newData: Partial<DatabaseSchema>): void {
+    if (!newData || typeof newData !== 'object') {
+      throw new Error('Invalid backup data');
+    }
+    this.data = {
+      ...this.getInitialSchema(),
+      ...newData,
+      users: Array.isArray(newData.users) ? newData.users : this.data.users,
+      products: Array.isArray(newData.products) ? newData.products : this.data.products,
+      productVariants: Array.isArray(newData.productVariants) ? newData.productVariants : this.data.productVariants,
+      digitalKeys: Array.isArray(newData.digitalKeys) ? newData.digitalKeys : this.data.digitalKeys,
+      orders: Array.isArray(newData.orders) ? newData.orders : this.data.orders,
+      transactions: Array.isArray(newData.transactions) ? newData.transactions : this.data.transactions,
+      deposits: Array.isArray(newData.deposits) ? newData.deposits : this.data.deposits,
+      supportTickets: Array.isArray(newData.supportTickets) ? newData.supportTickets : this.data.supportTickets,
+      supportMessages: Array.isArray(newData.supportMessages) ? newData.supportMessages : this.data.supportMessages,
+      referrals: Array.isArray(newData.referrals) ? newData.referrals : this.data.referrals,
+      gatewayConfig: newData.gatewayConfig || this.data.gatewayConfig,
+      resellerConfig: newData.resellerConfig || this.data.resellerConfig,
+      siteConfig: newData.siteConfig || this.data.siteConfig,
+      emailConfig: newData.emailConfig || this.data.emailConfig,
+      activityLogs: Array.isArray(newData.activityLogs) ? newData.activityLogs : this.data.activityLogs,
+    };
+    this.saveSync();
   }
 }
 

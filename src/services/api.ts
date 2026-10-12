@@ -32,7 +32,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     });
   } catch (err: any) {
     throw new ApiError(
-      err?.message || 'Unable to connect to Nexa Panel API. Please check your network connection.',
+      err?.message || 'Unable to connect to Kalam FF Panel API. Please check your network connection.',
       0
     );
   }
@@ -53,9 +53,13 @@ export const api = {
   // Auth
   register: (body: any) => request<any>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body: any) => request<any>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  sendOtp: (email: string) => request<any>('/auth/otp/send', { method: 'POST', body: JSON.stringify({ email }) }),
+  verifyOtp: (email: string, code: string) => request<any>('/auth/otp/verify', { method: 'POST', body: JSON.stringify({ email, code }) }),
+  getEmailStatus: () => request<any>('/auth/email-status'),
   firebaseSync: (body: { uid: string; email: string; displayName?: string }) =>
     request<any>('/auth/firebase-sync', { method: 'POST', body: JSON.stringify(body) }),
-  demoLogin: (role: string) => request<any>('/auth/demo-login', { method: 'POST', body: JSON.stringify({ role }) }),
+  resetPassword: (body: { usernameOrEmail: string; newPassword: string }) =>
+    request<any>('/auth/reset-password', { method: 'POST', body: JSON.stringify(body) }),
   getMe: () => request<{ user: any }>('/auth/me'),
   changePassword: (body: any) => request<any>('/auth/change-password', { method: 'POST', body: JSON.stringify(body) }),
   toggleTwoFactor: () => request<any>('/auth/toggle-2fa', { method: 'POST' }),
@@ -122,6 +126,8 @@ export const api = {
   adjustUserBalance: (id: string, amount: number, reason: string) =>
     request<any>(`/admin/users/${id}/adjust-balance`, { method: 'POST', body: JSON.stringify({ amount, reason }) }),
   toggleUserBan: (id: string) => request<any>(`/admin/users/${id}/ban`, { method: 'PATCH' }),
+  adminResetPassword: (id: string, newPassword: string) =>
+    request<any>(`/admin/users/${id}/password`, { method: 'PATCH', body: JSON.stringify({ newPassword }) }),
 
   createProduct: (body: any) => request<any>('/admin/products', { method: 'POST', body: JSON.stringify(body) }),
   updateProduct: (id: string, body: any) => request<any>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
@@ -170,5 +176,19 @@ export const api = {
   getSiteSettings: () => request<{ config: any }>('/admin/settings/site'),
   updateSiteSettings: (body: any) => request<any>('/admin/settings/site', { method: 'PATCH', body: JSON.stringify(body) }),
 
+  // Email & IMAP/SMTP Setup Settings
+  getEmailSettings: () => request<{ config: any }>('/admin/settings/email'),
+  updateEmailSettings: (body: any) => request<any>('/admin/settings/email', { method: 'PATCH', body: JSON.stringify(body) }),
+  testEmailConnection: (body?: { testEmail?: string; configOverride?: any }) =>
+    request<any>('/admin/settings/email/test', { method: 'POST', body: JSON.stringify(body || {}) }),
+
   getAdminLogs: () => request<{ logs: any[] }>('/admin/logs'),
+
+  // Database Backup & Migration
+  exportDatabase: () => request<any>('/admin/database/export'),
+  importDatabase: (backupData: any) =>
+    request<{ message: string; stats: any }>('/admin/database/import', {
+      method: 'POST',
+      body: JSON.stringify(backupData),
+    }),
 };

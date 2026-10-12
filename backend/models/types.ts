@@ -239,3 +239,22 @@ export interface SiteCustomizationConfig {
   adminThemePreset?: 'crimson-admin' | 'cyber-admin' | 'emerald-admin' | 'gold-admin' | 'obsidian-admin';
   adminShortcutsEnabled?: boolean;
 }
+
+export interface EmailConfig {
+  enabled: boolean;
+  protocol: 'smtp' | 'imap_smtp' | 'gmail';
+  senderEmail: string;        // "My Email" (e.g., kalamkalam1234kd@gmail.com)
+  senderName: string;         // e.g. "NEXA Gaming Panel"
+  smtpHost: string;           // e.g. smtp.gmail.com
+  smtpPort: number;           // e.g. 587 or 465
+  secure: boolean;            // SSL/TLS (true for 465, false for 587)
+  smtpUser: string;           // SMTP Username
+  smtpPass: string;           // Password / App password
+  imapHost?: string;          // IMAP Host (e.g. imap.gmail.com)
+  imapPort?: number;          // IMAP Port (e.g. 993)
+  imapUser?: string;          // IMAP Username
+  imapPass?: string;          // IMAP Password
+  imapSecure?: boolean;       // IMAP SSL
+  otpExpiryMinutes: number;   // default 10
+  allowOtpSignup: boolean;    // auto-create user on OTP verification if not exists
+}

@@ -46,7 +46,7 @@ async function startServer() {
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'Nexa Panel API', timestamp: new Date().toISOString() });
+    res.json({ status: 'ok', service: 'KALAM FF PANEL API', timestamp: new Date().toISOString() });
   });
 
   if (!isProduction) {

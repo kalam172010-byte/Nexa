@@ -28,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
 
   const brandInitials = siteConfig.siteTitle
     ? siteConfig.siteTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
-    : 'NX';
+    : 'KF';
 
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
 
@@ -63,10 +63,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
           </div>
           <div>
             <h1 className="font-display font-black text-base tracking-wider text-white group-hover:text-rose-400 transition-colors uppercase truncate max-w-[140px]">
-              {siteConfig.siteTitle || 'NEXA PANEL'}
+              {siteConfig.siteTitle || 'KALAM FF PANEL'}
             </h1>
             <span className="text-[10px] text-slate-400 font-mono tracking-wider truncate block max-w-[140px] uppercase">
-              {siteConfig.siteTagline || 'GAMING RESELLER'}
+              {siteConfig.siteTagline || 'FREE FIRE RESELLER'}
             </span>
           </div>
         </button>

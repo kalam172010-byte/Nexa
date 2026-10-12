@@ -37,7 +37,7 @@ export const FloatingSupport: React.FC<FloatingSupportProps> = ({ onOpenTickets 
               <div className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
                 <Headphones className="w-3.5 h-3.5" />
               </div>
-              <span className="text-xs font-bold text-white uppercase tracking-wider">NEXA HELPDESK</span>
+              <span className="text-xs font-bold text-white uppercase tracking-wider">KALAM FF HELPDESK</span>
             </div>
             <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
