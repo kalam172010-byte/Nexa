@@ -84,6 +84,23 @@ export class Database {
         }
         if (!parsed.emailConfig) {
           parsed.emailConfig = this.getDefaultEmailConfig();
+        } else if (parsed.emailConfig.smtpPort === 587 && parsed.emailConfig.secure === true) {
+          parsed.emailConfig.secure = false;
+        }
+        if (!parsed.gatewayConfig) {
+          parsed.gatewayConfig = this.getDefaultGatewayConfig();
+        } else {
+          // Ensure FamGateway has its valid production API key if selected
+          if (
+            (parsed.gatewayConfig.apiUrl?.includes('famgateway.in') || parsed.gatewayConfig.gatewayType === 'FAMGATEWAY') &&
+            (!parsed.gatewayConfig.apiKey ||
+              parsed.gatewayConfig.apiKey.includes('...') ||
+              parsed.gatewayConfig.apiKey === 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe')
+          ) {
+            parsed.gatewayConfig.apiKey = 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e';
+          }
+          // Force real-time bank verification mode (no fake test mode)
+          parsed.gatewayConfig.testMode = false;
         }
         if (Array.isArray(parsed.products) && Array.isArray(parsed.productVariants)) {
           const productIds = new Set(parsed.products.map((p: any) => p.id));
@@ -95,6 +112,29 @@ export class Database {
       }
     }
     return this.getInitialSchema();
+  }
+
+  public getDefaultGatewayConfig(): PaymentGatewayConfig {
+    return {
+      gatewayName: 'FamGateway Official (famgateway.in)',
+      gatewayType: 'FAMGATEWAY',
+      apiUrl: 'https://famgateway.in/api/create-order',
+      qrAliasUrl: 'https://famgateway.in/api/qr.php',
+      statusUrl: 'https://famgateway.in/api/verify-order.php',
+      merchantId: 'FAMGATEWAY_PRIMARY',
+      apiKey: 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e',
+      masterKey: '',
+      webhookUrl: 'https://panel.nexa.internal/api/payments/webhook',
+      redirectUrl: 'https://yoursite.com/payment-success',
+      successUrl: 'https://yoursite.com/payment-success',
+      cancelUrl: 'https://yoursite.com/payment-cancel',
+      paymentExpiryMinutes: 10,
+      minDeposit: 1,
+      isUpiQrEnabled: true,
+      upiVpa: '8056317218@fam',
+      upiMerchantName: 'Kalam Kalam',
+      testMode: false,
+    };
   }
 
   public getDefaultSiteConfig(): SiteCustomizationConfig {
@@ -174,25 +214,7 @@ export class Database {
       supportTickets: [],
       supportMessages: [],
       referrals: [],
-      gatewayConfig: {
-        gatewayName: 'FamPay UPI Payment Gateway',
-        gatewayType: 'RENDER_FGW',
-        apiUrl: 'https://payment-gateway-87gk.onrender.com/api/create-order',
-        qrAliasUrl: 'https://payment-gateway-87gk.onrender.com/api/qr.php',
-        statusUrl: 'https://payment-gateway-87gk.onrender.com/api/v1/order/status',
-        merchantId: 'FGW_RENDER_MERCHANT',
-        apiKey: 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe',
-        masterKey: '',
-        webhookUrl: 'https://panel.nexa.internal/api/payments/webhook',
-        redirectUrl: 'https://yoursite.com/payment-success',
-        successUrl: 'https://yoursite.com/payment-success',
-        cancelUrl: 'https://yoursite.com/payment-cancel',
-        paymentExpiryMinutes: 5,
-        minDeposit: 1,
-        isUpiQrEnabled: true,
-        upiVpa: '8056317218@fam',
-        upiMerchantName: 'Kalam Akash',
-      },
+      gatewayConfig: this.getDefaultGatewayConfig(),
       resellerConfig: {
         apiUrl: 'https://bantibhaiya.to/api/reseller_v1.php',
         apiKey: '5841ac0e6b458bdde0ffbe2baa095306',

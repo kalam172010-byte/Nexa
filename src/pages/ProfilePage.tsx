@@ -1,36 +1,33 @@
 import React, { useState } from 'react';
 import {
-  User,
   Shield,
-  KeyRound,
   Lock,
-  LogOut,
-  CheckCircle2,
-  AlertCircle,
   RefreshCw,
-  Clock,
   Laptop,
   Terminal,
   Code,
+  Eye,
+  EyeOff,
+  KeyRound,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { api } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
 
 export const ProfilePage: React.FC = () => {
-  const { user, role, balance, logout, refreshUser } = useAuth();
+  const { user, role, balance, refreshUser } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
 
-  // Change password fields
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
-  // 2FA toggle
   const [twoFaLoading, setTwoFaLoading] = useState(false);
-
-  // Outbound Reseller API credentials state
   const [resellerApiCreds, setResellerApiCreds] = useState<any>(null);
 
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
@@ -55,25 +52,36 @@ export const ProfilePage: React.FC = () => {
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      showToastError('Validation Error', 'New passwords do not match.');
+
+    if (user?.hasPassword !== false && !currentPassword.trim()) {
+      showToastError('Validation Error', 'Please enter your current password.');
       return;
     }
 
-    if (newPassword.length < 6) {
-      showToastError('Validation Error', 'Password must be at least 6 characters.');
+    if (newPassword.trim().length < 6) {
+      showToastError('Validation Error', 'New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      showToastError('Validation Error', 'New password and confirmation do not match.');
       return;
     }
 
     setIsUpdatingPassword(true);
     try {
-      await api.changePassword({ currentPassword, newPassword, confirmPassword });
-      showToastSuccess('Password Updated', 'Your account credentials have been changed.');
+      const res = await api.changePassword({
+        currentPassword: currentPassword.trim(),
+        newPassword: newPassword.trim(),
+        confirmPassword: confirmPassword.trim(),
+      });
+      showToastSuccess('Password Updated Successfully', res?.message || 'Your account password has been updated. You can now use it anytime to log in.');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      await refreshUser();
     } catch (err: any) {
-      showToastError('Password Update Failed', err.message);
+      showToastError('Password Update Failed', err.message || 'Could not update password.');
     } finally {
       setIsUpdatingPassword(false);
     }
@@ -84,7 +92,7 @@ export const ProfilePage: React.FC = () => {
     try {
       const res = await api.toggleTwoFactor();
       await refreshUser();
-      showToastSuccess('2FA Status Updated', res.message);
+      showToastSuccess('Security Updated', res.message);
     } catch (err: any) {
       showToastError('Failed to toggle 2FA', err.message);
     } finally {
@@ -93,35 +101,26 @@ export const ProfilePage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 pb-24 md:pb-12 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Profile Overview Card */}
-      <div className="p-6 sm:p-7 rounded-3xl bg-[#0d0d14] border border-white/5 shadow-2xl relative overflow-hidden space-y-6">
+      <div className="p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-rose-950/50 via-[#121422] to-indigo-950/50 border border-rose-500/30 space-y-6 shadow-[0_8px_30px_rgba(244,63,94,0.12)]">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-500/20 to-slate-800 border border-rose-500/40 text-rose-400 flex items-center justify-center font-display font-black text-2xl shadow-xl shadow-rose-950/30">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 via-pink-600 to-amber-500 text-white flex items-center justify-center font-display font-bold text-xl shrink-0 shadow-[0_4px_20px_rgba(244,63,94,0.35)]">
               {user?.username ? user.username.slice(0, 2).toUpperCase() : 'NX'}
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-display font-black text-xl text-white">@{user?.username}</h2>
-                <span
-                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase ${
-                    role === 'ADMIN' || role === 'SUPER ADMIN'
-                      ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
-                      : role === 'RESELLER'
-                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                      : 'bg-white/[0.04] text-slate-300 border-white/10'
-                  }`}
-                >
-                  {role}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">{user?.email}</p>
-              <div className="flex items-center gap-1.5 text-[11px] font-mono text-rose-400 font-bold mt-1">
-                <Clock className="w-3.5 h-3.5" />
-                <span>
-                  Member Since:{' '}
+              <h2 className="font-display font-bold text-lg sm:text-xl bg-gradient-to-r from-white via-rose-100 to-amber-200 bg-clip-text text-transparent">
+                @{user?.username}
+              </h2>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-0.5">
+                <span className="font-mono text-cyan-300">{user?.email}</span>
+                <span aria-hidden="true">·</span>
+                <span className="text-amber-400 font-bold">{role}</span>
+                <span aria-hidden="true">·</span>
+                <span className="text-slate-300">
+                  Joined{' '}
                   {user?.createdAt
                     ? new Date(user.createdAt).toLocaleDateString('en-GB', {
                         day: '2-digit',
@@ -135,44 +134,38 @@ export const ProfilePage: React.FC = () => {
           </div>
 
           <div className="sm:text-right">
-            <span className="text-[10px] text-slate-400 uppercase font-mono block">Wallet Balance</span>
-            <span className="font-mono text-2xl font-black text-emerald-400 tabular-nums">
+            <span className="text-xs text-rose-300 font-medium block">Available Balance</span>
+            <span className="font-mono text-2xl sm:text-3xl font-extrabold text-emerald-400 tabular-nums">
               ₹{balance.toFixed(2)}
             </span>
           </div>
         </div>
 
-        {/* Profile Info Details Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-white/5 text-xs">
-          <div className="p-3 rounded-xl bg-white/[0.02]">
-            <span className="text-[10px] text-slate-400 uppercase block font-mono">User ID</span>
-            <span className="font-mono font-semibold text-white truncate block">{user?.id}</span>
+        {/* Account Details Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-white/[0.08] text-xs">
+          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25">
+            <span className="text-rose-300 font-semibold block mb-0.5">Account ID</span>
+            <span className="font-mono font-bold text-white truncate block">{user?.id}</span>
           </div>
 
-          <div className="p-3 rounded-xl bg-white/[0.02]">
-            <span className="text-[10px] text-slate-400 uppercase block font-mono">Assigned Role</span>
-            <span className="font-bold text-rose-400">{role}</span>
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25">
+            <span className="text-amber-300 font-semibold block mb-0.5">Access Tier</span>
+            <span className="font-bold text-amber-400">{role}</span>
           </div>
 
-          <div className="p-3 rounded-xl bg-white/[0.02]">
-            <span className="text-[10px] text-slate-400 uppercase block font-mono">Referral Code</span>
-            <span className="font-mono font-bold text-amber-400">{user?.referralCode}</span>
+          <div className="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/25">
+            <span className="text-cyan-300 font-semibold block mb-0.5">Partner Code</span>
+            <span className="font-mono font-bold text-cyan-400">{user?.referralCode}</span>
           </div>
 
-          <div className="p-3 rounded-xl bg-white/[0.02]">
-            <span className="text-[10px] text-slate-400 uppercase block font-mono flex items-center gap-1">
-              <Clock className="w-3 h-3 text-rose-400" />
-              <span>Joined Date &amp; Time</span>
-            </span>
-            <span className="font-mono font-bold text-slate-200 truncate block mt-0.5">
+          <div className="p-3.5 rounded-xl bg-violet-500/10 border border-violet-500/25">
+            <span className="text-violet-300 font-semibold block mb-0.5">Registered</span>
+            <span className="font-mono font-bold text-white truncate block tabular-nums">
               {user?.createdAt
-                ? new Date(user.createdAt).toLocaleString('en-GB', {
+                ? new Date(user.createdAt).toLocaleDateString('en-GB', {
                     day: '2-digit',
                     month: 'short',
                     year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true,
                   })
                 : 'N/A'}
             </span>
@@ -180,180 +173,144 @@ export const ProfilePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Security Section: Change Password & 2FA */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* CHANGE PASSWORD */}
-        <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 shadow-xl space-y-4">
-          <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 text-rose-400" />
-            <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
-              CHANGE PASSWORD
-            </h3>
+      {/* Security & API Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Change Password */}
+        <div className="p-6 rounded-2xl bg-gradient-to-b from-[#131622] to-[#0e1018] border border-rose-500/25 space-y-4 shadow-lg">
+          <div className="flex items-center justify-between pb-1 border-b border-white/[0.06]">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-rose-400" />
+              <h3 className="font-display font-bold text-base text-white">
+                {user?.hasPassword === false ? 'Set Account Password' : 'Update Password'}
+              </h3>
+            </div>
+            {user?.hasPassword === false ? (
+              <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+                No Password Configured
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Password Configured</span>
+              </span>
+            )}
           </div>
 
-          <form onSubmit={handlePasswordChange} className="space-y-3 text-xs">
+          {user?.hasPassword === false && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs leading-relaxed flex items-start gap-2">
+              <KeyRound className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+              <span>
+                Your account was created via Email OTP or Google. Set a password below to enable instant login with your username (<strong className="text-white">@{user?.username}</strong>) or email (<strong className="text-white">{user?.email}</strong>).
+              </span>
+            </div>
+          )}
+
+          <form onSubmit={handlePasswordChange} className="space-y-3.5 text-xs">
+            {user?.hasPassword !== false && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-rose-300">
+                    Current Password
+                  </label>
+                  <span className="text-[10px] text-slate-500">
+                    Default is <strong className="text-rose-300 font-mono">admin123</strong> for admin accounts
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showCurrentPassword ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    required
+                    className="w-full px-3.5 py-2.5 pr-10 bg-[#090a0f] border border-white/15 rounded-xl text-white focus:outline-none focus:border-rose-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    title={showCurrentPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                CURRENT PASSWORD
+              <label className="text-xs font-semibold text-amber-300 block mb-1.5">
+                New Password <span className="text-slate-400 font-normal">(Min 6 characters)</span>
               </label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white focus:outline-none focus:border-rose-500"
-              />
+              <div className="relative">
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Create new password"
+                  required
+                  minLength={6}
+                  className="w-full px-3.5 py-2.5 pr-10 bg-[#090a0f] border border-white/15 rounded-xl text-white focus:outline-none focus:border-amber-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title={showNewPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                NEW PASSWORD
+              <label className="text-xs font-semibold text-cyan-300 block mb-1.5">
+                Confirm New Password
               </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                required
-                className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white focus:outline-none focus:border-rose-500"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                CONFIRM NEW PASSWORD
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                placeholder="Repeat new password"
-                required
-                className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white focus:outline-none focus:border-rose-500"
-              />
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat new password exactly"
+                  required
+                  minLength={6}
+                  className="w-full px-3.5 py-2.5 pr-10 bg-[#090a0f] border border-white/15 rounded-xl text-white focus:outline-none focus:border-cyan-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <button
               type="submit"
               disabled={isUpdatingPassword}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-rose-950/40 flex items-center justify-center gap-2 mt-2"
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white text-xs font-bold shadow-[0_4px_20px_rgba(244,63,94,0.3)] transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              {isUpdatingPassword ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>UPDATE PASSWORD</span>}
+              {isUpdatingPassword ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>{user?.hasPassword === false ? 'Set Password' : 'Save New Password'}</span>}
             </button>
           </form>
         </div>
 
-        {/* OUTBOUND RESELLER API INTEGRATION CENTER (ONLY VISIBLE FOR UPGRADED RESELLERS / ADMINS) */}
-        {isReseller && (
-          <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-amber-500/20 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/5">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center">
-                  <Terminal className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
-                    OUTBOUND RESELLER API INTEGRATION (CONNECT OTHER WEBSITES)
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Provide your API key and endpoint to other websites so they can buy keys automatically from your wallet balance
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleRegenerateKey}
-                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 self-start sm:self-auto"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Regenerate API Key</span>
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                  YOUR RESELLER API ENDPOINT URL
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={resellerApiCreds?.apiUrl || 'https://.../api/v1/reseller/buy'}
-                    className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-emerald-400 font-mono text-xs select-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(resellerApiCreds?.apiUrl || '');
-                      showToastSuccess('Copied API URL');
-                    }}
-                    className="px-3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 font-mono text-xs shrink-0"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                  YOUR UNIQUE RESELLER API KEY (`api_key`)
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={resellerApiCreds?.apiKey || 'Generating...'}
-                    className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-amber-300 font-mono text-xs select-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(resellerApiCreds?.apiKey || '');
-                      showToastSuccess('Copied API Key');
-                    }}
-                    className="px-3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 font-mono text-xs shrink-0"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-black/50 border border-white/5 space-y-2">
-                <span className="text-[10px] font-mono font-bold uppercase text-slate-400 block flex items-center gap-1.5">
-                  <Code className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Integration cURL Payload Specification</span>
-                </span>
-                <pre className="p-3 rounded-xl bg-[#08080c] font-mono text-[10px] text-slate-300 overflow-x-auto select-all leading-relaxed">
-{`curl -X POST "${resellerApiCreds?.apiUrl || 'https://your-domain.com/api/v1/reseller/buy'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "api_key": "${resellerApiCreds?.apiKey || 'YOUR_API_KEY'}",
-    "action": "buy",
-    "product_id": "BALA_V5_1H",
-    "duration": "1 Hours"
-  }'`}
-                </pre>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* SECURITY & LOGIN ACTIVITY */}
-        <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 shadow-xl space-y-4">
+        {/* Security & Sessions */}
+        <div className="p-6 rounded-2xl bg-gradient-to-b from-[#131622] to-[#0e1018] border border-emerald-500/25 space-y-4 shadow-lg">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-emerald-400" />
-            <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
-              TWO-FACTOR & DEVICES
+            <h3 className="font-display font-bold text-base text-white">
+              Security & Active Sessions
             </h3>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-between">
+          <div className="p-4 rounded-xl bg-[#090a0f] border border-emerald-500/20 flex items-center justify-between gap-3">
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-white block">Two-Factor Authentication</span>
-              <span className="text-[10px] text-slate-400 block">
-                {user?.twoFactorEnabled ? 'TOTP Authenticator Active' : 'Extra layer of security disabled'}
+              <span className="text-xs font-semibold text-white block">Two-Factor Authentication</span>
+              <span className="text-xs text-slate-400 block">
+                {user?.twoFactorEnabled ? 'Verification enabled on login' : 'Additional login verification disabled'}
               </span>
             </div>
 
@@ -361,33 +318,30 @@ export const ProfilePage: React.FC = () => {
               type="button"
               onClick={handleToggle2Fa}
               disabled={twoFaLoading}
-              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer whitespace-nowrap shrink-0 ${
                 user?.twoFactorEnabled
-                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:border-white/20'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 border-transparent'
               }`}
             >
-              {twoFaLoading ? 'Updating...' : user?.twoFactorEnabled ? 'ENABLED' : 'DISABLED'}
+              {twoFaLoading ? 'Updating...' : user?.twoFactorEnabled ? 'Enabled' : 'Enable 2FA'}
             </button>
           </div>
 
-          {/* Login Activity */}
-          <div className="space-y-2 pt-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-              RECENT LOGIN SESSIONS
+          <div className="space-y-2.5 pt-1">
+            <span className="text-xs font-semibold text-cyan-300 block">
+              Active Session
             </span>
 
-            <div className="space-y-2 text-xs">
-              <div className="p-3 rounded-xl bg-white/[0.02] flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <Laptop className="w-4 h-4 text-emerald-400" />
-                  <div>
-                    <span className="font-semibold text-white block">Current Web Session</span>
-                    <span className="text-[10px] text-slate-400 font-mono">Chrome / Linux · 127.0.0.1</span>
-                  </div>
+            <div className="p-3.5 rounded-xl bg-[#090a0f] border border-cyan-500/20 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-3">
+                <Laptop className="w-4 h-4 text-cyan-400 shrink-0" />
+                <div>
+                  <span className="font-semibold text-white block">Current Browser Session</span>
+                  <span className="text-xs text-slate-400">Authenticated Web Client</span>
                 </div>
-                <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase">ACTIVE NOW</span>
               </div>
+              <span className="text-xs text-emerald-400 font-bold">Active</span>
             </div>
 
             <button
@@ -395,13 +349,109 @@ export const ProfilePage: React.FC = () => {
               onClick={() => {
                 showToastSuccess('All other sessions terminated.');
               }}
-              className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-semibold transition-colors border border-white/5 mt-2"
+              className="w-full py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 text-xs font-semibold transition-colors border border-white/[0.1] cursor-pointer"
             >
-              Logout from all other devices
+              Sign Out Other Devices
             </button>
           </div>
         </div>
       </div>
+
+      {/* Outbound Reseller API Quick Credentials */}
+      {isReseller && (
+        <div className="p-6 rounded-2xl bg-gradient-to-b from-[#131622] to-[#0e1018] border border-amber-500/30 space-y-4 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.08]">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-400 flex items-center justify-center shrink-0">
+                <Terminal className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-base text-white">
+                  Outbound Reseller API Credentials
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Connect external storefronts to provision keys automatically from your wallet.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleRegenerateKey}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Rotate API Key</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="text-xs font-semibold text-emerald-300 block mb-1.5">
+                Endpoint URL
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={resellerApiCreds?.apiUrl || 'https://.../api/v1/reseller/buy'}
+                  className="w-full px-3.5 py-2 bg-[#090a0f] border border-emerald-500/25 rounded-xl text-emerald-400 font-mono text-xs select-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(resellerApiCreds?.apiUrl || '');
+                    showToastSuccess('Copied API URL');
+                  }}
+                  className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-bold text-xs shrink-0 cursor-pointer"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-amber-300 block mb-1.5">
+                Secret API Key
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={resellerApiCreds?.apiKey || 'Generating...'}
+                  className="w-full px-3.5 py-2 bg-[#090a0f] border border-amber-500/25 rounded-xl text-amber-300 font-mono text-xs select-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(resellerApiCreds?.apiKey || '');
+                    showToastSuccess('Copied API Key');
+                  }}
+                  className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold text-xs shrink-0 cursor-pointer"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-[#090a0f] border border-white/[0.08] space-y-2">
+            <span className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+              <Code className="w-3.5 h-3.5 text-amber-400" />
+              <span>Example cURL Request</span>
+            </span>
+            <pre className="font-mono text-[11px] text-cyan-300 overflow-x-auto select-all leading-relaxed">
+{`curl -X POST "${resellerApiCreds?.apiUrl || 'https://your-domain.com/api/v1/reseller/buy'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "api_key": "${resellerApiCreds?.apiKey || 'YOUR_API_KEY'}",
+    "action": "buy",
+    "product_id": "155",
+    "duration": "1 Hours"
+  }'`}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

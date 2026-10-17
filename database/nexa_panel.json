@@ -30,27 +30,27 @@
       "id": "USR-001",
       "username": "nexa_admin",
       "email": "admin@example.com",
-      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
+      "passwordHash": "6d23920a4ac20ac6de3d5fbebf731f01e51268ced86d0186fe1902dfcd077152",
       "role": "ADMIN",
       "balance": 5000,
       "referralCode": "NEXAROOT1",
       "twoFactorEnabled": true,
       "isBanned": false,
       "createdAt": "2026-10-03T07:21:44.786Z",
-      "updatedAt": "2026-10-03T07:21:44.786Z"
+      "updatedAt": "2026-10-17T15:59:59.657Z"
     },
     {
       "id": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
       "username": "kalam_kalam",
       "email": "kalam172010@gmail.com",
-      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
+      "passwordHash": "6d23920a4ac20ac6de3d5fbebf731f01e51268ced86d0186fe1902dfcd077152",
       "role": "ADMIN",
       "balance": 154,
       "referralCode": "NXC8A9FC",
       "twoFactorEnabled": false,
       "isBanned": false,
       "createdAt": "2026-10-03T07:23:04.943Z",
-      "updatedAt": "2026-10-11T14:36:21.181Z",
+      "updatedAt": "2026-10-17T15:59:59.657Z",
       "apiKey": "nexa_live_8ab3e7c3646b1fa5a108a63bec284025"
     },
     {
@@ -84,14 +84,14 @@
       "id": "USR-KALAM-ADMIN",
       "username": "kalam",
       "email": "kalamkalam1234kd@gmail.com",
-      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
+      "passwordHash": "6d23920a4ac20ac6de3d5fbebf731f01e51268ced86d0186fe1902dfcd077152",
       "role": "ADMIN",
-      "balance": 5000,
+      "balance": 11352,
       "referralCode": "NXA73B8E",
       "twoFactorEnabled": false,
       "isBanned": false,
       "createdAt": "2026-10-12T01:11:37.905Z",
-      "updatedAt": "2026-10-12T01:11:37.905Z",
+      "updatedAt": "2026-10-17T16:06:08.933Z",
       "apiKey": "nexa_live_68b3acdb11737f8cdd646c17770d2e83"
     },
     {
@@ -106,6 +106,32 @@
       "isBanned": false,
       "createdAt": "2026-10-12T12:26:37.584Z",
       "updatedAt": "2026-10-12T12:26:37.584Z"
+    },
+    {
+      "id": "USR-1792242683123",
+      "username": "kk7953926",
+      "email": "kk7953926@gmail.com",
+      "passwordHash": "",
+      "role": "USER",
+      "balance": 0,
+      "referralCode": "NX18EDC3",
+      "twoFactorEnabled": true,
+      "isBanned": false,
+      "createdAt": "2026-10-17T13:11:23.123Z",
+      "updatedAt": "2026-10-17T15:08:54.317Z"
+    },
+    {
+      "id": "USR-1792253604314",
+      "username": "test_gamer_4170",
+      "email": "test4170@example.com",
+      "passwordHash": "3000b48cb34fb91c407d503fc6fe425adcf438b99c8facb08b415852315cfd3d",
+      "role": "USER",
+      "balance": 0,
+      "referralCode": "NXDAA248",
+      "twoFactorEnabled": false,
+      "isBanned": false,
+      "createdAt": "2026-10-17T16:13:24.314Z",
+      "updatedAt": "2026-10-17T16:13:24.314Z"
     }
   ],
   "products": [
@@ -191,6 +217,30 @@
       "assignedOrderId": "ORD-EXT-1791729381181-A2DC",
       "assignedAt": "2026-10-11T14:36:21.183Z",
       "createdAt": "2026-10-11T14:36:21.183Z"
+    },
+    {
+      "id": "KEY-1792251200446-0-df12",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "keyCode": "NEXA-EXT-0EC7F985-32EC67A5",
+      "isUsed": true,
+      "status": "USED",
+      "assignedUserId": "USR-KALAM-ADMIN",
+      "assignedOrderId": "ORD-EXT-1792251200445-CD29",
+      "assignedAt": "2026-10-17T15:33:20.446Z",
+      "createdAt": "2026-10-17T15:33:20.446Z"
+    },
+    {
+      "id": "KEY-1792251217799-0-fb37",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "keyCode": "NEXA-EXT-3DFB64D7-54641DDF",
+      "isUsed": true,
+      "status": "USED",
+      "assignedUserId": "USR-KALAM-ADMIN",
+      "assignedOrderId": "ORD-EXT-1792251217797-EDCC",
+      "assignedAt": "2026-10-17T15:33:37.799Z",
+      "createdAt": "2026-10-17T15:33:37.799Z"
     }
   ],
   "orders": [
@@ -219,9 +269,125 @@
       "deliveredKeyCode": "NEXA-EXT-2D68462A-BF9F483F",
       "status": "COMPLETED",
       "createdAt": "2026-10-11T14:36:21.184Z"
+    },
+    {
+      "id": "ORD-EXT-1792251200445-CD29",
+      "userId": "USR-KALAM-ADMIN",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 850,
+      "deliveredKeyId": "ORD-EXT-1792251200445-CD29",
+      "deliveredKeyCode": "NEXA-EXT-0EC7F985-32EC67A5",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-17T15:33:20.447Z"
+    },
+    {
+      "id": "ORD-EXT-1792251217797-EDCC",
+      "userId": "USR-KALAM-ADMIN",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 850,
+      "deliveredKeyId": "ORD-EXT-1792251217797-EDCC",
+      "deliveredKeyCode": "NEXA-EXT-3DFB64D7-54641DDF",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-17T15:33:37.800Z"
     }
   ],
   "transactions": [
+    {
+      "id": "TXN-1792253168933-EB6258",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "DEPOSIT",
+      "amount": 1,
+      "description": "UPI Deposit (Ref: TEST-1792253168933)",
+      "referenceId": "TXN-DEP-1792253144685-681659",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T16:06:08.933Z"
+    },
+    {
+      "id": "TXN-1792252558640-FB5389",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "DEPOSIT",
+      "amount": 2000,
+      "description": "UPI Deposit (Ref: UTR-1792252558640-256632)",
+      "referenceId": "TXN-DEP-1792252555602-FD3ED7",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T15:55:58.640Z"
+    },
+    {
+      "id": "TXN-1792252550020-CA37A7",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "DEPOSIT",
+      "amount": 2000,
+      "description": "UPI Deposit (Ref: UTR-1792252550019-115350)",
+      "referenceId": "TXN-DEP-1792252547463-382413",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T15:55:50.020Z"
+    },
+    {
+      "id": "TXN-1792252545586-E908F4",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "DEPOSIT",
+      "amount": 2000,
+      "description": "UPI Deposit (Ref: UTR-1792252545586-379266)",
+      "referenceId": "TXN-DEP-1792252542928-AD5AD4",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T15:55:45.586Z"
+    },
+    {
+      "id": "TXN-1792252539513-0C2BC5",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "DEPOSIT",
+      "amount": 2000,
+      "description": "UPI Deposit (Ref: UTR-1792252539513-152873)",
+      "referenceId": "TXN-DEP-1792252536469-ED8ADF",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T15:55:39.513Z"
+    },
+    {
+      "id": "TXN-1792252529124-9CAED4",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "DEPOSIT",
+      "amount": 50,
+      "description": "UPI Deposit (Ref: UTR-1792252529123-221916)",
+      "referenceId": "TXN-DEP-1792252525074-D902E7",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T15:55:29.124Z"
+    },
+    {
+      "id": "TXN-1792251217798-244A91",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "PURCHASE",
+      "amount": -850,
+      "description": "External API Purchase (1x): KALAM VIP AIMBOT FF OB55 (60 Days)",
+      "referenceId": "ORD-EXT-1792251217797-EDCC",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T15:33:37.798Z"
+    },
+    {
+      "id": "TXN-1792251200445-B19E05",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "PURCHASE",
+      "amount": -850,
+      "description": "External API Purchase (1x): KALAM VIP AIMBOT FF OB55 (60 Days)",
+      "referenceId": "ORD-EXT-1792251200445-CD29",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T15:33:20.445Z"
+    },
+    {
+      "id": "TXN-1792250441007-2C1A65",
+      "userId": "USR-KALAM-ADMIN",
+      "type": "DEPOSIT",
+      "amount": 1,
+      "description": "UPI Deposit (Ref: UTR-1792250441007-646396)",
+      "referenceId": "TXN-DEP-1792250422588-B52F2F",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-17T15:20:41.007Z"
+    },
     {
       "id": "TXN-1791729381181-261FD4",
       "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
@@ -413,6 +579,185 @@
     }
   ],
   "deposits": [
+    {
+      "id": "DEP-1792253604331-2D1A",
+      "userId": "USR-1792253604314",
+      "amount": 10,
+      "payableAmount": 10,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792253604331-984BE9",
+      "gatewayOrderId": "fg_3RGFFD9R",
+      "qrUrl": "https://famgateway.in/api/qr-image.php?order_id=fg_3RGFFD9R",
+      "checkoutUrl": "https://famgateway.in/pay.php?order_id=fg_3RGFFD9R",
+      "upiIntent": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_3RGFFD9R&am=10.00&cu=INR",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Kalam",
+      "qrPayload": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_3RGFFD9R&am=10.00&cu=INR",
+      "status": "PENDING",
+      "expiresAt": "2026-10-17T16:23:24.331Z",
+      "createdAt": "2026-10-17T16:13:24.702Z"
+    },
+    {
+      "id": "DEP-1792253144685-4EDB",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 1,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792253144685-681659",
+      "gatewayOrderId": "fg_SQ0EYVBF",
+      "qrUrl": "https://famgateway.in/api/qr-image.php?order_id=fg_SQ0EYVBF",
+      "checkoutUrl": "https://famgateway.in/pay.php?order_id=fg_SQ0EYVBF",
+      "upiIntent": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_SQ0EYVBF&am=1.00&cu=INR",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Kalam",
+      "qrPayload": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_SQ0EYVBF&am=1.00&cu=INR",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-17T16:15:44.685Z",
+      "createdAt": "2026-10-17T16:05:45.678Z",
+      "completedAt": "2026-10-17T16:06:08.933Z",
+      "upiRefNumber": "TEST-1792253168933"
+    },
+    {
+      "id": "DEP-1792252555602-C5BF",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 2000,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792252555602-FD3ED7",
+      "qrUrl": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D8056317218%2540fam%26pn%3DKalam%2520Akash%26am%3D2000.00%26cu%3DINR%26tr%3DTXN-DEP-1792252555602-FD3ED7%26tn%3DWallet%2520Topup%2520DEP-1792252555602-C5BF",
+      "upiIntent": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=2000.00&cu=INR&tr=TXN-DEP-1792252555602-FD3ED7&tn=Wallet%20Topup%20DEP-1792252555602-C5BF",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Akash",
+      "qrPayload": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=2000.00&cu=INR&tr=TXN-DEP-1792252555602-FD3ED7&tn=Wallet%20Topup%20DEP-1792252555602-C5BF",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-17T16:00:55.602Z",
+      "createdAt": "2026-10-17T15:55:56.573Z",
+      "completedAt": "2026-10-17T15:55:58.640Z",
+      "upiRefNumber": "UTR-1792252558640-256632"
+    },
+    {
+      "id": "DEP-1792252547463-A60A",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 2000,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792252547463-382413",
+      "qrUrl": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D8056317218%2540fam%26pn%3DKalam%2520Akash%26am%3D2000.00%26cu%3DINR%26tr%3DTXN-DEP-1792252547463-382413%26tn%3DWallet%2520Topup%2520DEP-1792252547463-A60A",
+      "upiIntent": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=2000.00&cu=INR&tr=TXN-DEP-1792252547463-382413&tn=Wallet%20Topup%20DEP-1792252547463-A60A",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Akash",
+      "qrPayload": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=2000.00&cu=INR&tr=TXN-DEP-1792252547463-382413&tn=Wallet%20Topup%20DEP-1792252547463-A60A",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-17T16:00:47.463Z",
+      "createdAt": "2026-10-17T15:55:47.861Z",
+      "completedAt": "2026-10-17T15:55:50.019Z",
+      "upiRefNumber": "UTR-1792252550019-115350"
+    },
+    {
+      "id": "DEP-1792252542928-82B8",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 2000,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792252542928-AD5AD4",
+      "qrUrl": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D8056317218%2540fam%26pn%3DKalam%2520Akash%26am%3D2000.00%26cu%3DINR%26tr%3DTXN-DEP-1792252542928-AD5AD4%26tn%3DWallet%2520Topup%2520DEP-1792252542928-82B8",
+      "upiIntent": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=2000.00&cu=INR&tr=TXN-DEP-1792252542928-AD5AD4&tn=Wallet%20Topup%20DEP-1792252542928-82B8",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Akash",
+      "qrPayload": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=2000.00&cu=INR&tr=TXN-DEP-1792252542928-AD5AD4&tn=Wallet%20Topup%20DEP-1792252542928-82B8",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-17T16:00:42.928Z",
+      "createdAt": "2026-10-17T15:55:43.932Z",
+      "completedAt": "2026-10-17T15:55:45.586Z",
+      "upiRefNumber": "UTR-1792252545586-379266"
+    },
+    {
+      "id": "DEP-1792252536469-B72E",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 2000,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792252536469-ED8ADF",
+      "qrUrl": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D8056317218%2540fam%26pn%3DKalam%2520Akash%26am%3D2000.00%26cu%3DINR%26tr%3DTXN-DEP-1792252536469-ED8ADF%26tn%3DWallet%2520Topup%2520DEP-1792252536469-B72E",
+      "upiIntent": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=2000.00&cu=INR&tr=TXN-DEP-1792252536469-ED8ADF&tn=Wallet%20Topup%20DEP-1792252536469-B72E",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Akash",
+      "qrPayload": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=2000.00&cu=INR&tr=TXN-DEP-1792252536469-ED8ADF&tn=Wallet%20Topup%20DEP-1792252536469-B72E",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-17T16:00:36.469Z",
+      "createdAt": "2026-10-17T15:55:37.088Z",
+      "completedAt": "2026-10-17T15:55:39.513Z",
+      "upiRefNumber": "UTR-1792252539513-152873"
+    },
+    {
+      "id": "DEP-1792252525074-0216",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 50,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792252525074-D902E7",
+      "qrUrl": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D8056317218%2540fam%26pn%3DKalam%2520Akash%26am%3D50.00%26cu%3DINR%26tr%3DTXN-DEP-1792252525074-D902E7%26tn%3DWallet%2520Topup%2520DEP-1792252525074-0216",
+      "upiIntent": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=50.00&cu=INR&tr=TXN-DEP-1792252525074-D902E7&tn=Wallet%20Topup%20DEP-1792252525074-0216",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Akash",
+      "qrPayload": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=50.00&cu=INR&tr=TXN-DEP-1792252525074-D902E7&tn=Wallet%20Topup%20DEP-1792252525074-0216",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-17T16:00:25.074Z",
+      "createdAt": "2026-10-17T15:55:26.064Z",
+      "completedAt": "2026-10-17T15:55:29.124Z",
+      "upiRefNumber": "UTR-1792252529123-221916"
+    },
+    {
+      "id": "DEP-1792251079658-12B1",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 100,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792251079658-04E309",
+      "qrUrl": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D8056317218%2540fam%26pn%3DKalam%2520Akash%26am%3D100.00%26cu%3DINR%26tr%3DTXN-DEP-1792251079658-04E309%26tn%3DWallet%2520Topup%2520DEP-1792251079658-12B1",
+      "upiIntent": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=100.00&cu=INR&tr=TXN-DEP-1792251079658-04E309&tn=Wallet%20Topup%20DEP-1792251079658-12B1",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Akash",
+      "qrPayload": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=100.00&cu=INR&tr=TXN-DEP-1792251079658-04E309&tn=Wallet%20Topup%20DEP-1792251079658-12B1",
+      "status": "PENDING",
+      "expiresAt": "2026-10-17T15:36:19.658Z",
+      "createdAt": "2026-10-17T15:31:20.149Z"
+    },
+    {
+      "id": "DEP-1792250483104-4B10",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 1,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792250483104-154D5E",
+      "qrUrl": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D8056317218%2540fam%26pn%3DKalam%2520Akash%26am%3D1.00%26cu%3DINR%26tr%3DTXN-DEP-1792250483104-154D5E%26tn%3DWallet%2520Topup%2520DEP-1792250483104-4B10",
+      "upiIntent": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=1.00&cu=INR&tr=TXN-DEP-1792250483104-154D5E&tn=Wallet%20Topup%20DEP-1792250483104-4B10",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Akash",
+      "qrPayload": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=1.00&cu=INR&tr=TXN-DEP-1792250483104-154D5E&tn=Wallet%20Topup%20DEP-1792250483104-4B10",
+      "status": "PENDING",
+      "expiresAt": "2026-10-17T15:26:23.104Z",
+      "createdAt": "2026-10-17T15:21:23.400Z"
+    },
+    {
+      "id": "DEP-1792250422588-545A",
+      "userId": "USR-KALAM-ADMIN",
+      "amount": 1,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792250422588-B52F2F",
+      "qrUrl": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D8056317218%2540fam%26pn%3DKalam%2520Akash%26am%3D1.00%26cu%3DINR%26tr%3DTXN-DEP-1792250422588-B52F2F%26tn%3DWallet%2520Topup%2520DEP-1792250422588-545A",
+      "upiIntent": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=1.00&cu=INR&tr=TXN-DEP-1792250422588-B52F2F&tn=Wallet%20Topup%20DEP-1792250422588-545A",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Akash",
+      "qrPayload": "upi://pay?pa=8056317218%40fam&pn=Kalam%20Akash&am=1.00&cu=INR&tr=TXN-DEP-1792250422588-B52F2F&tn=Wallet%20Topup%20DEP-1792250422588-545A",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-17T15:25:22.588Z",
+      "createdAt": "2026-10-17T15:20:22.905Z",
+      "completedAt": "2026-10-17T15:20:41.007Z",
+      "upiRefNumber": "UTR-1792250441007-646396"
+    },
     {
       "id": "DEP-1791131825619-6660",
       "userId": "USR-101",
@@ -826,24 +1171,24 @@
   "supportMessages": [],
   "referrals": [],
   "gatewayConfig": {
-    "gatewayName": "FamPay UPI Payment Gateway",
-    "gatewayType": "RENDER_FGW",
-    "apiUrl": "https://payment-gateway-87gk.onrender.com/api/create-order",
-    "qrAliasUrl": "https://payment-gateway-87gk.onrender.com/api/qr.php",
-    "statusUrl": "https://payment-gateway-87gk.onrender.com/api/v1/order/status",
-    "merchantId": "FGW_RENDER_MERCHANT",
-    "apiKey": "fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe",
+    "gatewayName": "FamGateway Official",
+    "gatewayType": "FAMGATEWAY",
+    "apiUrl": "https://famgateway.in/api/create-order",
+    "qrAliasUrl": "https://famgateway.in/api/qr.php",
+    "statusUrl": "https://famgateway.in/api/verify-order.php",
+    "merchantId": "FGW_OFFICIAL_MERCHANT",
+    "apiKey": "fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e",
     "masterKey": "",
     "webhookUrl": "https://panel.nexa.internal/api/payments/webhook",
     "redirectUrl": "https://yoursite.com/payment-success",
     "successUrl": "https://yoursite.com/payment-success",
     "cancelUrl": "https://yoursite.com/payment-cancel",
-    "paymentExpiryMinutes": 5,
+    "paymentExpiryMinutes": 10,
     "minDeposit": 1,
     "isUpiQrEnabled": true,
     "upiVpa": "8056317218@fam",
-    "upiMerchantName": "Kalam Akash",
-    "testMode": true
+    "upiMerchantName": "Kalam Kalam",
+    "testMode": false
   },
   "resellerConfig": {
     "apiUrl": "https://bantibhaiya.to/api/reseller_v1.php",
@@ -884,7 +1229,7 @@
     "youtubeChannelUrl": "",
     "discordInviteUrl": "",
     "contactEmail": "support@nexapanel.com",
-    "quickSupportWidgetEnabled": true,
+    "quickSupportWidgetEnabled": false,
     "minDepositAmount": 1,
     "resellerUpgradePrice": 299,
     "referralCommissionPct": 5,
@@ -897,6 +1242,484 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1792253604704-d3e357",
+      "userId": "USR-1792253604314",
+      "username": "test_gamer_4170",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792253604331-2D1A (fg_3RGFFD9R) for ₹10",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T16:13:24.704Z"
+    },
+    {
+      "id": "LOG-1792253604702-f72c66",
+      "userId": "USR-1792253604314",
+      "username": "test_gamer_4170",
+      "action": "GATEWAY_ORDER_CREATED",
+      "details": "Live gateway order fg_3RGFFD9R created for ₹10.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T16:13:24.702Z"
+    },
+    {
+      "id": "LOG-1792253604314-5b9330",
+      "userId": "USR-1792253604314",
+      "username": "test_gamer_4170",
+      "action": "USER_REGISTER",
+      "details": "New user registered via referral: None",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T16:13:24.314Z"
+    },
+    {
+      "id": "LOG-1792253168936-989d36",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_TEST_VERIFIED",
+      "details": "Test mode deposit DEP-1792253144685-4EDB completed (Amount: ₹1)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T16:06:08.936Z"
+    },
+    {
+      "id": "LOG-1792253145679-7331cf",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792253144685-4EDB (fg_SQ0EYVBF) for ₹1",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T16:05:45.679Z"
+    },
+    {
+      "id": "LOG-1792253145678-e8deca",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "GATEWAY_ORDER_CREATED",
+      "details": "Live gateway order fg_SQ0EYVBF created for ₹1.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T16:05:45.678Z"
+    },
+    {
+      "id": "LOG-1792253080398-9d3232",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T16:04:40.398Z"
+    },
+    {
+      "id": "LOG-1792252822401-5cfaaa",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T16:00:22.401Z"
+    },
+    {
+      "id": "LOG-1792252799661-3ddd2b",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "PASSWORD_CHANGE",
+      "details": "Password updated successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:59:59.661Z"
+    },
+    {
+      "id": "LOG-1792252558643-087768",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_UTR_VERIFIED",
+      "details": "Deposit DEP-1792252555602-C5BF verified with UTR: UTR-1792252558640-256632 (Amount: ₹2000)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:58.643Z"
+    },
+    {
+      "id": "LOG-1792252556573-c4069d",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792252555602-C5BF for ₹2000",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:56.573Z"
+    },
+    {
+      "id": "LOG-1792252550022-8f5514",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_UTR_VERIFIED",
+      "details": "Deposit DEP-1792252547463-A60A verified with UTR: UTR-1792252550019-115350 (Amount: ₹2000)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:50.022Z"
+    },
+    {
+      "id": "LOG-1792252547861-febbbf",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792252547463-A60A for ₹2000",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:47.861Z"
+    },
+    {
+      "id": "LOG-1792252545588-c6fdf4",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_UTR_VERIFIED",
+      "details": "Deposit DEP-1792252542928-82B8 verified with UTR: UTR-1792252545586-379266 (Amount: ₹2000)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:45.588Z"
+    },
+    {
+      "id": "LOG-1792252543932-113d21",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792252542928-82B8 for ₹2000",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:43.932Z"
+    },
+    {
+      "id": "LOG-1792252539515-427540",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_UTR_VERIFIED",
+      "details": "Deposit DEP-1792252536469-B72E verified with UTR: UTR-1792252539513-152873 (Amount: ₹2000)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:39.515Z"
+    },
+    {
+      "id": "LOG-1792252537088-99e261",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792252536469-B72E for ₹2000",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:37.089Z"
+    },
+    {
+      "id": "LOG-1792252529128-9558fc",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_UTR_VERIFIED",
+      "details": "Deposit DEP-1792252525074-0216 verified with UTR: UTR-1792252529123-221916 (Amount: ₹50)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:29.128Z"
+    },
+    {
+      "id": "LOG-1792252526064-9cb28e",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792252525074-0216 for ₹50",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:55:26.064Z"
+    },
+    {
+      "id": "LOG-1792251217800-121b69",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "RESELLER_API_KEY_SUCCESS",
+      "details": "External API generated 1x keys for KALAM VIP AIMBOT FF OB55 (60 Days) | Total: ₹850",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:33:37.800Z"
+    },
+    {
+      "id": "LOG-1792251200447-52a44c",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "RESELLER_API_KEY_SUCCESS",
+      "details": "External API generated 1x keys for KALAM VIP AIMBOT FF OB55 (60 Days) | Total: ₹850",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:33:20.448Z"
+    },
+    {
+      "id": "LOG-1792251080149-3a2c77",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792251079658-12B1 for ₹100",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:31:20.149Z"
+    },
+    {
+      "id": "LOG-1792250483400-583955",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792250483104-4B10 for ₹1",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:21:23.400Z"
+    },
+    {
+      "id": "LOG-1792250441009-d4fc7b",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_UTR_VERIFIED",
+      "details": "Deposit DEP-1792250422588-545A verified with UTR: UTR-1792250441007-646396 (Amount: ₹1)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:20:41.009Z"
+    },
+    {
+      "id": "LOG-1792250422905-c0b330",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792250422588-545A for ₹1",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:20:22.905Z"
+    },
+    {
+      "id": "LOG-1792250338740-6b4c64",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "SITE_CUSTOMIZATION_UPDATE",
+      "details": "Admin updated website branding & theme settings: General",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:18:58.740Z"
+    },
+    {
+      "id": "LOG-1792249905173-453345",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "OTP_LOGIN",
+      "details": "Logged in via Email OTP: kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:11:45.173Z"
+    },
+    {
+      "id": "LOG-1792249889311-9ded31",
+      "username": "kalamkalam1234kd@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) to kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:11:29.311Z"
+    },
+    {
+      "id": "LOG-1792249861168-04f280",
+      "username": "kalamkalam1234kd@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) to kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:11:01.168Z"
+    },
+    {
+      "id": "LOG-1792249846293-402d41",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "OTP_LOGIN",
+      "details": "Logged in via Email OTP: kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:10:46.293Z"
+    },
+    {
+      "id": "LOG-1792249782833-95b473",
+      "username": "kalamkalam1234kd@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) to kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T15:09:42.833Z"
+    },
+    {
+      "id": "LOG-1792246259730-40ebee",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "OTP_LOGIN",
+      "details": "Logged in via Email OTP: kk7953926@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T14:10:59.730Z"
+    },
+    {
+      "id": "LOG-1792246221416-f938a0",
+      "username": "kk7953926@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) to kk7953926@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T14:10:21.416Z"
+    },
+    {
+      "id": "LOG-1792244236793-69c3ea",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "OTP_LOGIN",
+      "details": "Logged in via Email OTP: kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:37:16.793Z"
+    },
+    {
+      "id": "LOG-1792244222064-ef4369",
+      "username": "kalamkalam1234kd@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) to kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:37:02.064Z"
+    },
+    {
+      "id": "LOG-1792244151419-16c5f5",
+      "username": "kalamkalam1234kd@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) to kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:35:51.419Z"
+    },
+    {
+      "id": "LOG-1792242735764-774320",
+      "username": "kk7953926@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) from kalamkalam1234kd@gmail.com to kk7953926@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:12:15.764Z"
+    },
+    {
+      "id": "LOG-1792242683123-64549b",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "OTP_SIGNUP",
+      "details": "Registered via Email OTP: kk7953926@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:11:23.124Z"
+    },
+    {
+      "id": "LOG-1792242661517-0a0458",
+      "username": "kk7953926@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) from kalamkalam1234kd@gmail.com to kk7953926@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:11:01.517Z"
+    },
+    {
+      "id": "LOG-1792242580738-5f1819",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_SUCCESS",
+      "details": "Successfully verified mail connection and sent test OTP to kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:09:40.738Z"
+    },
+    {
+      "id": "LOG-1792242568223-173e90",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_SUCCESS",
+      "details": "Successfully verified mail connection and sent test OTP to kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:09:28.223Z"
+    },
+    {
+      "id": "LOG-1792242563139-f6de3e",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=kalamkalam1234kd@gmail.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:09:23.139Z"
+    },
+    {
+      "id": "LOG-1792242381730-a6b7b0",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Google SMTP Login Rejected (Error 535: BadCredentials). Google rejected authentication for \"kalamkalam1234kd@gmail.com\".",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:06:21.730Z"
+    },
+    {
+      "id": "LOG-1792242379789-f015f7",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=kalamkalam1234kd@gmail.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:06:19.789Z"
+    },
+    {
+      "id": "LOG-1792242372461-c12aff",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Google SMTP Login Rejected (Error 535: BadCredentials). Google rejected authentication for \"kalamkalam1234kd@gmail.com\".",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:06:12.461Z"
+    },
+    {
+      "id": "LOG-1792242370497-d23486",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=kalamkalam1234kd@gmail.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:06:10.497Z"
+    },
+    {
+      "id": "LOG-1792242365493-c96e94",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Google SMTP Login Rejected (Error 535: BadCredentials). Google rejected authentication for \"kalamkalam1234kd@gmail.com\".",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:06:05.493Z"
+    },
+    {
+      "id": "LOG-1792242363441-43bcca",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=kalamkalam1234kd@gmail.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:06:03.441Z"
+    },
+    {
+      "id": "LOG-1792242351785-ec5477",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Google SMTP Login Rejected (Error 535: BadCredentials). Google rejected authentication for \"kalamkalam1234kd@gmail.com\".",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T13:05:51.785Z"
+    },
+    {
+      "id": "LOG-1792241692585-f8b93a",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Mail server test failed: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-89f6ab19e93sm2174276b3a.49 - gsmtp",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T12:54:52.585Z"
+    },
+    {
+      "id": "LOG-1792241685942-f44d7b",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Mail server test failed: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-3acc9e47588sm4429346a91.1 - gsmtp",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T12:54:45.942Z"
+    },
+    {
+      "id": "LOG-1792241682557-b68981",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=kalamkalam1234kd@gmail.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T12:54:42.557Z"
+    },
+    {
+      "id": "LOG-1792240297628-a0cb49",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_TEST_FAILED",
+      "details": "Mail server test failed: Mail server test failed: C02CF664B07F0000:error:0A00010B:SSL routines:tls_validate_record_header:wrong version number:../deps/openssl/openssl/ssl/record/methods/tlsany_meth.c:77:\n",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T12:31:37.628Z"
+    },
+    {
+      "id": "LOG-1792240290937-b71b08",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=kalamkalam1234kd@gmail.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-17T12:31:30.937Z"
+    },
     {
       "id": "LOG-1791809714255-32a8d8",
       "userId": "USR-KALAM-ADMIN",
@@ -2208,13 +3031,15 @@
     "smtpPort": 587,
     "secure": false,
     "smtpUser": "kalamkalam1234kd@gmail.com",
-    "smtpPass": "",
+    "smtpPass": "nrvo khka qtej hyqe",
     "imapHost": "imap.gmail.com",
     "imapPort": 993,
     "imapUser": "kalamkalam1234kd@gmail.com",
-    "imapPass": "",
+    "imapPass": "wows wyei ppgm mwvq",
     "imapSecure": true,
     "otpExpiryMinutes": 10,
-    "allowOtpSignup": true
+    "allowOtpSignup": true,
+    "hasSmtpPass": true,
+    "hasImapPass": true
   }
 }

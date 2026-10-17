@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import QRCode from 'qrcode';
 import { db } from '../db/database';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { PaymentGatewayAdapter } from '../services/paymentAdapter';
@@ -80,21 +81,25 @@ export class WalletController {
         return;
       }
 
+      const originUrl = req.headers.origin ? `${req.headers.origin}/` : undefined;
+
       const deposit = await PaymentGatewayAdapter.createDeposit({
         userId: user.id,
         customerName: user.username,
         customerEmail: user.email,
         amount: numAmount,
         method: method || 'UPI_QR',
+        redirectUrl: originUrl,
       });
 
-      db.logActivity(user.id, user.username, 'DEPOSIT_INITIATED', `Created deposit ${deposit.id} for ₹${numAmount}`);
+      db.logActivity(user.id, user.username, 'DEPOSIT_INITIATED', `Created deposit ${deposit.id} (${deposit.gatewayOrderId || 'UPI'}) for ₹${numAmount}`);
 
       res.status(201).json({
         success: true,
         deposit,
         upiVpa: deposit.upiVpa || db.gatewayConfig.upiVpa,
         merchantName: deposit.merchantName || db.gatewayConfig.upiMerchantName,
+        testMode: Boolean(db.gatewayConfig.testMode),
       });
     } catch (err: any) {
       res.status(400).json({ error: err.message || 'Failed to initiate deposit.' });
@@ -121,7 +126,7 @@ export class WalletController {
       const deposit = await PaymentGatewayAdapter.checkStatus(id);
       
       const balance = req.user ? WalletService.getBalance(req.user.id) : 0;
-      res.json({ deposit, currentBalance: balance });
+      res.json({ deposit, currentBalance: balance, testMode: Boolean(db.gatewayConfig.testMode) });
     } catch (err: any) {
       res.status(404).json({ error: err.message || 'Deposit not found.' });
     }
@@ -136,10 +141,10 @@ export class WalletController {
       }
 
       const { id } = req.params;
-      const { utr, isFake, isDemo } = req.body;
+      const { utr } = req.body;
 
       // 1. Check if deposit is already confirmed by gateway or webhook
-      let deposit = db.deposits.find(d => d.id === id);
+      const deposit = db.deposits.find(d => d.id === id);
       if (!deposit) {
         res.status(404).json({ error: 'Deposit record not found.' });
         return;
@@ -155,44 +160,83 @@ export class WalletController {
         return;
       }
 
-      const cleanUtr = typeof utr === 'string' ? utr.trim() : '';
-
-      // 1. Live gateway check first
-      try {
-        const liveCheck = await PaymentGatewayAdapter.checkStatus(id);
-        if (liveCheck.status === 'SUCCESS') {
-          res.json({
-            success: true,
-            message: 'Payment verified from bank gateway! Wallet credited.',
-            deposit: liveCheck,
-            newBalance: WalletService.getBalance(user.id),
-          });
-          return;
-        }
-      } catch (checkErr) {
-        // Continue to UTR verification
+      // 2. Authoritative Real-Time Gateway Verification (FamGateway /api/checkout-status.php & /api/verify-order.php)
+      const liveCheck = await PaymentGatewayAdapter.checkStatus(id);
+      if (liveCheck.status === 'SUCCESS') {
+        res.json({
+          success: true,
+          message: 'Payment verified in real-time from UPI Gateway! Wallet credited.',
+          deposit: liveCheck,
+          newBalance: WalletService.getBalance(user.id),
+        });
+        return;
       }
 
-      // 2. Accept and verify any UTR or generate one
-      const refNo = cleanUtr || `UTR-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`;
+      if (liveCheck.status === 'EXPIRED') {
+        res.status(400).json({
+          error: 'This payment session has expired. Please generate a new UPI QR code.',
+        });
+        return;
+      }
 
-      // 3. Complete deposit with submitted/generated UTR
-      const completed = PaymentGatewayAdapter.completeDeposit(id, refNo, true);
-      db.logActivity(
-        user.id,
-        user.username,
-        'DEPOSIT_UTR_VERIFIED',
-        `Deposit ${completed.id} verified with UTR: ${refNo} (Amount: ₹${completed.amount})`
-      );
+      // 3. Only allow simulated completion if Admin has explicitly turned ON Test / Fake Mode
+      if (db.gatewayConfig.testMode === true) {
+        const cleanUtr = typeof utr === 'string' ? utr.trim() : '';
+        const refNo = cleanUtr || `TEST-${Date.now()}`;
+        const completed = PaymentGatewayAdapter.completeDeposit(id, refNo, true);
+        db.logActivity(
+          user.id,
+          user.username,
+          'DEPOSIT_TEST_VERIFIED',
+          `Test mode deposit ${completed.id} completed (Amount: ₹${completed.amount})`
+        );
+        res.json({
+          success: true,
+          message: 'Test Payment Mode: Wallet credited.',
+          deposit: completed,
+          newBalance: WalletService.getBalance(user.id),
+        });
+        return;
+      }
 
-      res.json({
-        success: true,
-        message: 'Payment verified successfully! Wallet credited.',
-        deposit: completed,
-        newBalance: WalletService.getBalance(user.id),
+      // Real-Time Mode (Default): Do NOT fake-credit unpaid orders!
+      res.status(400).json({
+        error: `Payment not received yet on UPI Gateway (Order ${deposit.gatewayOrderId || deposit.id}). Scan the QR code or click "Open UPI App" to pay ₹${(deposit.payableAmount || deposit.amount).toFixed(2)} — your wallet will be credited automatically in real-time within 3 seconds of payment.`,
       });
     } catch (err: any) {
       res.status(400).json({ error: err.message || 'Could not verify payment.' });
+    }
+  }
+
+  public static async getDepositQrImage(req: any, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const deposit = db.deposits.find(d => d.id === id);
+      if (!deposit) {
+        res.status(404).send('Deposit not found.');
+        return;
+      }
+
+      const upiString =
+        deposit.upiIntent ||
+        deposit.qrPayload ||
+        `upi://pay?pa=${deposit.upiVpa || '8056317218@fam'}&pn=FamPay&am=${(deposit.payableAmount || deposit.amount).toFixed(2)}&cu=INR&tn=${deposit.gatewayOrderId || deposit.transactionId}`;
+
+      const buffer = await QRCode.toBuffer(upiString, {
+        width: 360,
+        margin: 1,
+        color: {
+          dark: '#020617',
+          light: '#ffffff',
+        },
+        errorCorrectionLevel: 'M',
+      });
+
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(buffer);
+    } catch (err: any) {
+      res.status(500).send('Failed to generate QR code image.');
     }
   }
 

@@ -1,25 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Zap,
   Download,
   PlaySquare,
-  Sparkles,
   ShoppingBag,
-  CheckCircle,
   AlertCircle,
   AlertTriangle,
-  Clock,
   ChevronDown,
   ChevronUp,
-  Volume2,
-  VolumeX,
   Plus,
   Minus,
-  Star,
   ExternalLink,
   ShieldCheck,
   X,
   RefreshCw,
+  Check,
+  Sparkles,
 } from 'lucide-react';
 import { Product, ProductVariant } from '../types/index.js';
 import { api } from '../services/api.js';
@@ -38,14 +33,14 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   onNavigateKeys,
   onNavigateAdmin,
 }) => {
-  const { user, role, balance, updateBalanceLocally } = useAuth();
+  const { role, balance, updateBalanceLocally } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Filters from the video
+  // Filters
   const [gameFilter, setGameFilter] = useState<string>('ALL GAMES');
   const [deviceFilter, setDeviceFilter] = useState<string>('ALL SYSTEMS');
 
@@ -71,6 +66,9 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     current: number;
   } | null>(null);
 
+  // Track broken product images to render clean CSS/SVG fallback
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
   const fetchProducts = async (isSilent = false) => {
     try {
       if (!isSilent) setIsLoading(true);
@@ -93,10 +91,9 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   useEffect(() => {
     fetchProducts();
 
-    // Auto-sync polling every 3 seconds so product additions, deletions and maintenance reflect live
     const interval = setInterval(() => {
       fetchProducts(true);
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [role]);
@@ -144,7 +141,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
         } else {
           updateBalanceLocally(balance - totalCost);
         }
-        showToastSuccess('Key Delivered!', `${product.name} ready to use.`);
+        showToastSuccess('License Key Delivered', `${product.name} is ready to use.`);
 
         setDeliveredKey({
           keyCode: delivered.keyCode,
@@ -153,7 +150,6 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           expiresAt: delivered.expiresAt,
         });
 
-        // Refresh stock counts
         fetchProducts();
       }
     } catch (err: any) {
@@ -163,7 +159,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     }
   };
 
-  // Dynamic filter lists based on existing products + defaults
+  // Dynamic filter lists
   const dynamicGames = Array.from(
     new Set(
       products
@@ -223,20 +219,47 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   });
 
   return (
-    <div className="space-y-6 pb-28 md:pb-16 max-w-4xl mx-auto">
-      {/* 1. TOP GAME CATEGORY FILTER (Row 1 from video) + Live Sync Action */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 flex-1">
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Page Header & Refresh Control */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="font-display font-bold text-xl sm:text-2xl bg-gradient-to-r from-white via-rose-100 to-amber-200 bg-clip-text text-transparent">
+            Product Catalog & License Stock
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Select a software package and duration tier for automated key generation.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          <span className="text-xs text-emerald-400 font-mono font-semibold tabular-nums">
+            {filteredProducts.length} available
+          </span>
+          <button
+            type="button"
+            onClick={() => fetchProducts(false)}
+            className="px-3.5 py-2 rounded-xl bg-[#10121a] hover:bg-[#161926] text-slate-200 hover:text-white text-xs font-semibold border border-rose-500/25 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-rose-400 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh Stock</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Interactive Filter Controls */}
+      <div className="space-y-3 p-4 rounded-2xl bg-gradient-to-br from-[#131622] to-[#0f111a] border border-white/[0.08] shadow-lg">
+        {/* Category Filter */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {gameFilters.map(tab => {
             const isActive = gameFilter === tab;
             return (
               <button
                 key={tab}
                 onClick={() => setGameFilter(tab)}
-                className={`px-4 sm:px-6 py-2.5 rounded-xl font-display font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all whitespace-nowrap border ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                   isActive
-                    ? 'bg-gradient-to-r from-red-600 to-rose-600 border-red-500 text-white shadow-lg shadow-rose-950/60 scale-[1.02]'
-                    : 'bg-[#101018] border-white/10 text-slate-400 hover:text-white hover:border-white/20'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold shadow-[0_2px_12px_rgba(244,63,94,0.35)]'
+                    : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
                 }`}
               >
                 {tab}
@@ -245,34 +268,18 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => fetchProducts(false)}
-          className="px-3 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white text-xs font-bold border border-white/10 transition-colors flex items-center gap-1.5 shrink-0"
-          title="Refresh live catalog"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing || isLoading ? 'animate-spin text-rose-400' : ''}`} />
-          <span className="hidden sm:inline">Sync Live</span>
-        </button>
-      </div>
-
-      {/* 2. DEVICE FILTER (Row 2 from video) */}
-      <div className="space-y-2">
-        <div className="text-[11px] font-mono font-black text-[#f59e0b] uppercase tracking-wider">
-          DEVICE FILTER
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+        {/* System / Device Filter */}
+        <div className="pt-2 border-t border-white/[0.06] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {deviceFilters.map(dTab => {
             const isActive = deviceFilter === dTab;
             return (
               <button
                 key={dTab}
                 onClick={() => setDeviceFilter(dTab)}
-                className={`px-3.5 py-1.5 rounded-lg font-mono text-[11px] font-bold uppercase transition-all whitespace-nowrap border ${
+                className={`px-3 py-1 rounded-lg text-[11px] font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                   isActive
-                    ? 'bg-red-950/60 border-rose-500 text-rose-300 shadow-sm shadow-rose-950'
-                    : 'bg-[#0f0f16] border-white/10 text-slate-400 hover:text-slate-200'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
                 }`}
               >
                 {dTab}
@@ -282,224 +289,204 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
         </div>
       </div>
 
-      {/* 3. SECTION TITLE (from video) */}
-      <div className="flex items-center justify-between pt-1">
-        <h3 className="font-mono font-black text-rose-500 text-xs sm:text-sm tracking-widest uppercase flex items-center gap-1.5">
-          <span>&gt;&gt; MARKETPLACE / USER STOCK</span>
-        </h3>
-        <span className="text-[10px] font-mono text-slate-500">
-          {filteredProducts.length} PRODUCTS ONLINE
-        </span>
-      </div>
-
-      {/* 4. PRODUCTS LIST */}
+      {/* Products List */}
       {isLoading ? (
-        <div className="py-20 flex flex-col items-center justify-center space-y-3">
-          <div className="w-10 h-10 border-4 border-rose-500/20 border-t-rose-500 rounded-full animate-spin" />
-          <p className="font-mono text-xs text-slate-400 tracking-wider">LOADING STORE CATALOG...</p>
+        <div className="space-y-4">
+          {[1, 2].map(n => (
+            <div key={n} className="h-72 rounded-2xl bg-[#10121a] border border-white/[0.06] animate-pulse" />
+          ))}
         </div>
       ) : products.length === 0 ? (
-        <div className="p-12 text-center rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4 shadow-xl">
-          <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center mx-auto text-slate-500">
-            <ShoppingBag className="w-7 h-7" />
+        <div className="p-12 text-center rounded-2xl bg-[#10121a] border border-white/[0.06] space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400">
+            <ShoppingBag className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h4 className="text-white font-display font-black text-base uppercase tracking-wider">
-              NO PRODUCTS CURRENTLY AVAILABLE
+            <h4 className="text-white font-display font-bold text-base">
+              No Products Configured
             </h4>
             <p className="text-slate-400 text-xs max-w-sm mx-auto">
-              All demo products have been removed. Products will appear here once added through the admin control panel.
+              Catalog items will appear here once added through the administration panel.
             </p>
           </div>
-          {role === 'ADMIN' && onNavigateAdmin && (
+          {(role === 'ADMIN' || role === 'SUPER ADMIN') && onNavigateAdmin && (
             <button
               type="button"
               onClick={onNavigateAdmin}
-              className="px-6 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:scale-95 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-rose-950/60 inline-flex items-center gap-2"
+              className="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white rounded-xl text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer"
             >
-              <span>+ ADD PRODUCT IN ADMIN PANEL</span>
+              <span>Add Product in Admin Console</span>
             </button>
           )}
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="p-12 text-center rounded-3xl bg-[#0d0d14] border border-white/5 space-y-3">
-          <AlertCircle className="w-10 h-10 text-slate-500 mx-auto" />
-          <h4 className="text-white font-bold text-sm">NO PRODUCTS MATCH THIS FILTER</h4>
+        <div className="p-12 text-center rounded-2xl bg-[#10121a] border border-white/[0.06] space-y-3">
+          <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
+          <h4 className="text-white font-display font-bold text-sm">No Matching Products</h4>
           <p className="text-slate-400 text-xs max-w-sm mx-auto">
-            Try switching game categories or device filters above.
+            No products match the selected category or system filters.
           </p>
           <button
             onClick={() => {
               setGameFilter('ALL GAMES');
               setDeviceFilter('ALL SYSTEMS');
             }}
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider"
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
           >
             Reset Filters
           </button>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {filteredProducts.map(product => {
             const isExpanded = !!expandedMap[product.id];
-            const features = product.features || ['Headshot', 'Location', 'Fast Revive'];
+            const features = product.features || ['Precision Aim Assist', 'ESP Overlay', 'Anti-Ban Protection'];
+            const hasValidImage = Boolean(product.imageUrl && !failedImages[product.id] && !product.imageUrl?.includes('images.unsplash.com'));
 
             return (
               <div
                 key={product.id}
-                className="bg-[#0b0b12] border border-white/10 rounded-3xl overflow-hidden shadow-2xl shadow-black/80 hover:border-rose-500/30 transition-all duration-300"
+                className="bg-gradient-to-b from-[#131622] to-[#0e1018] border border-rose-500/20 hover:border-rose-500/40 rounded-2xl overflow-hidden transition-all shadow-[0_8px_30px_rgba(0,0,0,0.4)]"
               >
-                {/* Product Banner Container */}
-                <div className="relative aspect-[16/8] sm:aspect-[16/7] w-full bg-[#10101a] overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-rose-950/40 via-[#10101a] to-[#070709] flex items-center justify-center pointer-events-none">
-                    <span className="font-display font-black text-3xl sm:text-4xl text-rose-500/20 uppercase tracking-widest select-none">
-                      {product.game || 'FREE FIRE'}
-                    </span>
-                  </div>
-                  <img
-                    src={
-                      product.imageUrl ||
-                      'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80'
-                    }
-                    alt={product.name}
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                    className="w-full h-full object-cover opacity-85 hover:scale-105 transition-transform duration-700 relative z-0"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b12] via-transparent to-black/60 z-1" />
-
-                  {/* Top Badges */}
-                  <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
-                    <span className="bg-red-600 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-md">
-                      {product.deviceType || 'NONROOT'}
-                    </span>
-                    <span className="bg-sky-600 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-md">
-                      {product.game || 'FREEFIRE'}
-                    </span>
+                {/* Product Media Banner with Vibrant Architectural Fallback */}
+                <div className="relative aspect-[16/7] w-full bg-[#0c0e15] overflow-hidden border-b border-white/[0.06]">
+                  {/* Vibrant Multi-Stop Gradient Banner */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-rose-950/80 via-indigo-950/70 to-amber-950/50 flex flex-col items-center justify-center p-6 text-center select-none">
+                    <div className="w-11 h-11 rounded-2xl bg-rose-500/20 border border-rose-400/35 flex items-center justify-center mb-2.5 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
+                      <ShieldCheck className="w-6 h-6 text-rose-300" />
+                    </div>
+                    <div className="font-display font-extrabold text-lg sm:text-2xl bg-gradient-to-r from-white via-rose-100 to-amber-200 bg-clip-text text-transparent tracking-tight">
+                      {product.name}
+                    </div>
+                    <div className="text-xs text-cyan-300 font-medium mt-1">
+                      {product.game || 'Digital License'} · {product.deviceType || 'Universal'}
+                    </div>
                   </div>
 
-                  <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
-                    <span className="bg-[#fbbf24] text-black text-[10px] font-black uppercase px-2 py-1 rounded-md flex items-center gap-1 shadow-md">
-                      <Star className="w-3 h-3 fill-black text-black" />
-                      <span>{product.badge || 'STAR'}</span>
-                    </span>
-                  </div>
+                  {hasValidImage && (
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      referrerPolicy="no-referrer"
+                      onError={() =>
+                        setFailedImages(prev => ({ ...prev, [product.id]: true }))
+                      }
+                      className="w-full h-full object-cover relative z-10"
+                    />
+                  )}
 
-                  {/* Centered Under Maintenance Button / Overlay on Product Photo */}
+                  {/* Measured Contrast Scrim */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0e1018] via-black/25 to-transparent z-20 pointer-events-none" />
+
+                  {/* Maintenance Scrim Overlay */}
                   {product.isUnderMaintenance && (
-                    <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/70 backdrop-blur-[2px] p-4">
-                      <div className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-black border-2 border-amber-300 font-display font-black text-xs sm:text-sm uppercase tracking-wider flex items-center gap-2 shadow-[0_0_30px_rgba(245,158,11,0.8)] animate-pulse">
-                        <AlertTriangle className="w-4 h-4 text-black fill-black shrink-0" />
-                        <span>UNDER MAINTENANCE</span>
+                    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/75 backdrop-blur-xs p-4">
+                      <div className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-semibold text-xs flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Temporarily Under Maintenance</span>
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* Card Body */}
-                <div className="p-4 sm:p-6 space-y-4">
-                  {/* Product Title */}
-                  <h4 className="font-display font-black text-lg sm:text-xl text-white uppercase text-center tracking-wide flex items-center justify-center gap-2">
-                    <span>{product.name}</span>
-                    {product.isUnderMaintenance && (
-                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase">
-                        MAINTENANCE
-                      </span>
-                    )}
-                  </h4>
-
-                  {/* Available Plan Durations Preview Badges */}
-                  {product.variants && product.variants.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5">
-                      {product.variants.map(v => (
-                        <span
-                          key={v.id}
-                          className="px-2.5 py-1 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
-                        >
-                          <Clock className="w-3 h-3 text-rose-400" />
-                          <span>{v.durationLabel}</span>
-                        </span>
-                      ))}
+                <div className="p-5 sm:p-6 space-y-5">
+                  {/* Colorful Unboxed Metadata Kicker & Title */}
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-rose-400 font-bold">{product.game || 'Free Fire'}</span>
+                      <span aria-hidden="true" className="text-slate-600">·</span>
+                      <span className="text-cyan-400 font-semibold">{product.deviceType || 'Non-Root'}</span>
+                      {product.badge && (
+                        <>
+                          <span aria-hidden="true" className="text-slate-600">·</span>
+                          <span className="text-amber-400 font-semibold flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" />
+                            {product.badge}
+                          </span>
+                        </>
+                      )}
+                      {product.variants && product.variants.length > 0 && (
+                        <>
+                          <span aria-hidden="true" className="text-slate-600">·</span>
+                          <span className="text-emerald-400 font-medium">
+                            {product.variants.map(v => v.durationLabel).join(' / ')}
+                          </span>
+                        </>
+                      )}
                     </div>
-                  )}
 
-                  {/* Feature Pills with Red Lightning Bolts */}
-                  <div className="space-y-2">
+                    <h4 className="font-display font-bold text-lg sm:text-xl text-white">
+                      {product.name}
+                    </h4>
+                  </div>
+
+                  {/* Clean Specification List */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-white/[0.06]">
                     {features.map((feat, idx) => (
                       <div
                         key={idx}
-                        className="bg-[#12121c] border border-white/5 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-inner"
+                        className="flex items-center gap-2.5 text-xs text-slate-200 py-1"
                       >
-                        <Zap className="w-4 h-4 text-rose-500 fill-rose-500 shrink-0" />
-                        <span className="text-white font-bold text-xs sm:text-sm tracking-wide">
-                          {feat}
-                        </span>
+                        <div className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                          <Check className="w-3 h-3 text-emerald-400" />
+                        </div>
+                        <span>{feat}</span>
                       </div>
                     ))}
                   </div>
 
-                  {/* Side-by-side action buttons */}
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setActiveFileModal(product)}
-                      className="py-3 px-3 rounded-2xl bg-[#141420] hover:bg-[#1a1a2b] border border-white/10 active:scale-95 text-slate-200 text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
-                    >
-                      <Download className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span className="truncate">CHECK UPDATE FILE</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveVideoModal(product)}
-                      className="py-3 px-3 rounded-2xl bg-[#141420] hover:bg-[#1a1a2b] border border-white/10 active:scale-95 text-slate-200 text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
-                    >
-                      <PlaySquare className="w-4 h-4 text-rose-400 shrink-0" />
-                      <span className="truncate">CHECK VIDEO / FEEDBACK</span>
-                    </button>
-                  </div>
-
-                  {/* Under Maintenance Notice & Button OR Normal Purchase Button */}
-                  {product.isUnderMaintenance ? (
-                    <div className="space-y-2.5 pt-1">
+                  {/* Secondary Resource Links & Primary Purchase Trigger */}
+                  <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                    <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
-                        disabled
-                        className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-600/30 via-orange-600/30 to-amber-600/30 border border-amber-500/50 text-amber-300 font-display font-black uppercase tracking-widest text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                        onClick={() => setActiveFileModal(product)}
+                        className="py-2.5 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
                       >
-                        <AlertTriangle className="w-5 h-5 text-amber-400 animate-bounce" />
-                        <span>UNDER MAINTENANCE · PURCHASING PAUSED</span>
+                        <Download className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="truncate">Download Loader</span>
                       </button>
-                      <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-500/30 text-center space-y-1">
-                        <div className="text-[11px] font-mono text-amber-300 font-bold uppercase tracking-wider flex items-center justify-center gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          <span>MAINTENANCE STATUS NOTICE</span>
-                        </div>
-                        <p className="text-xs text-amber-200/90 leading-relaxed font-semibold">
-                          {product.maintenanceNotice || '⚠️ This product is currently undergoing game server updates. New key purchases are temporarily paused.'}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => toggleAccordion(product.id)}
-                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 active:scale-[0.99] text-white font-black uppercase tracking-widest text-sm sm:text-base shadow-[0_0_30px_rgba(225,29,72,0.45)] transition-all flex items-center justify-center gap-2 group"
-                    >
-                      <span>PURCHASE KEY</span>
-                      {isExpanded ? (
-                        <ChevronUp className="w-5 h-5 transition-transform group-hover:-translate-y-0.5" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5 transition-transform group-hover:translate-y-0.5" />
-                      )}
-                    </button>
-                  )}
 
-                  {/* 5. ACCORDION DURATION LIST (Shown in video when PURCHASE KEY is tapped) */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveVideoModal(product)}
+                        className="py-2.5 px-4 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        <PlaySquare className="w-4 h-4 text-violet-400 shrink-0" />
+                        <span className="truncate">Preview & Proof</span>
+                      </button>
+                    </div>
+
+                    {product.isUnderMaintenance ? (
+                      <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-200 flex items-start gap-2.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-semibold text-amber-300">Maintenance Notice</div>
+                          <p className="text-amber-200/80 mt-0.5">
+                            {product.maintenanceNotice || 'This package is undergoing a scheduled update. New license purchases are temporarily paused.'}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => toggleAccordion(product.id)}
+                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-bold text-xs sm:text-sm transition-all shadow-[0_4px_20px_rgba(244,63,94,0.3)] flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+                      >
+                        <span>{isExpanded ? 'Hide Duration Options' : 'Select Duration & Buy Key'}</span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Accordion Duration Variants */}
                   {isExpanded && (
-                    <div className="pt-2 space-y-2.5 animate-in slide-in-from-top-3 fade-in duration-200">
+                    <div className="pt-2 space-y-2 border-t border-white/[0.06]">
                       {product.variants && product.variants.length > 0 ? (
                         product.variants.map(variant => {
                           const qty = getQuantity(variant.id);
@@ -511,57 +498,56 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                           return (
                             <div
                               key={variant.id}
-                              className="bg-[#12121c] border border-white/10 hover:border-rose-500/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 transition-colors shadow-sm"
+                              className="bg-[#090a0f] border border-rose-500/20 hover:border-rose-500/40 rounded-xl p-3.5 flex items-center justify-between gap-3 transition-colors"
                             >
-                              {/* Left: Duration Label & Price */}
                               <div className="space-y-0.5">
-                                <div className="text-white font-black text-xs sm:text-sm">
+                                <div className="text-white font-semibold text-xs sm:text-sm">
                                   {variant.durationLabel}
                                 </div>
-                                <div className="text-rose-400 font-extrabold text-sm sm:text-base font-mono">
+                                <div className="text-emerald-400 font-bold text-sm font-mono tabular-nums">
                                   ₹{totalPrice.toFixed(2)}
                                   {qty > 1 && (
-                                    <span className="text-[10px] text-slate-400 font-normal ml-1">
-                                      (₹{unitPrice.toFixed(2)}/ea)
+                                    <span className="text-xs text-slate-400 font-normal ml-1.5">
+                                      (₹{unitPrice.toFixed(2)} each)
                                     </span>
                                   )}
                                 </div>
                               </div>
 
-                              {/* Right: Quantity Selector & BUY button */}
-                              <div className="flex items-center gap-2 sm:gap-3">
-                                {/* Quantity selector box */}
-                                <div className="flex items-center bg-[#0a0a0f] border border-white/10 rounded-xl px-1.5 py-1">
+                              <div className="flex items-center gap-2.5">
+                                {/* Quantity Control */}
+                                <div className="flex items-center bg-[#131622] border border-white/[0.1] rounded-lg px-1.5 py-1">
                                   <button
                                     type="button"
                                     onClick={() => updateQuantity(variant.id, -1)}
-                                    className="p-1 text-slate-400 hover:text-white active:scale-90"
+                                    className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer"
+                                    aria-label="Decrease quantity"
                                   >
                                     <Minus className="w-3 h-3" />
                                   </button>
-                                  <span className="w-6 text-center text-xs font-mono font-bold text-white">
+                                  <span className="w-6 text-center text-xs font-mono font-bold text-amber-300 tabular-nums">
                                     {qty}
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => updateQuantity(variant.id, 1)}
-                                    className="p-1 text-slate-400 hover:text-white active:scale-90"
+                                    className="p-1 text-slate-400 hover:text-emerald-400 cursor-pointer"
+                                    aria-label="Increase quantity"
                                   >
                                     <Plus className="w-3 h-3" />
                                   </button>
                                 </div>
 
-                                {/* BUY button */}
                                 <button
                                   type="button"
                                   onClick={() => handlePurchase(product, variant)}
                                   disabled={isBuying}
-                                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-950/60 transition-all flex items-center justify-center min-w-[68px]"
+                                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs transition-all shadow-[0_2px_12px_rgba(16,185,129,0.3)] flex items-center justify-center min-w-[76px] cursor-pointer whitespace-nowrap shrink-0"
                                 >
                                   {isBuying ? (
-                                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                   ) : (
-                                    <span>BUY</span>
+                                    <span>Buy Key</span>
                                   )}
                                 </button>
                               </div>
@@ -569,8 +555,8 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                           );
                         })
                       ) : (
-                        <div className="text-center py-4 text-xs text-slate-400 font-mono">
-                          NO ACTIVE DURATION VARIANTS CONFIGURED
+                        <div className="text-center py-4 text-xs text-slate-400">
+                          No duration plans configured for this product.
                         </div>
                       )}
                     </div>
@@ -582,46 +568,42 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
         </div>
       )}
 
-      {/* 6. MODAL: CHECK UPDATE FILE */}
+      {/* Modal: Update File & Loader */}
       {activeFileModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             onClick={() => setActiveFileModal(null)}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in"
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
           />
-          <div className="relative w-full max-w-md bg-[#0e0e17] border border-white/10 rounded-3xl p-6 shadow-2xl z-10 space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="relative w-full max-w-md bg-[#10121a] border border-emerald-500/30 rounded-2xl p-6 shadow-2xl z-10 space-y-4">
+            <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
               <div className="flex items-center gap-2">
-                <Download className="w-5 h-5 text-emerald-400" />
-                <h4 className="font-display font-black text-sm text-white">UPDATE FILE & LOADER</h4>
+                <Download className="w-4 h-4 text-emerald-400" />
+                <h4 className="font-display font-bold text-sm text-white">Loader & Package File</h4>
               </div>
               <button
                 onClick={() => setActiveFileModal(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <p className="text-slate-300 font-medium">
-                Latest stable build for <span className="text-rose-400 font-bold">{activeFileModal.name}</span>.
+            <div className="space-y-4 text-xs">
+              <p className="text-slate-300">
+                Download the latest verified setup package for <span className="text-white font-semibold">{activeFileModal.name}</span>.
               </p>
 
-              <div className="bg-[#141420] border border-white/5 rounded-2xl p-4 space-y-2 font-mono text-[11px]">
+              <div className="bg-[#090a0f] border border-white/[0.06] rounded-xl p-4 space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">VERSION:</span>
-                  <span className="text-emerald-400 font-bold">v5.2.0 (OB55 Safe)</span>
+                  <span className="text-slate-400">System Compatibility</span>
+                  <span className="text-cyan-400 font-semibold">{activeFileModal.deviceType || 'Non-Root'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">SECURITY:</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" /> 100% CLEAN
+                  <span className="text-slate-400">Verification</span>
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Verified Clean Build
                   </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">TARGET:</span>
-                  <span className="text-white">{activeFileModal.deviceType || 'NONROOT'}</span>
                 </div>
               </div>
 
@@ -629,60 +611,44 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                 href={activeFileModal.updateFileUrl || 'https://t.me'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40"
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>DOWNLOAD FILE NOW</span>
+                <span>Download Setup Package</span>
               </a>
             </div>
           </div>
         </div>
       )}
 
-      {/* 7. MODAL: CHECK VIDEO / FEEDBACK */}
+      {/* Modal: Gameplay Video & Proof */}
       {activeVideoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             onClick={() => setActiveVideoModal(null)}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in"
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
           />
-          <div className="relative w-full max-w-md bg-[#0e0e17] border border-white/10 rounded-3xl p-6 shadow-2xl z-10 space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="relative w-full max-w-md bg-[#10121a] border border-violet-500/30 rounded-2xl p-6 shadow-2xl z-10 space-y-4">
+            <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
               <div className="flex items-center gap-2">
-                <PlaySquare className="w-5 h-5 text-rose-400" />
-                <h4 className="font-display font-black text-sm text-white">GAMEPLAY VIDEO & FEEDBACK</h4>
+                <PlaySquare className="w-4 h-4 text-violet-400" />
+                <h4 className="font-display font-bold text-sm text-white">Gameplay Preview & Proof</h4>
               </div>
               <button
                 onClick={() => setActiveVideoModal(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="aspect-video w-full rounded-2xl bg-black border border-white/10 relative overflow-hidden flex items-center justify-center group">
-                <img
-                  src={activeVideoModal.imageUrl}
-                  alt="Gameplay Proof"
-                  className="w-full h-full object-cover opacity-50"
-                />
-                <a
-                  href={activeVideoModal.videoUrl || 'https://t.me'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-14 h-14 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-xl shadow-rose-950 hover:scale-110 active:scale-95 transition-all z-10"
-                >
-                  <PlaySquare className="w-6 h-6 fill-white" />
-                </a>
-              </div>
-
-              <div className="bg-[#141420] border border-white/5 rounded-2xl p-3.5 space-y-1 text-slate-300">
-                <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
-                  ⭐⭐⭐⭐⭐ Customer Verified Proof
+            <div className="space-y-4 text-xs">
+              <div className="p-4 rounded-xl bg-[#090a0f] border border-white/[0.06] space-y-1.5 text-slate-300">
+                <div className="font-semibold text-white">
+                  Official Demonstration Channel
                 </div>
-                <p className="text-[11px] text-slate-400">
-                  Full headshot and fast revive gameplay preview on official Telegram channel.
+                <p className="text-slate-400 leading-relaxed">
+                  Watch live gameplay footage, setup tutorials, and customer feedback on our verified channel.
                 </p>
               </div>
 
@@ -690,9 +656,9 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                 href={activeVideoModal.videoUrl || 'https://t.me'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40"
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-violet-600 to-rose-600 hover:from-violet-500 hover:to-rose-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all"
               >
-                <span>OPEN OFFICIAL VIDEO PROOF</span>
+                <span>Open Video Preview</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
             </div>
@@ -700,30 +666,30 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
         </div>
       )}
 
-      {/* 8. MODAL: INSUFFICIENT BALANCE */}
+      {/* Modal: Insufficient Balance */}
       {insufficientModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             onClick={() => setInsufficientModal(null)}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in"
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
           />
-          <div className="relative w-full max-w-sm bg-[#0e0e17] border border-rose-500/40 rounded-3xl p-6 shadow-2xl z-10 space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
-              <ShoppingBag className="w-6 h-6" />
+          <div className="relative w-full max-w-sm bg-[#10121a] border border-rose-500/30 rounded-2xl p-6 shadow-2xl z-10 space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto">
+              <ShoppingBag className="w-5 h-5" />
             </div>
 
             <div className="text-center space-y-1">
-              <h4 className="font-display font-black text-base text-white">INSUFFICIENT BALANCE</h4>
-              <p className="text-xs text-slate-400">
-                You need <span className="text-rose-400 font-bold font-mono">₹{insufficientModal.required.toFixed(2)}</span>, but your wallet balance is <span className="text-white font-bold font-mono">₹{insufficientModal.current.toFixed(2)}</span>.
+              <h4 className="font-display font-bold text-base text-white">Insufficient Wallet Balance</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                This order requires <span className="text-amber-300 font-semibold font-mono tabular-nums">₹{insufficientModal.required.toFixed(2)}</span>, but your available balance is <span className="text-rose-400 font-semibold font-mono tabular-nums">₹{insufficientModal.current.toFixed(2)}</span>.
               </p>
             </div>
 
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setInsufficientModal(null)}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 text-xs font-bold uppercase"
+                className="flex-1 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.09] text-slate-300 text-xs font-medium cursor-pointer"
               >
                 Cancel
               </button>
@@ -733,16 +699,16 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                   setInsufficientModal(null);
                   onNavigateDeposit();
                 }}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-rose-950/60"
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-xs font-bold cursor-pointer"
               >
-                Deposit Funds
+                Add Funds
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 9. MODAL: DELIVERED KEY SUCCESS */}
+      {/* Modal: Delivered Key Success */}
       {deliveredKey && (
         <KeySuccessModal
           keyData={deliveredKey}

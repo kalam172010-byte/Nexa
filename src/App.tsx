@@ -12,7 +12,7 @@ import { Sidebar } from './components/Sidebar.js';
 import { BottomNav } from './components/BottomNav.js';
 import { SideDrawer } from './components/SideDrawer.js';
 import { ResellerUpgradeModal } from './components/ResellerUpgradeModal.js';
-import { Megaphone, MessageSquare, ExternalLink, Sparkles, ChevronRight, LayoutDashboard } from 'lucide-react';
+import { MessageSquare, ExternalLink, ShieldCheck } from 'lucide-react';
 
 // Pages
 import { DashboardPage } from './pages/DashboardPage.js';
@@ -29,16 +29,16 @@ import { AuthPage } from './pages/AuthPage.js';
 
 const PAGE_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
-  deposit: 'Add Funds & Wallet',
-  buy: 'Buy Free Fire Keys',
+  deposit: 'Deposit',
+  buy: 'Buy Key',
   keys: 'My License Keys',
-  history: 'Order History',
-  tickets: 'Support Tickets',
-  refer: 'Refer & Earn',
-  profile: 'My Account & Profile',
-  api: 'Reseller API Documentation',
-  admin: 'Admin Control Panel',
-  auth: 'Login & Register',
+  history: 'Transaction Ledger',
+  tickets: 'Support Desk',
+  refer: 'Partner Referrals',
+  profile: 'Account Settings',
+  api: 'Developer API',
+  admin: 'Administration',
+  auth: 'Sign In',
 };
 
 const MainLayout: React.FC = () => {
@@ -48,11 +48,11 @@ const MainLayout: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isUpgradeOpen, setIsUpgradeOpen] = useState<boolean>(false);
 
-  // Sync document title with current active page and site title (e.g. Dashboard • KALAM FF PANEL)
+  // Sync document title with current active page and site title
   useEffect(() => {
     const pageName = PAGE_TITLES[currentPage] || 'Dashboard';
-    const siteName = siteConfig.siteTitle || 'KALAM FF PANEL';
-    document.title = `${pageName} • ${siteName}`;
+    const siteName = siteConfig.siteTitle || 'Nexa Panel';
+    document.title = `${pageName} — ${siteName}`;
   }, [currentPage, siteConfig.siteTitle]);
 
   // Read URL hash on initial mount and respond to browser Back/Forward buttons
@@ -70,12 +70,12 @@ const MainLayout: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500/20 to-red-600/30 border border-rose-500/40 text-rose-400 flex items-center justify-center font-display font-black text-xl animate-pulse shadow-[0_0_25px_rgba(244,63,94,0.4)]">
-          {siteConfig.siteTitle ? siteConfig.siteTitle.slice(0, 2).toUpperCase() : 'KF'}
+      <div className="min-h-screen bg-[#090a0f] flex flex-col items-center justify-center space-y-3">
+        <div className="w-10 h-10 rounded-xl bg-[#10121a] border border-white/10 text-rose-500 flex items-center justify-center font-display font-bold text-base">
+          {siteConfig.siteTitle ? siteConfig.siteTitle.slice(0, 2).toUpperCase() : 'NX'}
         </div>
-        <div className="font-mono text-xs text-slate-400 tracking-widest uppercase animate-pulse">
-          INITIALIZING {siteConfig.siteTitle.toUpperCase()}...
+        <div className="text-xs text-slate-400 font-medium tracking-wide">
+          Loading workspace...
         </div>
       </div>
     );
@@ -98,85 +98,57 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#070709] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-rose-500/30 selection:text-rose-200">
-      {/* Desktop Sidebar (replaces bottom nav on desktop screens) */}
+    <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-rose-500/25 selection:text-rose-200">
+      {/* Desktop Sidebar */}
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 
-      {/* Main App Container */}
+      {/* Main Workspace Container */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Customizable Announcement Bar */}
+        {/* Optional System Announcement Strip */}
         {siteConfig.isAnnouncementEnabled && siteConfig.announcementText && (
-          <div className="w-full bg-gradient-to-r from-rose-600/90 via-red-600/90 to-amber-600/90 text-white px-3 py-1.5 text-xs font-bold flex items-center justify-center gap-2 shadow-md relative z-40">
-            <span className="px-1.5 py-0.5 rounded bg-black/40 text-[9px] font-mono font-black uppercase tracking-wider">
-              {siteConfig.announcementType === 'promo' ? '🔥 PROMO' : siteConfig.announcementType === 'alert' ? '⚠️ NOTICE' : '🚀 UPDATE'}
+          <div className="w-full bg-[#12141f] border-b border-white/[0.06] text-slate-200 px-4 py-2 text-xs flex items-center justify-center gap-2.5 relative z-40">
+            <span className="text-rose-400 font-semibold tracking-wide">
+              {siteConfig.announcementType === 'promo' ? 'Promotion' : siteConfig.announcementType === 'alert' ? 'Notice' : 'Update'}
             </span>
-            <span className="truncate">{siteConfig.announcementText}</span>
+            <span aria-hidden="true" className="text-slate-600">·</span>
+            <span className="truncate font-medium">{siteConfig.announcementText}</span>
             {siteConfig.announcementLink && (
-              <a
-                href={siteConfig.announcementLink}
-                target="_blank"
-                rel="noreferrer"
-                className="underline text-[11px] font-mono flex items-center gap-0.5 hover:text-white/80 shrink-0"
-              >
-                <span>Details</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              <>
+                <span aria-hidden="true" className="text-slate-600">·</span>
+                <a
+                  href={siteConfig.announcementLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-rose-400 hover:text-rose-300 font-medium inline-flex items-center gap-1 shrink-0 transition-colors"
+                >
+                  <span>Learn more</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </>
             )}
           </div>
         )}
 
-        {/* Mobile & Tablet Sticky Header */}
+        {/* Top Bar Contract Header */}
         <Header
           onOpenDrawer={() => setIsDrawerOpen(true)}
           onNavigate={handleNavigate}
           currentPage={currentPage}
         />
 
-        {/* Live News Smooth Ticker */}
+        {/* Optional Broadcast Notice */}
         {siteConfig.isMarqueeEnabled && siteConfig.marqueeText && (
-          <div className="w-full bg-[#0d0d14] border-b border-white/5 py-1.5 px-3 overflow-hidden flex items-center gap-2.5 text-[11px] font-mono font-bold text-slate-300 select-none">
-            <span className="shrink-0 text-rose-400 font-extrabold flex items-center gap-1 uppercase text-[10px] bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md">
-              <Sparkles className="w-3 h-3 text-rose-400" />
-              <span>LIVE</span>
+          <div className="w-full bg-[#0c0e16] border-b border-white/[0.05] py-2 px-4 sm:px-6 lg:px-8 flex items-center gap-2.5 text-xs text-slate-400">
+            <span className="shrink-0 text-slate-300 font-semibold">
+              Broadcast
             </span>
-            <div className="overflow-hidden whitespace-nowrap flex-1">
-              <div className="animate-smooth-ticker flex gap-8 items-center cursor-default">
-                <span>{siteConfig.marqueeText}</span>
-                <span className="text-rose-500 font-black">·</span>
-                <span>{siteConfig.marqueeText}</span>
-                <span className="text-rose-500 font-black">·</span>
-              </div>
-            </div>
+            <span aria-hidden="true" className="text-slate-600">·</span>
+            <span className="truncate text-slate-300">{siteConfig.marqueeText}</span>
           </div>
         )}
 
-        {/* Interactive Breadcrumb & Active Page Bar */}
-        <div className="w-full bg-[#08080d]/85 border-b border-white/5 px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between text-xs backdrop-blur-md">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
-            <button
-              onClick={() => handleNavigate('dashboard')}
-              className="text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5 font-mono text-[11px] shrink-0 group"
-              title="Return to Dashboard"
-            >
-              <LayoutDashboard className="w-3.5 h-3.5 text-rose-500 group-hover:scale-110 transition-transform" />
-              <span>{siteConfig.siteTitle || 'KALAM FF PANEL'}</span>
-            </button>
-            <ChevronRight className="w-3 h-3 text-slate-600 shrink-0" />
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 font-display font-bold uppercase tracking-wider text-[11px] shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>{PAGE_TITLES[currentPage] || currentPage.toUpperCase()}</span>
-            </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono text-slate-400 shrink-0">
-            <span className="text-slate-400">ACTIVE:</span>
-            <span className="text-rose-300 font-bold bg-white/[0.04] border border-white/10 px-2 py-0.5 rounded text-[10px] uppercase tracking-wider">
-              #{currentPage}
-            </span>
-          </div>
-        </div>
-
         {/* Page Content Viewport */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 md:pb-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 md:pb-10 max-w-[1200px] w-full mx-auto">
           {currentPage === 'dashboard' && (
             <DashboardPage
               onNavigate={handleNavigate}
@@ -214,19 +186,21 @@ const MainLayout: React.FC = () => {
             role === 'ADMIN' || role === 'SUPER ADMIN' ? (
               <AdminPage />
             ) : (
-              <div className="p-12 text-center rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4 max-w-md mx-auto">
-                <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
-                  {siteConfig.siteTitle ? siteConfig.siteTitle.slice(0, 2).toUpperCase() : 'NX'}
+              <div className="p-8 sm:p-10 text-center rounded-2xl bg-[#10121a] border border-white/[0.06] space-y-4 max-w-md mx-auto my-8">
+                <div className="w-11 h-11 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
-                <h3 className="font-display font-bold text-base text-white">ADMIN PERMISSION REQUIRED</h3>
-                <p className="text-xs text-slate-400">
-                  You must be authenticated with an Administrator account to access the control panel.
-                </p>
+                <div className="space-y-1">
+                  <h3 className="font-display font-bold text-base text-white">Administrator Access Required</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    You must be signed in with an authorized administrator account to view system controls.
+                  </p>
+                </div>
                 <button
                   onClick={() => handleNavigate('auth')}
-                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold uppercase transition-colors"
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
                 >
-                  Sign In with Admin Account
+                  Switch Account
                 </button>
               </div>
             )
@@ -236,7 +210,7 @@ const MainLayout: React.FC = () => {
         </main>
       </div>
 
-      {/* Mobile Animated Left Drawer */}
+      {/* Mobile Navigation Drawer */}
       <SideDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
@@ -244,10 +218,10 @@ const MainLayout: React.FC = () => {
         onNavigate={handleNavigate}
       />
 
-      {/* Mobile Fixed Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation */}
       <BottomNav currentPage={currentPage} onNavigate={handleNavigate} />
 
-      {/* Floating WhatsApp / Telegram Quick Support Widget */}
+      {/* Direct Support Action */}
       {siteConfig.quickSupportWidgetEnabled && (siteConfig.whatsappNumber || siteConfig.telegramSupportUser) && (
         <a
           href={
@@ -257,17 +231,15 @@ const MainLayout: React.FC = () => {
           }
           target="_blank"
           rel="noreferrer"
-          className="fixed bottom-20 md:bottom-6 right-5 z-40 p-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-2xl shadow-emerald-950/80 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
-          title="Direct WhatsApp Support"
+          className="fixed bottom-20 md:bottom-6 right-5 z-40 px-3.5 py-2.5 rounded-xl bg-[#141722] hover:bg-[#1a1e2d] border border-white/10 text-slate-200 hover:text-white shadow-lg flex items-center gap-2 transition-colors text-xs font-medium whitespace-nowrap shrink-0"
+          title="Direct Support"
         >
-          <MessageSquare className="w-5 h-5 group-hover:animate-bounce" />
-          <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 ease-in-out text-xs font-bold pl-0 group-hover:pl-2">
-            24/7 Live Support
-          </span>
+          <MessageSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="hidden sm:inline">Support Desk</span>
         </a>
       )}
 
-      {/* Promotional Reseller Upgrade Modal */}
+      {/* Reseller Upgrade Modal */}
       {isUpgradeOpen && (
         <ResellerUpgradeModal
           onClose={() => setIsUpgradeOpen(false)}

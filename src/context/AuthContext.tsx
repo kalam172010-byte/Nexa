@@ -6,6 +6,7 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../firebase.js';
@@ -24,6 +25,7 @@ interface AuthContextValue {
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (username: string, email: string, password: string, referralCode?: string) => Promise<void>;
   resetPassword: (usernameOrEmail: string, newPassword: string) => Promise<void>;
+  sendPasswordReset: (usernameOrEmail: string) => Promise<{ success: boolean; message: string; email?: string; simulated?: boolean; resetToken?: string }>;
   sendOtp: (email: string) => Promise<{ success: boolean; simulated: boolean; code?: string; message: string }>;
   loginWithOtp: (email: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -286,6 +288,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Forgot password: send password reset email only (no new password fields)
+  const sendPasswordReset = async (usernameOrEmail: string) => {
+    setIsLoading(true);
+    try {
+      const trimmed = usernameOrEmail.trim();
+      // If entered as an email, also attempt Firebase password reset email
+      if (trimmed.includes('@')) {
+        try {
+          await sendPasswordResetEmail(auth, trimmed);
+        } catch (firebaseErr: any) {
+          console.log('Firebase reset email note:', firebaseErr?.message);
+        }
+      }
+
+      const res = await api.forgotPassword({
+        usernameOrEmail: trimmed,
+      });
+      return res;
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to dispatch password reset email.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const sendOtp = async (email: string) => {
     try {
       const res = await api.sendOtp(email.trim());
@@ -342,6 +369,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithEmail,
         registerWithEmail,
         resetPassword,
+        sendPasswordReset,
         sendOtp,
         loginWithOtp,
         logout,

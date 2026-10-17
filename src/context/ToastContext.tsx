@@ -32,7 +32,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     const newToast: Toast = { id, type, title, message, duration };
 
-    setToasts(prev => [...prev.slice(-4), newToast]); // keep max 5 toasts
+    setToasts(prev => [...prev.slice(-4), newToast]);
 
     setTimeout(() => {
       removeToast(id);
@@ -47,7 +47,6 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ showToast, success, error, info, warning }}>
       {children}
-      {/* Toast container */}
       <div className="fixed top-4 right-4 left-4 sm:left-auto sm:w-96 z-50 pointer-events-none flex flex-col gap-2">
         {toasts.map(toast => {
           const isError = toast.type === 'error';
@@ -57,32 +56,32 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return (
             <div
               key={toast.id}
-              className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-xl backdrop-blur-xl transition-all duration-300 animate-in fade-in slide-in-from-top-3 ${
+              className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-xl backdrop-blur-xl transition-all duration-200 bg-[#10121a]/95 ${
                 isSuccess
-                  ? 'bg-[#0f1715]/95 border-emerald-500/40 text-emerald-100 shadow-emerald-950/40'
+                  ? 'border-emerald-500/35 text-slate-100'
                   : isError
-                  ? 'bg-[#1a0f12]/95 border-rose-500/50 text-rose-100 shadow-rose-950/40'
+                  ? 'border-rose-500/40 text-slate-100'
                   : isWarning
-                  ? 'bg-[#1c1409]/95 border-amber-500/40 text-amber-100 shadow-amber-950/40'
-                  : 'bg-[#0f111a]/95 border-sky-500/40 text-sky-100 shadow-sky-950/40'
+                  ? 'border-amber-500/35 text-slate-100'
+                  : 'border-sky-500/35 text-slate-100'
               }`}
             >
               <div className="mt-0.5 shrink-0">
-                {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-                {isError && <AlertCircle className="w-5 h-5 text-rose-400" />}
-                {isWarning && <AlertTriangle className="w-5 h-5 text-amber-400" />}
-                {toast.type === 'info' && <Info className="w-5 h-5 text-sky-400" />}
+                {isSuccess && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                {isError && <AlertCircle className="w-4 h-4 text-rose-400" />}
+                {isWarning && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+                {toast.type === 'info' && <Info className="w-4 h-4 text-sky-400" />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wider">{toast.title}</div>
-                {toast.message && <div className="text-xs text-slate-300 mt-0.5 leading-relaxed">{toast.message}</div>}
+                <div className="text-xs font-semibold text-white">{toast.title}</div>
+                {toast.message && <div className="text-xs text-slate-400 mt-0.5 leading-relaxed">{toast.message}</div>}
               </div>
               <button
                 onClick={() => removeToast(toast.id)}
-                className="shrink-0 p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
+                className="shrink-0 p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
                 aria-label="Dismiss"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           );

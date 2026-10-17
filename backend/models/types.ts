@@ -12,6 +12,7 @@ export interface User {
   referredBy?: string;
   twoFactorEnabled: boolean;
   isBanned: boolean;
+  hasPassword?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +105,7 @@ export interface Deposit {
   merchantName?: string;
   upiRefNumber?: string;
   qrPayload?: string;
+  payableAmount?: number;
   status: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'EXPIRED';
   expiresAt: string;
   createdAt: string;

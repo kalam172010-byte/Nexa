@@ -27,84 +27,75 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
   const handleCopy = () => {
     navigator.clipboard.writeText(keyData.keyCode);
     setCopied(true);
-    showToastSuccess('Key Copied to Clipboard!');
+    showToastSuccess('Key copied to clipboard');
     setTimeout(() => setCopied(false), 2500);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div
         onClick={onClose}
-        className="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity animate-in fade-in"
+        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
       />
 
-      {/* Modal Dialog */}
-      <div className="relative w-full max-w-sm bg-[#0d0d14] border border-rose-500/40 rounded-2xl p-5 shadow-2xl shadow-rose-950/60 z-10 animate-in zoom-in-95 duration-200">
-        {/* Glow corner */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl pointer-events-none" />
-
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/5">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5" />
+      <div className="relative w-full max-w-sm bg-[#10121a] border border-white/10 rounded-2xl p-6 shadow-2xl z-10 space-y-5">
+        <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-display font-extrabold text-sm text-white">PURCHASE SUCCESSFUL</h3>
-              <p className="text-[10px] text-emerald-400 font-mono">AUTOMATED INSTANT DELIVERY</p>
+              <h3 className="font-display font-bold text-sm text-white">License Delivered</h3>
+              <p className="text-xs text-emerald-400">Instant Automated Provisioning</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1 rounded-lg bg-white/[0.04] text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg bg-white/[0.04] text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Description */}
-        <div className="mt-4 text-center">
-          <p className="text-xs text-slate-300">
-            Your premium license key has been generated and is ready to use in your loader or game panel.
+        <div className="text-center space-y-1">
+          <p className="text-xs text-slate-400">
+            Your license key has been generated and is ready for activation.
           </p>
-          <div className="mt-1 flex items-center justify-center gap-2 text-xs font-semibold text-rose-400">
+          <div className="flex items-center justify-center gap-2 text-xs font-semibold text-white pt-1">
             <span>{keyData.productName}</span>
-            <span>·</span>
-            <span className="font-mono">{keyData.durationLabel}</span>
+            <span aria-hidden="true" className="text-slate-600">·</span>
+            <span className="text-rose-400">{keyData.durationLabel}</span>
           </div>
         </div>
 
-        {/* Digital Key Box */}
-        <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-rose-950/30 to-red-950/20 border border-rose-500/50 text-center relative overflow-hidden group">
-          <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">
-            DIGITAL KEY CODE
+        <div className="p-4 rounded-xl bg-[#090a0f] border border-rose-500/30 text-center space-y-1.5">
+          <div className="text-xs text-slate-400">
+            License Key Code
           </div>
-          <div className="mt-1 font-mono font-black text-rose-300 text-sm tracking-widest break-all select-all py-1">
+          <div className="font-mono font-bold text-rose-400 text-sm tracking-wider break-all select-all py-1">
             {keyData.keyCode}
           </div>
-          <div className="mt-1 flex items-center justify-center gap-1.5 text-[10px] text-slate-400">
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Encrypted & Verified</span>
+            <span>Verified & Encrypted</span>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="mt-5 space-y-2">
+        <div className="space-y-2">
           <button
             onClick={handleCopy}
-            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40 active:scale-[0.98]"
+            className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             {copied ? (
               <>
-                <Check className="w-4 h-4 text-emerald-300" />
-                <span>Copied to Clipboard!</span>
+                <Check className="w-4 h-4" />
+                <span>Copied to Clipboard</span>
               </>
             ) : (
               <>
                 <Copy className="w-4 h-4" />
-                <span>Copy Key</span>
+                <span>Copy License Key</span>
               </>
             )}
           </button>
@@ -114,10 +105,10 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
               onClose();
               onViewKeys();
             }}
-            className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-semibold transition-all flex items-center justify-center gap-2 border border-white/5"
+            className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium transition-colors flex items-center justify-center gap-2 border border-white/[0.06] cursor-pointer"
           >
             <KeyRound className="w-4 h-4 text-slate-400" />
-            <span>View My Keys</span>
+            <span>Open My Keys</span>
             <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
           </button>
         </div>

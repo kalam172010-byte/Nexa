@@ -20,6 +20,7 @@ router.post('/auth/otp/verify', AuthController.verifyOtp);
 router.get('/auth/email-status', AuthController.getEmailStatus);
 router.post('/auth/firebase-sync', AuthController.firebaseSync);
 router.post('/auth/reset-password', AuthController.resetPassword);
+router.post('/auth/forgot-password', AuthController.forgotPassword);
 router.get('/auth/me', authenticate as any, AuthController.getCurrentUser as any);
 router.post('/auth/change-password', authenticate as any, AuthController.changePassword as any);
 router.post('/auth/toggle-2fa', authenticate as any, AuthController.toggleTwoFactor as any);
@@ -51,6 +52,7 @@ router.patch('/keys/:id/used', authenticate as any, KeyController.markKeyUsed as
 router.get('/wallet/summary', authenticate as any, WalletController.getWalletSummary as any);
 router.post('/deposits', authenticate as any, WalletController.createDeposit as any);
 router.get('/deposits/:id/status', authenticate as any, WalletController.checkDepositStatus as any);
+router.get('/deposits/:id/qr-image', WalletController.getDepositQrImage as any);
 router.post('/deposits/:id/simulate-success', authenticate as any, WalletController.simulateDepositSuccess as any);
 router.get('/transactions', authenticate as any, WalletController.getTransactions as any);
 

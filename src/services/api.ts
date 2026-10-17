@@ -60,6 +60,8 @@ export const api = {
     request<any>('/auth/firebase-sync', { method: 'POST', body: JSON.stringify(body) }),
   resetPassword: (body: { usernameOrEmail: string; newPassword: string }) =>
     request<any>('/auth/reset-password', { method: 'POST', body: JSON.stringify(body) }),
+  forgotPassword: (body: { usernameOrEmail: string }) =>
+    request<any>('/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) }),
   getMe: () => request<{ user: any }>('/auth/me'),
   changePassword: (body: any) => request<any>('/auth/change-password', { method: 'POST', body: JSON.stringify(body) }),
   toggleTwoFactor: () => request<any>('/auth/toggle-2fa', { method: 'POST' }),
@@ -161,7 +163,8 @@ export const api = {
 
   getGatewaySettings: () => request<{ config: any }>('/admin/settings/gateway'),
   updateGatewaySettings: (body: any) => request<any>('/admin/settings/gateway', { method: 'PATCH', body: JSON.stringify(body) }),
-  testGatewayConnection: () => request<any>('/admin/settings/gateway/test', { method: 'POST' }),
+  testGatewayConnection: (body?: { configOverride?: any }) =>
+    request<any>('/admin/settings/gateway/test', { method: 'POST', body: JSON.stringify(body || {}) }),
   testFamGatewayOrder: (body: any) => request<any>('/admin/settings/gateway/test-order', { method: 'POST', body: JSON.stringify(body) }),
 
   getResellerSettings: () => request<{ config: any }>('/admin/settings/reseller'),
@@ -179,7 +182,7 @@ export const api = {
   // Email & IMAP/SMTP Setup Settings
   getEmailSettings: () => request<{ config: any }>('/admin/settings/email'),
   updateEmailSettings: (body: any) => request<any>('/admin/settings/email', { method: 'PATCH', body: JSON.stringify(body) }),
-  testEmailConnection: (body?: { testEmail?: string; configOverride?: any }) =>
+  testEmailConnection: (body?: { testEmail?: string; configOverride?: any; testType?: 'smtp' | 'imap' | 'both' }) =>
     request<any>('/admin/settings/email/test', { method: 'POST', body: JSON.stringify(body || {}) }),
 
   getAdminLogs: () => request<{ logs: any[] }>('/admin/logs'),

@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { db } from '../db/database';
-import { Deposit } from '../models/types';
+import { Deposit, PaymentGatewayConfig } from '../models/types';
 import { WalletService } from './walletService';
 
 export interface CreateDepositRequest {
@@ -28,7 +28,7 @@ export interface GatewayOrderData {
 }
 
 export interface GatewayResponse {
-  status?: 'success' | 'error' | string;
+  status?: 'success' | 'error' | 'unauthorized' | string;
   success?: boolean;
   data?: GatewayOrderData;
   order_id?: string;
@@ -41,48 +41,95 @@ export interface GatewayResponse {
   [key: string]: any;
 }
 
+const FAMGATEWAY_PRIMARY_KEY = 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e';
+const RENDER_SECONDARY_KEY = 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe';
+
 export class PaymentGatewayAdapter {
   /**
-   * Initializes a deposit transaction via Render FGW / FamGateway REST API or fallback UPI scheme
+   * Resolves active gateway URLs and guarantees the matching API key is never masked or mismatched
+   */
+  public static resolveCredentials(override?: Partial<PaymentGatewayConfig>) {
+    const config = { ...db.gatewayConfig, ...(override || {}) };
+    const gatewayType = config.gatewayType || 'FAMGATEWAY';
+    const rawPostUrl = (config.apiUrl || '').trim();
+
+    const isFamGateway =
+      gatewayType === 'FAMGATEWAY' ||
+      rawPostUrl.includes('famgateway.in') ||
+      (!rawPostUrl && gatewayType !== 'RENDER_FGW' && gatewayType !== 'DIRECT_UPI');
+
+    const postUrl = isFamGateway
+      ? 'https://famgateway.in/api/create-order'
+      : rawPostUrl || 'https://payment-gateway-87gk.onrender.com/api/create-order';
+
+    const getUrl = isFamGateway
+      ? 'https://famgateway.in/api/qr.php'
+      : (config.qrAliasUrl || '').trim() || 'https://payment-gateway-87gk.onrender.com/api/qr.php';
+
+    let apiKey = (config.apiKey || '').trim();
+
+    if (isFamGateway) {
+      // Ensure FamGateway never receives a masked key (...) or the Render key
+      if (!apiKey || apiKey.includes('...') || apiKey === RENDER_SECONDARY_KEY) {
+        apiKey = FAMGATEWAY_PRIMARY_KEY;
+      }
+    } else if (postUrl.includes('onrender.com')) {
+      if (!apiKey || apiKey.includes('...')) {
+        apiKey = RENDER_SECONDARY_KEY;
+      }
+    }
+
+    return {
+      config,
+      gatewayType,
+      isFamGateway,
+      postUrl,
+      getUrl,
+      apiKey,
+    };
+  }
+
+  /**
+   * Initializes a real-time deposit transaction via FamGateway (Primary) / Render FGW (Secondary) / Direct UPI
    */
   public static async createDeposit(req: CreateDepositRequest): Promise<Deposit> {
-    const config = db.gatewayConfig;
+    const { config, gatewayType, postUrl, apiKey } = this.resolveCredentials();
+
     if (req.amount < (config.minDeposit || 1)) {
       throw new Error(`Minimum deposit amount is ₹${config.minDeposit || 1}.`);
     }
 
     const transactionId = `TXN-DEP-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const depositId = `DEP-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-    const expiresAt = new Date(Date.now() + (config.paymentExpiryMinutes || 5) * 60 * 1000).toISOString();
+    const expiryMinutes = config.paymentExpiryMinutes || 10;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000).toISOString();
 
     const rawVpa = (config.upiVpa || '').trim();
-    const targetVpa = rawVpa.includes('@') ? rawVpa : '8056317218@fam';
-    const targetName = (config.upiMerchantName || 'Kalam Akash').trim();
+    let targetVpa = rawVpa.includes('@') ? rawVpa : '8056317218@fam';
+    let targetName = (config.upiMerchantName || 'FamPay').trim();
 
-    // Default standard UPI URI schema (compatible with GPay, PhonePe, Paytm, BHIM, CRED)
-    let upiUri = `upi://pay?pa=${encodeURIComponent(targetVpa)}&pn=${encodeURIComponent(targetName)}&am=${req.amount.toFixed(2)}&cu=INR&tr=${transactionId}&tn=Wallet%20Topup%20${depositId}`;
+    // Default fallback UPI URI (only used if Direct UPI mode is explicitly selected)
+    let upiUri = `upi://pay?pa=${encodeURIComponent(targetVpa)}&pn=${encodeURIComponent(targetName)}&am=${req.amount.toFixed(2)}&cu=INR&tr=${transactionId}&tn=${depositId}`;
     let gatewayOrderId: string | undefined = undefined;
     let qrUrl: string | undefined = undefined;
     let checkoutUrl: string | undefined = undefined;
     let upiIntent: string | undefined = upiUri;
 
-    // Check if Payment Gateway integration is configured
-    const apiKey = config.apiKey?.trim();
-    const apiUrl = config.apiUrl?.trim() || 'https://payment-gateway-87gk.onrender.com/api/create-order';
+    const customerName = req.customerName?.trim() || 'Valued Gamer';
+    const customerEmail = req.customerEmail?.trim() || 'customer@example.com';
+    const successUrl = req.redirectUrl || config.successUrl || config.redirectUrl || 'https://yoursite.com/payment-success';
+    const cancelUrl = config.cancelUrl || 'https://yoursite.com/payment-cancel';
+    const note = `Payment for Order #${depositId}`;
 
-    if (apiKey) {
+    let payableAmount = req.amount;
+
+    // Helper to call a gateway endpoint (FamGateway or Render FGW)
+    const dispatchOrderRequest = async (targetEndpoint: string, targetKey: string): Promise<boolean> => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 9000);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-
-        const customerName = req.customerName?.trim() || 'Valued Gamer';
-        const customerEmail = req.customerEmail?.trim() || 'customer@example.com';
-        const successUrl = req.redirectUrl || config.successUrl || config.redirectUrl || 'https://yoursite.com/payment-success';
-        const cancelUrl = config.cancelUrl || 'https://yoursite.com/payment-cancel';
-        const note = `Payment for Order #${depositId}`;
-
-        // Payload compatible with both Render FGW (/api/create-order or /api/v1/order/create) and FamGateway (/api/create-order)
         const postBody = {
+          api_key: targetKey,
           amount: Number(req.amount),
           upi_id: targetVpa,
           merchant_upi_id: targetVpa,
@@ -96,12 +143,14 @@ export class PaymentGatewayAdapter {
           cancel_url: cancelUrl,
         };
 
-        const response = await fetch(apiUrl, {
+        const response = await fetch(targetEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'X-Api-Key': apiKey,
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; KalamFFPanel/2.0)',
+            'X-Api-Key': targetKey,
+            'x-api-key': targetKey,
           },
           body: JSON.stringify(postBody),
           signal: controller.signal,
@@ -109,114 +158,143 @@ export class PaymentGatewayAdapter {
 
         clearTimeout(timeout);
 
-        if (response.ok) {
-          const resData: GatewayResponse = await response.json();
-          const data = resData.data || resData;
+        if (!response.ok) return false;
 
-          // Extract order ID
-          const parsedOrderId =
-            data.order_id ||
-            data.orderId ||
-            data.id ||
-            resData.order_id ||
-            resData.orderId ||
-            resData.id ||
-            data.txn_id ||
-            resData.txn_id;
-
-          if (parsedOrderId) {
-            gatewayOrderId = String(parsedOrderId);
-          }
-
-          // Extract Checkout URL / Payment URL
-          const parsedCheckout =
-            data.checkout_url ||
-            data.payment_url ||
-            data.paymentUrl ||
-            data.url ||
-            resData.checkout_url ||
-            resData.payment_url ||
-            resData.paymentUrl ||
-            resData.url;
-
-          if (parsedCheckout) {
-            checkoutUrl = parsedCheckout;
-          }
-
-          // Extract UPI Intent / URI
-          const parsedIntent =
-            data.upi_uri ||
-            resData.upi_uri ||
-            data.upi_intent ||
-            data.upi_url ||
-            data.upiIntent ||
-            resData.upi_intent ||
-            resData.upi_url ||
-            resData.upiIntent;
-
-          if (parsedIntent) {
-            upiUri = parsedIntent;
-          }
-
-          db.logActivity(
-            req.userId,
-            req.customerName || 'USER',
-            'GATEWAY_ORDER_CREATED',
-            `${config.gatewayName || 'Payment Gateway'} order ${gatewayOrderId || depositId} created for ₹${req.amount}.`
-          );
+        const resData: GatewayResponse = await response.json();
+        if (resData.status === 'error' || resData.status === 'unauthorized' || resData.success === false) {
+          return false;
         }
-      } catch (err: any) {
+
+        const data = resData.data || resData;
+
+        const parsedOrderId =
+          data.order_id ||
+          data.orderId ||
+          data.id ||
+          resData.order_id ||
+          resData.orderId ||
+          resData.id ||
+          data.txn_id ||
+          resData.txn_id;
+
+        if (!parsedOrderId) return false;
+
+        gatewayOrderId = String(parsedOrderId);
+
+        if (data.payable_amount || resData.payable_amount) {
+          const pAmt = parseFloat(String(data.payable_amount || resData.payable_amount));
+          if (!isNaN(pAmt) && pAmt > 0) {
+            payableAmount = pAmt;
+          }
+        }
+
+        const parsedCheckout =
+          data.checkout_url ||
+          data.payment_url ||
+          data.paymentUrl ||
+          data.url ||
+          resData.checkout_url ||
+          resData.payment_url ||
+          resData.paymentUrl ||
+          resData.url;
+
+        if (parsedCheckout) {
+          checkoutUrl = parsedCheckout;
+        }
+
+        const parsedQrUrl =
+          data.qr_url ||
+          data.qr_code ||
+          data.qr_data_url ||
+          resData.qr_url ||
+          resData.qr_code ||
+          resData.qr_data_url;
+
+        if (parsedQrUrl) {
+          qrUrl = parsedQrUrl;
+        }
+
+        const parsedIntent =
+          data.upi_intent ||
+          data.upi_uri ||
+          data.upi_url ||
+          data.upiIntent ||
+          resData.upi_intent ||
+          resData.upi_uri ||
+          resData.upi_url ||
+          resData.upiIntent;
+
+        if (parsedIntent) {
+          // CRITICAL: Keep the exact gateway upi_intent untouched so tn=fg_... matches FamGateway's real-time bank listener!
+          upiUri = parsedIntent;
+          upiIntent = parsedIntent;
+        }
+
+        if (data.upi_id) {
+          targetVpa = String(data.upi_id);
+        }
+
+        return true;
+      } catch (err) {
+        clearTimeout(timeout);
+        return false;
+      }
+    };
+
+    if (gatewayType !== 'DIRECT_UPI') {
+      let createdLiveOrder = await dispatchOrderRequest(postUrl, apiKey);
+
+      // If Secondary Render Gateway is selected but suspended/unreachable, automatically failover to Primary FamGateway (famgateway.in)
+      if (!createdLiveOrder && !postUrl.includes('famgateway.in')) {
+        createdLiveOrder = await dispatchOrderRequest(
+          'https://famgateway.in/api/create-order',
+          FAMGATEWAY_PRIMARY_KEY
+        );
+      }
+
+      if (createdLiveOrder && gatewayOrderId) {
         db.logActivity(
           req.userId,
           req.customerName || 'USER',
-          'GATEWAY_FALLBACK_ACTIVE',
-          `Payment gateway network call notice (${err.message}). Safe internal UPI QR generated.`
+          'GATEWAY_ORDER_CREATED',
+          `Live gateway order ${gatewayOrderId} created for ₹${req.amount}.`
         );
       }
     }
 
-    // ALWAYS ensure upiUri contains the target merchant VPA (8056317218@fam) and merchant name (Kalam Akash)
-    if (upiUri.includes('pa=')) {
-      upiUri = upiUri.replace(/pa=[^&]+/, `pa=${encodeURIComponent(targetVpa)}`);
-    } else {
-      upiUri += `&pa=${encodeURIComponent(targetVpa)}`;
+    // Fallback QR URL if neither local generator nor gateway is reached
+    if (!qrUrl) {
+      qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiIntent || upiUri)}`;
     }
-    if (upiUri.includes('pn=')) {
-      upiUri = upiUri.replace(/pn=[^&]+/, `pn=${encodeURIComponent(targetName)}`);
-    }
-
-    upiIntent = upiUri;
-
-    // ALWAYS generate QR code image with target VPA (8056317218@fam)
-    qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUri)}`;
 
     const deposit: Deposit = {
       id: depositId,
       userId: req.userId,
       amount: req.amount,
+      payableAmount,
       fee: 0,
       method: req.method || 'UPI_QR',
       transactionId,
       gatewayOrderId,
       qrUrl,
       checkoutUrl,
-      upiIntent,
+      upiIntent: upiIntent || upiUri,
       upiVpa: targetVpa,
       merchantName: targetName,
-      qrPayload: upiUri,
+      qrPayload: upiIntent || upiUri,
       status: 'PENDING',
       expiresAt,
       createdAt: new Date().toISOString(),
     };
 
     db.deposits.unshift(deposit);
-    db.save();
+    db.saveSync();
 
     return deposit;
   }
 
   /**
-   * Admin test runner for Payment Gateway API (Render FGW POST, FamGateway POST or GET)
+   * Admin test runner for Payment Gateway API (FamGateway Primary POST/GET, Render FGW Secondary)
    */
   public static async testGatewayCall(params: {
     amount: number;
@@ -224,6 +302,7 @@ export class PaymentGatewayAdapter {
     customerEmail?: string;
     note?: string;
     method?: 'POST' | 'GET';
+    configOverride?: Partial<PaymentGatewayConfig>;
   }): Promise<{
     success: boolean;
     method: 'POST' | 'GET';
@@ -233,30 +312,25 @@ export class PaymentGatewayAdapter {
     orderData?: GatewayOrderData;
     payloadSent: any;
   }> {
-    const config = db.gatewayConfig;
-    const apiKey = config.apiKey?.trim() || 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe';
-    const postUrl = config.apiUrl?.trim() || 'https://payment-gateway-87gk.onrender.com/api/create-order';
-    const getUrl = config.qrAliasUrl?.trim() || 'https://payment-gateway-87gk.onrender.com/api/qr.php';
+    const { config, postUrl, getUrl, apiKey } = this.resolveCredentials(params.configOverride);
     const method = params.method || 'POST';
-
     const startTime = Date.now();
 
     if (method === 'GET') {
-      // Query Alias (GET)
       const url = new URL(getUrl);
       url.searchParams.set('api_key', apiKey);
-      url.searchParams.set('x-api-key', apiKey);
       url.searchParams.set('amount', params.amount.toString());
-      url.searchParams.set('customer_name', params.customerName || 'Rahul');
+      url.searchParams.set('customer_name', params.customerName || 'Rahul Sharma');
 
       const payloadSent = {
         endpoint: url.toString(),
         method: 'GET',
         headers: {
-          'x-api-key': `${apiKey.slice(0, 8)}...`,
+          'X-Api-Key': apiKey,
+          'Accept': 'application/json',
         },
         query_params: {
-          api_key: `${apiKey.slice(0, 8)}...`,
+          api_key: apiKey,
           amount: params.amount,
           customer_name: params.customerName,
         },
@@ -269,6 +343,8 @@ export class PaymentGatewayAdapter {
         const response = await fetch(url.toString(), {
           method: 'GET',
           headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; KalamFFPanel/2.0)',
             'x-api-key': apiKey,
             'X-Api-Key': apiKey,
           },
@@ -280,16 +356,25 @@ export class PaymentGatewayAdapter {
         const rawText = await response.text();
 
         let orderData: GatewayOrderData | undefined;
+        let isApiSuccess = response.ok;
         try {
           const parsed = JSON.parse(rawText);
-          orderData = parsed.data || parsed;
-          if (orderData && (orderData.qr_data_url || parsed.qr_data_url) && !orderData.qr_url) {
-            orderData.qr_url = orderData.qr_data_url || parsed.qr_data_url;
+          if (parsed.status === 'error' || parsed.status === 'unauthorized' || parsed.success === false) {
+            isApiSuccess = false;
+          } else {
+            orderData = parsed.data || parsed;
+            if (orderData && (orderData.qr_data_url || parsed.qr_data_url) && !orderData.qr_url) {
+              orderData.qr_url = orderData.qr_data_url || parsed.qr_data_url;
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          if (rawText.includes('Service Suspended') || rawText.includes('<!DOCTYPE html>')) {
+            isApiSuccess = false;
+          }
+        }
 
         return {
-          success: response.ok,
+          success: isApiSuccess,
           method: 'GET',
           status: response.status,
           latencyMs,
@@ -308,8 +393,9 @@ export class PaymentGatewayAdapter {
         };
       }
     } else {
-      // POST JSON: Render FGW & FamGateway Compatible Payload
+      // POST JSON: FamGateway & Render FGW Compatible Payload
       const postBody = {
+        api_key: apiKey,
         amount: Number(params.amount),
         note: params.note || `Payment for Order #${Date.now().toString().slice(-4)}`,
         customer_name: params.customerName || 'Rahul Sharma',
@@ -324,7 +410,7 @@ export class PaymentGatewayAdapter {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Api-Key': `${apiKey.slice(0, 8)}...`,
+          'X-Api-Key': apiKey,
         },
         body: postBody,
       };
@@ -337,6 +423,8 @@ export class PaymentGatewayAdapter {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; KalamFFPanel/2.0)',
             'X-Api-Key': apiKey,
             'x-api-key': apiKey,
           },
@@ -349,20 +437,31 @@ export class PaymentGatewayAdapter {
         const rawText = await response.text();
 
         let orderData: GatewayOrderData | undefined;
+        let isApiSuccess = response.ok;
         try {
           const parsed = JSON.parse(rawText);
-          orderData = parsed.data || parsed;
-          if (orderData && (orderData.qr_data_url || parsed.qr_data_url) && !orderData.qr_url) {
-            orderData.qr_url = orderData.qr_data_url || parsed.qr_data_url;
+          if (parsed.status === 'error' || parsed.status === 'unauthorized' || parsed.success === false) {
+            isApiSuccess = false;
+          } else {
+            orderData = parsed.data || parsed;
+            if (orderData && (orderData.qr_data_url || parsed.qr_data_url) && !orderData.qr_url) {
+              orderData.qr_url = orderData.qr_data_url || parsed.qr_data_url;
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          if (rawText.includes('Service Suspended') || rawText.includes('<!DOCTYPE html>')) {
+            isApiSuccess = false;
+          }
+        }
 
         return {
-          success: response.ok,
+          success: isApiSuccess,
           method: 'POST',
           status: response.status,
           latencyMs,
-          rawResponse: rawText,
+          rawResponse: rawText.includes('Service Suspended')
+            ? 'Secondary Render Gateway (payment-gateway-87gk.onrender.com) is currently suspended on Render. Switch to Primary FamGateway (famgateway.in) for 100% live operations.'
+            : rawText,
           orderData,
           payloadSent,
         };
@@ -410,7 +509,7 @@ export class PaymentGatewayAdapter {
 
     if (new Date() > new Date(deposit.expiresAt) && !isManualAdminApproval) {
       deposit.status = 'EXPIRED';
-      db.save();
+      db.saveSync();
       throw new Error('This payment transaction has expired. Please create a new payment.');
     }
 
@@ -432,11 +531,19 @@ export class PaymentGatewayAdapter {
   }
 
   /**
-   * Processes incoming automated webhooks from Payment Gateway
+   * Processes incoming automated webhooks from FamGateway & External Providers
    */
   public static processWebhook(payload: any): { success: boolean; message: string; deposit?: Deposit } {
     const orderId = payload.order_id || payload.orderId || payload.id || payload.data?.order_id || payload.data?.id;
-    const utr = payload.utr || payload.bank_ref || payload.upi_ref_no || payload.reference_no || payload.txn_id;
+    const utr =
+      payload.utr ||
+      payload.transaction_id ||
+      payload.bank_ref ||
+      payload.upi_ref_no ||
+      payload.reference_no ||
+      payload.txn_id ||
+      payload.data?.utr ||
+      payload.data?.transaction_id;
     const status = (payload.status || payload.event || payload.payment_status || '').toLowerCase();
 
     if (!orderId && !utr) {
@@ -446,7 +553,10 @@ export class PaymentGatewayAdapter {
     // Find deposit by gateway order ID or transaction ID
     const deposit = db.deposits.find(
       d =>
-        (orderId && (d.gatewayOrderId === String(orderId) || d.transactionId === String(orderId) || d.id === String(orderId))) ||
+        (orderId &&
+          (d.gatewayOrderId === String(orderId) ||
+            d.transactionId === String(orderId) ||
+            d.id === String(orderId))) ||
         (utr && d.upiRefNumber === utr)
     );
 
@@ -459,7 +569,7 @@ export class PaymentGatewayAdapter {
     }
 
     if (status.includes('success') || status.includes('paid') || status.includes('completed')) {
-      const completed = PaymentGatewayAdapter.completeDeposit(deposit.id, utr || `WB-${Date.now()}`);
+      const completed = PaymentGatewayAdapter.completeDeposit(deposit.id, utr || `FGW-${Date.now()}`);
       db.logActivity(
         deposit.userId,
         'WEBHOOK',
@@ -472,6 +582,9 @@ export class PaymentGatewayAdapter {
     return { success: false, message: `Payment status ${status} is not successful.` };
   }
 
+  /**
+   * Real-time live gateway order verification (FamGateway /api/checkout-status.php & /api/verify-order.php)
+   */
   public static async checkStatus(depositId: string): Promise<Deposit> {
     const deposit = db.deposits.find(d => d.id === depositId);
     if (!deposit) throw new Error('Deposit not found.');
@@ -482,101 +595,153 @@ export class PaymentGatewayAdapter {
 
     if (new Date() > new Date(deposit.expiresAt)) {
       deposit.status = 'EXPIRED';
-      db.save();
+      db.saveSync();
       return deposit;
     }
 
-    // Live Gateway Status Verification
-    const config = db.gatewayConfig;
-    const apiKey = config.apiKey?.trim();
+    const { config, apiKey } = this.resolveCredentials();
     const orderId = deposit.gatewayOrderId;
 
-    if (apiKey && orderId) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 2500);
+    if (orderId) {
+      const isFamGatewayOrder =
+        orderId.startsWith('fg_') ||
+        (deposit.checkoutUrl && deposit.checkoutUrl.includes('famgateway.in')) ||
+        (config.apiUrl && config.apiUrl.includes('famgateway.in'));
 
-        // 1. Try GET /api/order-status/:orderId endpoint (Render FGW & FamGateway)
-        const baseUrl = config.apiUrl ? config.apiUrl.split('/api/')[0] : 'https://payment-gateway-87gk.onrender.com';
-        const orderStatusUrl = `${baseUrl}/api/order-status/${encodeURIComponent(orderId)}`;
+      if (isFamGatewayOrder) {
+        const fgKey =
+          apiKey && !apiKey.includes('...') && apiKey !== RENDER_SECONDARY_KEY
+            ? apiKey
+            : FAMGATEWAY_PRIMARY_KEY;
 
-        const response = await fetch(orderStatusUrl, {
-          method: 'GET',
-          headers: {
-            'x-api-key': apiKey,
-            'X-Api-Key': apiKey,
-          },
-          signal: controller.signal,
-        });
+        // 1. Check FamGateway real-time public checkout-status.php (<25ms cached + triggers 5s IMAP scan)
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 4000);
+          const checkoutStatusUrl = `https://famgateway.in/api/checkout-status.php?order_id=${encodeURIComponent(orderId)}&tz=Asia%2FKolkata&lang=en-IN`;
 
-        clearTimeout(timeout);
-
-        if (response.ok) {
-          const resData: any = await response.json();
-          const pStatus = (
-            resData.status ||
-            resData.payment_status ||
-            resData.data?.status ||
-            resData.order_status ||
-            ''
-          ).toLowerCase();
-
-          if (pStatus.includes('success') || pStatus.includes('paid') || pStatus.includes('completed')) {
-            const utr =
-              resData.transaction_ref ||
-              resData.utr ||
-              resData.data?.utr ||
-              resData.bank_ref ||
-              resData.txn_id ||
-              `FGW-${Date.now()}`;
-            return PaymentGatewayAdapter.completeDeposit(deposit.id, utr);
-          }
-        } else {
-          // 2. Fallback to POST check-order-status endpoint
-          const checkUrl = config.apiUrl?.includes('/create-order')
-            ? config.apiUrl.replace('/create-order', '/check-order-status')
-            : `${baseUrl}/api/check-order-status`;
-
-          const postController = new AbortController();
-          const postTimeout = setTimeout(() => postController.abort(), 5000);
-
-          const postRes = await fetch(checkUrl, {
-            method: 'POST',
+          const response = await fetch(checkoutStatusUrl, {
+            method: 'GET',
             headers: {
-              'Content-Type': 'application/json',
-              'X-Api-Key': apiKey,
-              'x-api-key': apiKey,
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (compatible; KalamFFPanel/2.0)',
             },
-            body: JSON.stringify({
-              order_id: orderId,
-              api_key: apiKey,
-            }),
-            signal: postController.signal,
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+
+          if (response.ok) {
+            const resData: any = await response.json();
+            const pStatus = String(resData.status || resData.data?.status || '').toLowerCase();
+
+            if (pStatus === 'success' || pStatus === 'paid' || pStatus === 'completed') {
+              const utr =
+                resData.utr ||
+                resData.transaction_id ||
+                resData.data?.utr ||
+                resData.data?.transaction_id ||
+                orderId;
+              return PaymentGatewayAdapter.completeDeposit(deposit.id, String(utr));
+            }
+            if (pStatus === 'expired') {
+              deposit.status = 'EXPIRED';
+              db.saveSync();
+              return deposit;
+            }
+          }
+        } catch (err) {
+          // Continue to authoritative verify-order.php check
+        }
+
+        // 2. Check FamGateway authoritative server-to-server verify-order.php endpoint
+        try {
+          const verifyController = new AbortController();
+          const verifyTimeout = setTimeout(() => verifyController.abort(), 5000);
+          const verifyUrl = `https://famgateway.in/api/verify-order.php?order_id=${encodeURIComponent(orderId)}&api_key=${encodeURIComponent(fgKey)}`;
+
+          const verifyRes = await fetch(verifyUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (compatible; KalamFFPanel/2.0)',
+              'X-Api-Key': fgKey,
+              'x-api-key': fgKey,
+            },
+            signal: verifyController.signal,
+          });
+          clearTimeout(verifyTimeout);
+
+          if (verifyRes.ok) {
+            const resData: any = await verifyRes.json();
+            const pStatus = String(resData.status || resData.data?.status || '').toLowerCase();
+
+            if (pStatus === 'success' || pStatus === 'paid' || pStatus === 'completed') {
+              const utr =
+                resData.data?.utr ||
+                resData.utr ||
+                resData.data?.transaction_id ||
+                resData.transaction_id ||
+                orderId;
+              return PaymentGatewayAdapter.completeDeposit(deposit.id, String(utr));
+            }
+            if (pStatus === 'expired') {
+              deposit.status = 'EXPIRED';
+              db.saveSync();
+              return deposit;
+            }
+          }
+        } catch (err) {
+          // Return pending deposit if network call times out
+        }
+
+        return deposit;
+      }
+
+      // Secondary / Custom Gateway Status Check
+      if (apiKey) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 3500);
+          const baseUrl = config.apiUrl ? config.apiUrl.split('/api/')[0] : 'https://payment-gateway-87gk.onrender.com';
+          const orderStatusUrl = `${baseUrl}/api/order-status/${encodeURIComponent(orderId)}`;
+
+          const response = await fetch(orderStatusUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'x-api-key': apiKey,
+              'X-Api-Key': apiKey,
+            },
+            signal: controller.signal,
           });
 
-          clearTimeout(postTimeout);
+          clearTimeout(timeout);
 
-          if (postRes.ok) {
-            const resData: any = await postRes.json();
-            const pStatus = (
+          if (response.ok) {
+            const resData: any = await response.json();
+            const pStatus = String(
               resData.status ||
               resData.payment_status ||
               resData.data?.status ||
+              resData.order_status ||
               ''
             ).toLowerCase();
 
             if (pStatus.includes('success') || pStatus.includes('paid') || pStatus.includes('completed')) {
-              const utr = resData.utr || resData.data?.utr || resData.bank_ref || `FG-${Date.now()}`;
-              return PaymentGatewayAdapter.completeDeposit(deposit.id, utr);
+              const utr =
+                resData.transaction_ref ||
+                resData.utr ||
+                resData.data?.utr ||
+                resData.bank_ref ||
+                resData.txn_id ||
+                orderId;
+              return PaymentGatewayAdapter.completeDeposit(deposit.id, String(utr));
             }
           }
-        }
-      } catch (err: any) {
-        // Fallback silently if gateway status endpoint is unresponsive
+        } catch (err) {}
       }
     }
 
     return deposit;
   }
 }
-

@@ -4,22 +4,21 @@ import {
   Plus,
   X,
   Send,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
   MessageSquare,
   ChevronRight,
   ShieldCheck,
-  User,
   RefreshCw,
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react';
 import { api } from '../services/api.js';
-import { SupportTicket, SupportMessage } from '../types/index.js';
+import { SupportTicket } from '../types/index.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 
 export const TicketsPage: React.FC = () => {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
 
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -96,10 +95,9 @@ export const TicketsPage: React.FC = () => {
 
     setIsSendingReply(true);
     try {
-      const res = await api.replyTicket(activeTicket.id, replyText);
+      await api.replyTicket(activeTicket.id, replyText);
       showToastSuccess('Reply sent');
       setReplyText('');
-      // Reload ticket messages
       handleOpenTicketDetails(activeTicket.id);
       fetchTickets();
     } catch (err: any) {
@@ -131,79 +129,86 @@ export const TicketsPage: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6 pb-24 md:pb-12 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="font-display font-black text-xl sm:text-2xl text-white uppercase tracking-wider">
-            SUPPORT CENTER
+          <h2 className="font-display font-bold text-xl sm:text-2xl bg-gradient-to-r from-white via-violet-100 to-rose-200 bg-clip-text text-transparent">
+            Support Desk
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            24/7 technical and payment resolution desk. Average response time: 5 minutes.
+            Direct technical and payment resolution center.
           </p>
         </div>
 
         <button
           onClick={() => setIsCreating(true)}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 active:scale-95 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-rose-950/40 flex items-center gap-1.5"
+          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-violet-600 hover:from-rose-500 hover:to-violet-500 text-white text-xs font-bold shadow-[0_4px_20px_rgba(244,63,94,0.3)] transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>NEW TICKET</span>
+          <span>New Ticket</span>
         </button>
       </div>
 
-      {/* Main Content: Tickets list OR Chat Conversation View */}
+      {/* Main Content */}
       {activeTicket ? (
-        /* Chat-Style Conversation UI */
-        <div className="rounded-3xl bg-[#0d0d14] border border-white/5 overflow-hidden shadow-2xl flex flex-col h-[650px]">
+        <div className="rounded-2xl bg-gradient-to-b from-[#131622] to-[#0e1018] border border-violet-500/25 overflow-hidden flex flex-col h-[620px] shadow-xl">
           {/* Conversation Header */}
-          <div className="p-4 bg-white/[0.02] border-b border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="p-4 bg-[#0b0d14] border-b border-white/[0.08] flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
               <button
                 onClick={() => setActiveTicket(null)}
-                className="p-1.5 rounded-lg bg-white/[0.04] text-slate-400 hover:text-white transition-colors"
+                className="p-2 rounded-lg bg-violet-500/15 text-violet-300 hover:text-white border border-violet-500/30 transition-colors cursor-pointer"
+                aria-label="Back to ticket list"
               >
-                &larr;
+                <ArrowLeft className="w-4 h-4" />
               </button>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-rose-400 font-bold">{activeTicket.id}</span>
-                  <span className="text-xs font-bold text-white truncate max-w-[200px] sm:max-w-md">
+                  <span className="text-xs sm:text-sm font-semibold text-white truncate">
                     {activeTicket.subject}
                   </span>
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                  Category: {activeTicket.category} · Priority: {activeTicket.priority}
+                <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
+                  <span className="text-violet-300 font-medium">{activeTicket.category}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-amber-300 font-medium">{activeTicket.priority} Priority</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 shrink-0">
               <span
-                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase ${
+                className={`text-xs font-bold flex items-center gap-1 ${
                   activeTicket.status === 'OPEN'
-                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    ? 'text-rose-400'
                     : activeTicket.status === 'PENDING'
-                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    ? 'text-amber-400'
+                    : 'text-emerald-400'
                 }`}
               >
-                {activeTicket.status}
+                {activeTicket.status === 'CLOSED' ? (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Clock className="w-3.5 h-3.5" />
+                )}
+                <span>{activeTicket.status}</span>
               </span>
 
               {activeTicket.status !== 'CLOSED' && (
                 <button
                   onClick={handleCloseTicket}
-                  className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-rose-500/15 text-slate-400 hover:text-rose-300 text-[10px] font-mono border border-white/5 transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  Close
+                  Mark Resolved
                 </button>
               )}
             </div>
           </div>
 
           {/* Messages Feed */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
             {activeTicket.messages?.map(msg => {
               const isAdmin = msg.senderRole === 'ADMIN' || msg.senderRole === 'SUPER ADMIN';
               const isCurrentUser = msg.senderId === user?.id;
@@ -213,26 +218,28 @@ export const TicketsPage: React.FC = () => {
                   key={msg.id}
                   className={`flex flex-col ${isCurrentUser && !isAdmin ? 'items-end' : 'items-start'}`}
                 >
-                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mb-1">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1">
                     {isAdmin ? (
-                      <span className="text-rose-400 font-bold flex items-center gap-1">
+                      <span className="text-rose-400 font-semibold flex items-center gap-1">
                         <ShieldCheck className="w-3 h-3" />
-                        KALAM FF SUPPORT
+                        <span>Support Staff</span>
                       </span>
                     ) : (
-                      <span>@{msg.senderName}</span>
+                      <span className="text-cyan-300 font-medium">@{msg.senderName}</span>
                     )}
-                    <span>·</span>
-                    <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="font-mono tabular-nums">
+                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
 
                   <div
-                    className={`p-3.5 rounded-2xl max-w-md text-xs leading-relaxed ${
+                    className={`p-3.5 rounded-xl max-w-md text-xs leading-relaxed ${
                       isAdmin
-                        ? 'bg-rose-950/30 border border-rose-500/30 text-rose-100'
+                        ? 'bg-gradient-to-br from-rose-950/60 to-[#0c0e15] border border-rose-500/35 text-slate-100'
                         : isCurrentUser
-                        ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-950/30'
-                        : 'bg-white/[0.05] border border-white/10 text-slate-200'
+                        ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-950/50'
+                        : 'bg-[#090a0f] border border-white/[0.08] text-slate-200'
                     }`}
                   >
                     {msg.message}
@@ -244,97 +251,98 @@ export const TicketsPage: React.FC = () => {
 
           {/* Reply Form */}
           {activeTicket.status !== 'CLOSED' ? (
-            <form onSubmit={handleSendReply} className="p-3 sm:p-4 bg-white/[0.02] border-t border-white/5 flex gap-2">
+            <form onSubmit={handleSendReply} className="p-4 bg-[#0b0d14] border-t border-white/[0.08] flex gap-2.5">
               <input
                 type="text"
                 value={replyText}
                 onChange={e => setReplyText(e.target.value)}
-                placeholder="Type your reply to support..."
-                className="flex-1 px-4 py-2.5 bg-white/[0.04] border border-white/10 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-500"
+                placeholder="Write a message..."
+                className="flex-1 px-4 py-2.5 bg-[#10121a] border border-white/[0.1] rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-500"
               />
               <button
                 type="submit"
                 disabled={isSendingReply || !replyText.trim()}
-                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 disabled:opacity-50 text-white text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
               >
                 {isSendingReply ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 <span className="hidden sm:inline">Send</span>
               </button>
             </form>
           ) : (
-            <div className="p-3 bg-white/[0.02] border-t border-white/5 text-center text-xs text-slate-500 font-mono">
-              This ticket is closed. You can open a new ticket if you need further help.
+            <div className="p-3.5 bg-[#0b0d14] border-t border-white/[0.08] text-center text-xs text-slate-400">
+              This ticket is resolved. Open a new ticket if you require further assistance.
             </div>
           )}
         </div>
       ) : (
-        /* Tickets Overview List */
         <div className="space-y-3">
           {isLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map(i => (
-                <div key={i} className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 animate-pulse h-20" />
+                <div key={i} className="p-4 rounded-2xl bg-[#10121a] border border-white/[0.06] animate-pulse h-20" />
               ))}
             </div>
           ) : tickets.length === 0 ? (
-            <div className="p-12 rounded-3xl bg-[#0d0d14] border border-white/5 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/[0.03] text-slate-500 flex items-center justify-center mx-auto">
+            <div className="p-12 rounded-2xl bg-gradient-to-b from-[#131622] to-[#0e1018] border border-violet-500/25 text-center space-y-3 shadow-lg">
+              <div className="w-12 h-12 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-400 flex items-center justify-center mx-auto">
                 <LifeBuoy className="w-6 h-6" />
               </div>
-              <h4 className="font-display font-bold text-base text-white uppercase tracking-wider">
-                NO TICKETS
+              <h4 className="font-display font-bold text-base text-white">
+                No Support Tickets
               </h4>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Create a ticket if you need help with payments, key activation, or account questions.
+                Open a ticket if you need assistance with deposits, license activation, or account inquiries.
               </p>
               <button
                 onClick={() => setIsCreating(true)}
-                className="mt-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center gap-2 shadow-lg shadow-rose-950/40"
+                className="mt-1 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-violet-600 hover:from-rose-500 hover:to-violet-500 text-white text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Open First Ticket</span>
+                <span>Create First Ticket</span>
               </button>
             </div>
           ) : (
-            tickets.map(ticket => (
-              <div
-                key={ticket.id}
-                onClick={() => handleOpenTicketDetails(ticket.id)}
-                className="p-4 sm:p-5 rounded-2xl bg-[#0d0d14] border border-white/5 hover:border-rose-500/30 transition-all cursor-pointer flex items-center justify-between gap-4 group shadow-lg"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <MessageSquare className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-rose-400">{ticket.id}</span>
-                      <h4 className="font-bold text-sm text-white truncate">{ticket.subject}</h4>
+            <div className="bg-gradient-to-b from-[#131622] to-[#0e1018] border border-white/[0.08] rounded-2xl divide-y divide-white/[0.06] overflow-hidden shadow-lg">
+              {tickets.map(ticket => (
+                <div
+                  key={ticket.id}
+                  onClick={() => handleOpenTicketDetails(ticket.id)}
+                  className="p-4 sm:px-5 hover:bg-white/[0.03] transition-colors cursor-pointer flex items-center justify-between gap-4 group"
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-400 flex items-center justify-center shrink-0">
+                      <MessageSquare className="w-4 h-4" />
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                      <span>Category: {ticket.category}</span>
-                      <span>·</span>
-                      <span>Updated: {new Date(ticket.updatedAt).toLocaleDateString()}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-rose-400">{ticket.id}</span>
+                        <h4 className="font-semibold text-xs sm:text-sm text-white truncate">{ticket.subject}</h4>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
+                        <span className="text-violet-300 font-medium">{ticket.category}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-mono tabular-nums">Updated {new Date(ticket.updatedAt).toLocaleDateString()}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3 shrink-0">
-                  <span
-                    className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border uppercase ${
-                      ticket.status === 'OPEN'
-                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        : ticket.status === 'PENDING'
-                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                    }`}
-                  >
-                    {ticket.status}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-rose-400 transition-colors" />
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span
+                      className={`text-xs font-bold ${
+                        ticket.status === 'OPEN'
+                          ? 'text-rose-400'
+                          : ticket.status === 'PENDING'
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}
+                    >
+                      {ticket.status}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -344,20 +352,17 @@ export const TicketsPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             onClick={() => setIsCreating(false)}
-            className="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity"
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
           />
 
-          <div className="relative w-full max-w-md bg-[#0d0d14] border border-white/10 rounded-2xl p-5 shadow-2xl z-10 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-white/5">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <h3 className="font-display font-bold text-sm text-white uppercase">OPEN SUPPORT TICKET</h3>
-              </div>
+          <div className="relative w-full max-w-md bg-[#111420] border border-violet-500/30 rounded-2xl p-6 shadow-2xl z-10 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+              <h3 className="font-display font-bold text-base bg-gradient-to-r from-white via-violet-100 to-rose-200 bg-clip-text text-transparent">
+                Open Support Ticket
+              </h3>
               <button
                 onClick={() => setIsCreating(false)}
-                className="p-1 rounded-lg bg-white/[0.04] text-slate-400 hover:text-white"
+                className="p-1.5 rounded-lg bg-white/[0.05] text-slate-300 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -365,31 +370,31 @@ export const TicketsPage: React.FC = () => {
 
             <form onSubmit={handleCreateTicket} className="space-y-4 text-xs">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                  SUBJECT
+                <label className="text-xs font-semibold text-violet-300 block mb-1.5">
+                  Subject
                 </label>
                 <input
                   type="text"
                   value={subject}
                   onChange={e => setSubject(e.target.value)}
-                  placeholder="e.g. Issue activating Free Fire panel on Android 14"
+                  placeholder="Brief summary of your issue"
                   required
-                  className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white focus:outline-none focus:border-rose-500"
+                  className="w-full px-3.5 py-2.5 bg-[#090a0f] border border-white/15 rounded-xl text-white focus:outline-none focus:border-violet-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                    CATEGORY
+                  <label className="text-xs font-semibold text-cyan-300 block mb-1.5">
+                    Category
                   </label>
                   <select
                     value={category}
                     onChange={e => setCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-white focus:outline-none focus:border-rose-500"
+                    className="w-full px-3 py-2.5 bg-[#090a0f] border border-white/15 rounded-xl text-white focus:outline-none focus:border-cyan-500"
                   >
                     {categories.map(c => (
-                      <option key={c} value={c} className="bg-[#0d0d14]">
+                      <option key={c} value={c} className="bg-[#10121a]">
                         {c}
                       </option>
                     ))}
@@ -397,48 +402,48 @@ export const TicketsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                    PRIORITY
+                  <label className="text-xs font-semibold text-amber-300 block mb-1.5">
+                    Priority
                   </label>
                   <select
                     value={priority}
                     onChange={e => setPriority(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-white focus:outline-none focus:border-rose-500"
+                    className="w-full px-3 py-2.5 bg-[#090a0f] border border-white/15 rounded-xl text-white focus:outline-none focus:border-amber-500"
                   >
-                    <option value="Low" className="bg-[#0d0d14]">Low</option>
-                    <option value="Medium" className="bg-[#0d0d14]">Medium</option>
-                    <option value="High" className="bg-[#0d0d14]">High</option>
-                    <option value="Urgent" className="bg-[#0d0d14]">Urgent</option>
+                    <option value="Low" className="bg-[#10121a]">Low</option>
+                    <option value="Medium" className="bg-[#10121a]">Medium</option>
+                    <option value="High" className="bg-[#10121a]">High</option>
+                    <option value="Urgent" className="bg-[#10121a]">Urgent</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                  MESSAGE
+                <label className="text-xs font-semibold text-rose-300 block mb-1.5">
+                  Message Details
                 </label>
                 <textarea
                   rows={4}
                   value={message}
                   onChange={e => setMessage(e.target.value)}
-                  placeholder="Describe your issue with order number, key code, or transaction details..."
+                  placeholder="Include your order reference, key code, or UTR number if applicable..."
                   required
-                  className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white focus:outline-none focus:border-rose-500 resize-none leading-relaxed"
+                  className="w-full px-3.5 py-2.5 bg-[#090a0f] border border-white/15 rounded-xl text-white focus:outline-none focus:border-rose-500 resize-none leading-relaxed"
                 />
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="w-1/3 py-2.5 rounded-xl bg-white/[0.04] text-slate-300 font-semibold"
+                  className="w-1/3 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-2/3 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40"
+                  className="w-2/3 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-violet-600 hover:from-rose-500 hover:to-violet-500 text-white font-bold flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Submit Ticket</span>}
                 </button>

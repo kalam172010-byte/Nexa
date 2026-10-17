@@ -10,8 +10,6 @@ import {
   ShieldCheck,
   User,
   LogOut,
-  ChevronRight,
-  Palette,
   Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
@@ -28,55 +26,53 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
 
   const brandInitials = siteConfig.siteTitle
     ? siteConfig.siteTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
-    : 'KF';
+    : 'NX';
 
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
-
-  const mainNav = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'deposit', label: 'Deposit', icon: Wallet },
-    { id: 'buy', label: 'Buy Keys', icon: ShoppingBag },
-    { id: 'keys', label: 'My Keys', icon: KeyRound },
-    ...(isReseller ? [{ id: 'api', label: 'Reseller API', icon: Terminal }] : []),
-    { id: 'history', label: 'History', icon: History },
-    { id: 'tickets', label: 'Support Ticket', icon: LifeBuoy },
-    { id: 'refer', label: 'Refer & Earn', icon: Share2 },
-  ];
-
   const isAdmin = role === 'ADMIN' || role === 'SUPER ADMIN';
 
+  const mainNav = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-rose-400', activeBg: 'bg-gradient-to-r from-rose-500/20 to-red-500/5 border-rose-500/35 text-white' },
+    { id: 'buy', label: 'Buy Key', icon: ShoppingBag, color: 'text-pink-400', activeBg: 'bg-gradient-to-r from-pink-500/20 to-rose-500/5 border-pink-500/35 text-white' },
+    { id: 'keys', label: 'My Keys', icon: KeyRound, color: 'text-amber-400', activeBg: 'bg-gradient-to-r from-amber-500/20 to-orange-500/5 border-amber-500/35 text-white' },
+    { id: 'deposit', label: 'Deposit', icon: Wallet, color: 'text-emerald-400', activeBg: 'bg-gradient-to-r from-emerald-500/20 to-teal-500/5 border-emerald-500/35 text-white' },
+    ...(isReseller ? [{ id: 'api', label: 'Developer API', icon: Terminal, color: 'text-cyan-400', activeBg: 'bg-gradient-to-r from-cyan-500/20 to-sky-500/5 border-cyan-500/35 text-white' }] : []),
+    { id: 'history', label: 'Transactions', icon: History, color: 'text-sky-400', activeBg: 'bg-gradient-to-r from-sky-500/20 to-blue-500/5 border-sky-500/35 text-white' },
+    { id: 'tickets', label: 'Support Desk', icon: LifeBuoy, color: 'text-violet-400', activeBg: 'bg-gradient-to-r from-violet-500/20 to-indigo-500/5 border-violet-500/35 text-white' },
+    { id: 'refer', label: 'Refer & Earn', icon: Share2, color: 'text-fuchsia-400', activeBg: 'bg-gradient-to-r from-fuchsia-500/20 to-pink-500/5 border-fuchsia-500/35 text-white' },
+  ];
+
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-[#0a0a0f] border-r border-white/5 h-screen sticky top-0 shrink-0 z-30 select-none">
-      {/* Brand header */}
-      <div className="p-5 border-b border-white/5 flex items-center justify-between">
+    <aside className="hidden md:flex flex-col w-64 bg-[#0b0d16] border-r border-white/[0.07] h-screen sticky top-0 shrink-0 z-30 select-none">
+      {/* Brand Header */}
+      <div className="h-14 px-5 border-b border-white/[0.07] flex items-center">
         <button
           onClick={() => onNavigate('dashboard')}
-          className="flex items-center gap-3 text-left focus:outline-none group"
+          className="flex items-center gap-3 text-left focus:outline-none group min-w-0 cursor-pointer"
         >
-          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500/20 to-red-600/30 border border-rose-500/40 text-rose-400 group-hover:border-rose-400 transition-all shadow-[0_0_15px_rgba(244,63,94,0.35)] overflow-hidden">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-md shadow-rose-950/50 shrink-0 overflow-hidden">
             {siteConfig.logoUrl ? (
-              <img src={siteConfig.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+              <img
+                src={siteConfig.logoUrl}
+                alt={siteConfig.siteTitle || 'Brand Logo'}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover"
+              />
             ) : (
-              <span className="font-extrabold text-sm tracking-tighter">{brandInitials}</span>
+              <span className="font-display font-bold text-xs tracking-tight">{brandInitials}</span>
             )}
-            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[#0a0a0f]" />
           </div>
-          <div>
-            <h1 className="font-display font-black text-base tracking-wider text-white group-hover:text-rose-400 transition-colors uppercase truncate max-w-[140px]">
-              {siteConfig.siteTitle || 'KALAM FF PANEL'}
-            </h1>
-            <span className="text-[10px] text-slate-400 font-mono tracking-wider truncate block max-w-[140px] uppercase">
-              {siteConfig.siteTagline || 'FREE FIRE RESELLER'}
-            </span>
-          </div>
+          <span className="font-display font-bold text-sm tracking-tight bg-gradient-to-r from-white via-rose-100 to-rose-300 bg-clip-text text-transparent truncate whitespace-nowrap">
+            {siteConfig.siteTitle || 'Nexa Panel'}
+          </span>
         </button>
       </div>
 
-      {/* Navigation links */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+      {/* Navigation Links */}
+      <div className="flex-1 overflow-y-auto px-3 py-5 space-y-6">
         <div>
-          <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            MAIN
+          <div className="px-3 mb-2 text-[11px] font-semibold text-rose-400/80">
+            Workspace
           </div>
           <nav className="space-y-1">
             {mainNav.map(item => {
@@ -86,19 +82,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
                 <button
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
                     isActive
-                      ? 'bg-rose-500/15 text-rose-400 border border-rose-500/40 shadow-[0_0_20px_-3px_rgba(244,63,94,0.3)]'
-                      : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+                      ? `${item.activeBg} font-semibold shadow-sm`
+                      : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border-transparent'
                   }`}
                 >
-                  <Icon
-                    className={`w-4 h-4 transition-transform group-hover:scale-110 ${
-                      isActive ? 'text-rose-400 stroke-[2.5]' : 'text-slate-400'
-                    }`}
-                  />
-                  <span>{item.label}</span>
-                  {isActive && <ChevronRight className="w-3.5 h-3.5 ml-auto text-rose-400" />}
+                  <Icon className={`w-4 h-4 shrink-0 ${item.color}`} />
+                  <span className="truncate">{item.label}</span>
                 </button>
               );
             })}
@@ -107,80 +98,73 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
 
         {isAdmin && (
           <div>
-            <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-rose-400/90 flex items-center justify-between">
-              <span>ADMINISTRATION</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+            <div className="px-3 mb-2 text-[11px] font-semibold text-amber-400/80">
+              System Control
             </div>
             <nav className="space-y-1">
               <button
                 onClick={() => onNavigate('admin')}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
                   currentPage === 'admin'
-                    ? 'bg-rose-600/20 text-rose-300 border border-rose-500/50 shadow-[0_0_20px_-3px_rgba(244,63,94,0.35)]'
-                    : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+                    ? 'bg-gradient-to-r from-rose-600/25 to-amber-500/10 text-white border-rose-500/40 font-semibold'
+                    : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border-transparent'
                 }`}
               >
-                <ShieldCheck
-                  className={`w-4 h-4 transition-transform group-hover:scale-110 ${
-                    currentPage === 'admin' ? 'text-rose-400 stroke-[2.5]' : 'text-rose-400/70'
-                  }`}
-                />
-                <span>Admin Panel</span>
-                {currentPage === 'admin' && <ChevronRight className="w-3.5 h-3.5 ml-auto text-rose-400" />}
+                <ShieldCheck className="w-4 h-4 shrink-0 text-rose-400" />
+                <span className="truncate">Admin Console</span>
               </button>
             </nav>
           </div>
         )}
 
         <div>
-          <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            SETTINGS
+          <div className="px-3 mb-2 text-[11px] font-semibold text-sky-400/80">
+            Account
           </div>
           <nav className="space-y-1">
             <button
               onClick={() => onNavigate('profile')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
                 currentPage === 'profile'
-                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/40 shadow-[0_0_20px_-3px_rgba(244,63,94,0.3)]'
-                  : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+                  ? 'bg-gradient-to-r from-violet-500/20 to-rose-500/10 text-white border-violet-500/35 font-semibold'
+                  : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border-transparent'
               }`}
             >
-              <User
-                className={`w-4 h-4 transition-transform group-hover:scale-110 ${
-                  currentPage === 'profile' ? 'text-rose-400 stroke-[2.5]' : 'text-slate-400'
-                }`}
-              />
-              <span>My Profile</span>
+              <User className="w-4 h-4 shrink-0 text-violet-400" />
+              <span className="truncate">Account Settings</span>
             </button>
 
             <button
               onClick={logout}
-              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all group"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <LogOut className="w-4 h-4 transition-transform group-hover:scale-110 text-slate-400 group-hover:text-rose-400" />
-              <span>Logout</span>
+              <LogOut className="w-4 h-4 shrink-0 text-rose-400/80" />
+              <span>Sign Out</span>
             </button>
           </nav>
         </div>
       </div>
 
-      {/* User profile card & wallet indicator */}
-      <div className="p-3 border-t border-white/5 bg-black/40">
-        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-between">
+      {/* User Account Footer */}
+      <div className="p-3.5 border-t border-white/[0.07]">
+        <button
+          onClick={() => onNavigate('profile')}
+          className="w-full p-2.5 rounded-xl bg-gradient-to-r from-rose-950/30 via-[#121521] to-indigo-950/30 hover:from-rose-950/40 border border-rose-500/20 flex items-center justify-between transition-all text-left cursor-pointer"
+        >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500/20 to-slate-800 border border-rose-500/30 flex items-center justify-center font-display font-bold text-xs text-rose-400 shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500 to-violet-600 flex items-center justify-center font-display font-bold text-xs text-white shrink-0">
               {user?.username ? user.username.slice(0, 2).toUpperCase() : 'NX'}
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate">@{user?.username || 'user'}</div>
-              <div className="text-[10px] text-slate-400 flex items-center gap-1 font-mono">
-                <span className="text-emerald-400 font-bold">₹{balance.toFixed(2)}</span>
-                <span>·</span>
-                <span className="text-rose-400 font-medium">{role}</span>
+              <div className="text-xs font-semibold text-white truncate">@{user?.username || 'user'}</div>
+              <div className="text-[11px] flex items-center gap-1.5 font-mono tabular-nums">
+                <span className="text-emerald-400 font-bold">{siteConfig.currencySymbol || '₹'}{balance.toFixed(2)}</span>
+                <span aria-hidden="true" className="text-slate-600">·</span>
+                <span className="text-amber-400 font-sans font-medium text-[10px]">{role}</span>
               </div>
             </div>
           </div>
-        </div>
+        </button>
       </div>
     </aside>
   );

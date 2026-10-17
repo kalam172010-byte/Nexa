@@ -64,6 +64,7 @@ import {
 import { api } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
 import { useSite } from '../context/SiteContext.js';
+import { useAuth } from '../context/AuthContext.js';
 import { AdminStats, Product, ProductVariant, SiteCustomizationConfig } from '../types/index.js';
 
 const ALBUM_PRESETS = [
@@ -111,6 +112,7 @@ const ALBUM_PRESETS = [
 
 export const AdminPage: React.FC = () => {
   const { success: showToastSuccess, error: showToastError } = useToast();
+  const { user: authUser } = useAuth();
 
   const [activeTab, setActiveTab] = useState<
     | 'dashboard'
@@ -149,7 +151,19 @@ export const AdminPage: React.FC = () => {
   const [deposits, setDeposits] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
-  const [gatewayConfig, setGatewayConfig] = useState<any>({});
+  const [gatewayConfig, setGatewayConfig] = useState<any>({
+    gatewayName: 'FamGateway Official (famgateway.in)',
+    gatewayType: 'FAMGATEWAY',
+    apiUrl: 'https://famgateway.in/api/create-order',
+    qrAliasUrl: 'https://famgateway.in/api/qr.php',
+    statusUrl: 'https://famgateway.in/api/verify-order.php',
+    apiKey: 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e',
+    upiVpa: '8056317218@fam',
+    upiMerchantName: 'Kalam Kalam',
+    minDeposit: 1,
+    paymentExpiryMinutes: 10,
+    testMode: false,
+  });
   const [resellerConfig, setResellerConfig] = useState<any>({});
   const [emailConfig, setEmailConfig] = useState<any>({
     enabled: true,
@@ -177,6 +191,8 @@ export const AdminPage: React.FC = () => {
   const [emailTestResult, setEmailTestResult] = useState<any | null>(null);
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [showImapPass, setShowImapPass] = useState(false);
+  const [quickAppPassInput, setQuickAppPassInput] = useState('');
+  const [isApplyingFix, setIsApplyingFix] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // User Search & Real-time Details
@@ -444,8 +460,99 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  // Provider Auto-Detection helper for ANY email address
+  const detectEmailProvider = (emailStr: string) => {
+    const email = (emailStr || '').trim().toLowerCase();
+    const domain = email.includes('@') ? email.split('@')[1] : '';
+    if (!domain) return null;
+
+    if (domain === 'gmail.com' || domain === 'googlemail.com') {
+      return {
+        id: 'gmail',
+        name: 'Google Gmail',
+        badge: 'Gmail / Google Workspace',
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: 587,
+        secure: false,
+        imapHost: 'imap.gmail.com',
+        imapPort: 993,
+        imapSecure: true,
+        authHint: 'Requires 16-character Google App Password (myaccount.google.com/apppasswords)',
+      };
+    }
+    if (domain === 'outlook.com' || domain === 'hotmail.com' || domain === 'live.com' || domain === 'msn.com') {
+      return {
+        id: 'outlook',
+        name: 'Microsoft Outlook',
+        badge: 'Outlook / Office 365',
+        smtpHost: 'smtp-mail.outlook.com',
+        smtpPort: 587,
+        secure: false,
+        imapHost: 'outlook.office365.com',
+        imapPort: 993,
+        imapSecure: true,
+        authHint: 'Use Outlook password or App Password if 2FA is active',
+      };
+    }
+    if (domain === 'yahoo.com' || domain === 'ymail.com' || domain === 'rocketmail.com') {
+      return {
+        id: 'yahoo',
+        name: 'Yahoo Mail',
+        badge: 'Yahoo Mail',
+        smtpHost: 'smtp.mail.yahoo.com',
+        smtpPort: 465,
+        secure: true,
+        imapHost: 'imap.mail.yahoo.com',
+        imapPort: 993,
+        imapSecure: true,
+        authHint: 'Requires Yahoo App Password from security.yahoo.com',
+      };
+    }
+    if (domain.includes('zoho')) {
+      return {
+        id: 'zoho',
+        name: 'Zoho Mail',
+        badge: 'Zoho Mail',
+        smtpHost: 'smtp.zoho.com',
+        smtpPort: 465,
+        secure: true,
+        imapHost: 'imap.zoho.com',
+        imapPort: 993,
+        imapSecure: true,
+        authHint: 'Requires Zoho Application-Specific Password',
+      };
+    }
+    if (domain === 'icloud.com' || domain === 'me.com' || domain === 'mac.com') {
+      return {
+        id: 'icloud',
+        name: 'Apple iCloud',
+        badge: 'Apple iCloud',
+        smtpHost: 'smtp.mail.me.com',
+        smtpPort: 587,
+        secure: false,
+        imapHost: 'imap.mail.me.com',
+        imapPort: 993,
+        imapSecure: true,
+        authHint: 'Requires Apple App-Specific Password (appleid.apple.com)',
+      };
+    }
+    // Any custom domain / cPanel Webmail / Private mail server
+    return {
+      id: 'custom',
+      name: `Custom Domain (@${domain})`,
+      badge: `cPanel / Webmail (@${domain})`,
+      smtpHost: `mail.${domain}`,
+      smtpPort: 465,
+      secure: true,
+      imapHost: `mail.${domain}`,
+      imapPort: 993,
+      imapSecure: true,
+      authHint: 'Standard cPanel / Webmail password (Port 465 SSL or 587 STARTTLS)',
+    };
+  };
+
   // Test Email & IMAP/SMTP Connection
-  const handleTestEmailConnection = async () => {
+  const handleTestEmailConnection = async (testType: 'smtp' | 'imap' | 'both' = 'smtp') => {
     setIsTestingEmail(true);
     setEmailTestResult(null);
     try {
@@ -453,10 +560,14 @@ export const AdminPage: React.FC = () => {
       const res = await api.testEmailConnection({
         testEmail: targetEmail,
         configOverride: emailConfig,
+        testType,
       });
       setEmailTestResult(res);
       if (res.success) {
-        showToastSuccess('Test Email Dispatched!', res.message);
+        showToastSuccess(
+          testType === 'imap' ? 'IMAP Connection Verified!' : 'Email Verification Succeeded!',
+          res.message
+        );
       } else {
         showToastError('Mail Connection Test Failed', res.message);
       }
@@ -465,6 +576,41 @@ export const AdminPage: React.FC = () => {
       showToastError('Mail Test Error', err.message);
     } finally {
       setIsTestingEmail(false);
+    }
+  };
+
+  // Quick 1-Click Fix for Google 535 BadCredentials / Email Mismatch
+  const handleQuickFixAppPass = async (newEmail?: string, newPass?: string) => {
+    setIsApplyingFix(true);
+    try {
+      const cleanPass = newPass ? newPass.trim() : undefined;
+      const updatedConfig = {
+        ...emailConfig,
+        ...(newEmail ? { senderEmail: newEmail.trim(), smtpUser: newEmail.trim(), imapUser: newEmail.trim() } : {}),
+        ...(cleanPass ? { smtpPass: cleanPass, hasSmtpPass: true } : {}),
+      };
+
+      setEmailConfig(updatedConfig);
+      await api.updateEmailSettings(updatedConfig);
+      showToastSuccess('Settings Updated!', 'Retesting connection now...');
+
+      const targetEmail = testRecipientEmail.trim() || updatedConfig.senderEmail;
+      const res = await api.testEmailConnection({
+        testEmail: targetEmail,
+        configOverride: updatedConfig,
+        testType: 'smtp',
+      });
+      setEmailTestResult(res);
+      if (res.success) {
+        showToastSuccess('Test Email Sent Successfully!', res.message);
+        setQuickAppPassInput('');
+      } else {
+        showToastError('Mail Connection Test Failed', res.message);
+      }
+    } catch (err: any) {
+      showToastError('Quick Fix Failed', err.message);
+    } finally {
+      setIsApplyingFix(false);
     }
   };
 
@@ -1155,11 +1301,37 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  // Instant 1-Click Live Gateway Switcher (Switches & saves to frontend/backend immediately)
+  const handleSwitchGatewayLive = async (nextGatewayPatch: Record<string, any>, label: string) => {
+    const updatedConfig = {
+      ...gatewayConfig,
+      ...nextGatewayPatch,
+    };
+    setGatewayConfig(updatedConfig);
+    setFgTestResult(null);
+    try {
+      const res = await api.updateGatewaySettings(updatedConfig);
+      if (res?.config) {
+        setGatewayConfig(res.config);
+      }
+      showToastSuccess(
+        `Switched Live to ${label}`,
+        'Active immediately on the user Deposit checkout page.'
+      );
+    } catch (err: any) {
+      showToastError('Failed to switch gateway', err.message);
+    }
+  };
+
   // Test Gateway Connection
   const handleTestGateway = async () => {
     try {
-      const res = await api.testGatewayConnection();
-      showToastSuccess('Gateway Online', res.message);
+      const res = await api.testGatewayConnection({ configOverride: gatewayConfig });
+      if (res.success) {
+        showToastSuccess('Gateway Online & Verified', res.message);
+      } else {
+        showToastError('Gateway Response Notice', res.message);
+      }
     } catch (err: any) {
       showToastError('Gateway Connection Error', err.message);
     }
@@ -1169,14 +1341,17 @@ export const AdminPage: React.FC = () => {
   const handleSaveGatewaySettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.updateGatewaySettings(gatewayConfig);
-      showToastSuccess('Payment Gateway Settings Saved');
+      const res = await api.updateGatewaySettings(gatewayConfig);
+      if (res?.config) {
+        setGatewayConfig(res.config);
+      }
+      showToastSuccess('Payment Gateway Settings Saved Live');
     } catch (err: any) {
       showToastError('Save failed', err.message);
     }
   };
 
-  // Test Payment Gateway Order Generation (Render FGW POST or FamGateway POST/GET)
+  // Test Payment Gateway Order Generation (FamGateway Primary POST/GET or Render Secondary POST/GET)
   const handleRunFamGatewayTest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!testFgAmount || testFgAmount <= 0) {
@@ -1192,6 +1367,7 @@ export const AdminPage: React.FC = () => {
         customerEmail: testFgCustomerEmail.trim() || 'ramesh@example.com',
         note: testFgNote.trim() || 'Payment for Order #1024',
         method: testFgMethod,
+        configOverride: gatewayConfig,
       });
       setFgTestResult(res);
       if (res.success) {
@@ -1201,8 +1377,8 @@ export const AdminPage: React.FC = () => {
         );
       } else {
         showToastError(
-          `Gateway Notice (HTTP ${res.status || 0})`,
-          res.rawResponse?.slice(0, 80) || 'Request failed'
+          `Gateway Error (HTTP ${res.status || 0})`,
+          res.rawResponse?.slice(0, 100) || 'Request failed'
         );
       }
     } catch (err: any) {
@@ -2525,8 +2701,8 @@ export const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Persistent Bottom Save & Reset Dock */}
-          <div className="sticky bottom-4 z-30 p-4 rounded-2xl bg-[#0a0a0f]/95 backdrop-blur-md border border-rose-500/40 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Bottom Save & Reset Action Bar (Non-floating, docked at the bottom of settings) */}
+          <div className="mt-8 p-4 rounded-2xl bg-[#0a0a0f] border border-rose-500/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-white font-bold">Unsaved changes sync in real-time</span>
@@ -3195,7 +3371,7 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB CONTENT: USER RESELLER API SYSTEM (யூசர் ரீசெல்லர் ஏபிஐ சிஸ்டம்) */}
+      {/* TAB CONTENT: USER RESELLER API SYSTEM */}
       {activeTab === 'user_reseller_api' && (
         <div className="space-y-6">
           {/* Header Banner */}
@@ -3214,7 +3390,7 @@ export const AdminPage: React.FC = () => {
                   </span>
                 </div>
                 <h3 className="font-display font-black text-lg text-white uppercase tracking-wider mt-1">
-                  USER RESELLER API SYSTEM (யூசர் ரீசெல்லர் ஏபிஐ சிஸ்டம்)
+                  USER RESELLER API SYSTEM
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
                   Set 2-digit or 3-digit numeric PIDs (e.g. 155, 66, 150, 123) for each of your products. Duration plans, prices, and stock counts are automatically mapped for external resellers.
@@ -3742,119 +3918,186 @@ export const AdminPage: React.FC = () => {
       {/* TAB CONTENT: 8. PAYMENT GATEWAY SETTINGS & CONSOLE */}
       {activeTab === 'gateway' && (
         <div className="space-y-6">
-          {/* Quick Gateway Presets Banner */}
+          {/* Instant 1-Click Live Gateway Switcher */}
           <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-950/40 via-[#0d0d14] to-rose-950/40 border border-emerald-500/30 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-400" />
                 <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
-                  ONE-CLICK PAYMENT GATEWAY PRESETS
+                  ACTIVE PAYMENT GATEWAY SWITCHER (1-CLICK LIVE SWITCH)
                 </h3>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Click a preset to auto-populate production endpoints &amp; API keys
+              <span className="text-[11px] text-emerald-300 font-mono">
+                Click any gateway once to switch &amp; activate it immediately on the live website
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Preset 1: Render FGW Live */}
-              <button
-                type="button"
-                onClick={() => {
-                  setGatewayConfig(prev => ({
-                    ...prev,
-                    gatewayName: 'FamPay UPI Payment Gateway',
-                    gatewayType: 'RENDER_FGW' as any,
-                    apiUrl: 'https://payment-gateway-87gk.onrender.com/api/create-order',
-                    qrAliasUrl: 'https://payment-gateway-87gk.onrender.com/api/qr.php',
-                    statusUrl: 'https://payment-gateway-87gk.onrender.com/api/v1/order/status',
-                    apiKey: 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe',
-                    successUrl: 'https://yoursite.com/payment-success',
-                    redirectUrl: 'https://yoursite.com/payment-success',
-                    cancelUrl: 'https://yoursite.com/payment-cancel',
-                    upiVpa: '8056317218@fam',
-                    upiMerchantName: 'Kalam Akash',
-                  }));
-                  showToastSuccess('FamPay Render Gateway Applied', 'Live endpoints & API Key loaded.');
-                }}
-                className="p-3.5 rounded-2xl bg-black/50 border border-emerald-500/40 hover:border-emerald-400 text-left transition-all group"
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>FamPay Render Gateway</span>
-                  </span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
-                    ACTIVE LIVE
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 line-clamp-1 font-mono">
-                  https://payment-gateway-87gk.onrender.com/api/create-order
-                </p>
-                <div className="text-[10px] text-slate-500 mt-1 font-mono">X-Api-Key: fam_67c5e1...</div>
-              </button>
+              {/* Gateway 1 (PRIMARY): FamGateway (famgateway.in) */}
+              {(() => {
+                const isFamPrimaryActive =
+                  gatewayConfig.gatewayType === 'FAMGATEWAY' ||
+                  (gatewayConfig.apiUrl || '').includes('famgateway.in');
+                return (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSwitchGatewayLive(
+                        {
+                          gatewayName: 'FamGateway Official (famgateway.in)',
+                          gatewayType: 'FAMGATEWAY' as any,
+                          apiUrl: 'https://famgateway.in/api/create-order',
+                          qrAliasUrl: 'https://famgateway.in/api/qr.php',
+                          statusUrl: 'https://famgateway.in/api/verify-order.php',
+                          apiKey: 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e',
+                          redirectUrl: 'https://yoursite.com/payment-success',
+                          successUrl: 'https://yoursite.com/payment-success',
+                          cancelUrl: 'https://yoursite.com/payment-cancel',
+                          upiVpa: '8056317218@fam',
+                          upiMerchantName: 'Kalam Kalam',
+                          testMode: false,
+                        },
+                        'Primary: FamGateway (famgateway.in)'
+                      )
+                    }
+                    className={`p-3.5 rounded-2xl text-left transition-all cursor-pointer border ${
+                      isFamPrimaryActive
+                        ? 'bg-emerald-950/40 border-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.2)]'
+                        : 'bg-black/50 border-white/10 hover:border-emerald-500/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>1. FamGateway (Primary)</span>
+                      </span>
+                      <span
+                        className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold ${
+                          isFamPrimaryActive
+                            ? 'bg-emerald-500 text-slate-950'
+                            : 'bg-emerald-500/20 text-emerald-300'
+                        }`}
+                      >
+                        {isFamPrimaryActive ? '✓ ACTIVE LIVE' : 'PRIMARY · SWITCH'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 line-clamp-1 font-mono">
+                      https://famgateway.in/api/create-order
+                    </p>
+                    <div className="text-[10px] text-emerald-400/90 mt-1 font-mono">
+                      Real-Time QR + Auto Bank Verify (0% Fee)
+                    </div>
+                  </button>
+                );
+              })()}
 
-              {/* Preset 2: FamGateway */}
-              <button
-                type="button"
-                onClick={() => {
-                  setGatewayConfig(prev => ({
-                    ...prev,
-                    gatewayName: 'FamGateway UPI Automated',
-                    gatewayType: 'FAMGATEWAY' as any,
-                    apiUrl: 'https://famgateway.in/api/create-order',
-                    qrAliasUrl: 'https://famgateway.in/api/qr.php',
-                    apiKey: 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e',
-                    redirectUrl: 'https://yoursite.com/payment-success',
-                  }));
-                  showToastSuccess('FamGateway Preset Applied');
-                }}
-                className="p-3.5 rounded-2xl bg-black/50 border border-white/10 hover:border-white/20 text-left transition-all"
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <Radio className="w-3.5 h-3.5 text-rose-400" />
-                    <span>FamGateway Legacy</span>
-                  </span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">
-                    MIRROR
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 line-clamp-1 font-mono">
-                  https://famgateway.in/api/create-order
-                </p>
-                <div className="text-[10px] text-slate-500 mt-1 font-mono">X-Api-Key: fam_a9527c...</div>
-              </button>
+              {/* Gateway 2 (SECONDARY): FamPay Render Gateway */}
+              {(() => {
+                const isRenderSecondaryActive =
+                  gatewayConfig.gatewayType === 'RENDER_FGW' ||
+                  ((gatewayConfig.apiUrl || '').includes('onrender.com') &&
+                    gatewayConfig.gatewayType !== 'FAMGATEWAY' &&
+                    gatewayConfig.gatewayType !== 'DIRECT_UPI');
+                return (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSwitchGatewayLive(
+                        {
+                          gatewayName: 'FamPay Render Gateway',
+                          gatewayType: 'RENDER_FGW' as any,
+                          apiUrl: 'https://payment-gateway-87gk.onrender.com/api/create-order',
+                          qrAliasUrl: 'https://payment-gateway-87gk.onrender.com/api/qr.php',
+                          statusUrl: 'https://payment-gateway-87gk.onrender.com/api/v1/order/status',
+                          apiKey: 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe',
+                          successUrl: 'https://yoursite.com/payment-success',
+                          redirectUrl: 'https://yoursite.com/payment-success',
+                          cancelUrl: 'https://yoursite.com/payment-cancel',
+                          upiVpa: '8056317218@fam',
+                          upiMerchantName: 'Kalam Akash',
+                          testMode: false,
+                        },
+                        'Secondary: FamPay Render Gateway'
+                      )
+                    }
+                    className={`p-3.5 rounded-2xl text-left transition-all cursor-pointer border ${
+                      isRenderSecondaryActive
+                        ? 'bg-rose-950/40 border-rose-400 shadow-[0_0_25px_rgba(244,63,94,0.2)]'
+                        : 'bg-black/50 border-white/10 hover:border-rose-500/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Radio className="w-3.5 h-3.5 text-rose-400" />
+                        <span>2. FamPay Render (Secondary)</span>
+                      </span>
+                      <span
+                        className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold ${
+                          isRenderSecondaryActive
+                            ? 'bg-rose-500 text-white'
+                            : 'bg-rose-500/20 text-rose-300'
+                        }`}
+                      >
+                        {isRenderSecondaryActive ? '✓ ACTIVE LIVE' : 'SECONDARY · SWITCH'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 line-clamp-1 font-mono">
+                      https://payment-gateway-87gk.onrender.com/api/create-order
+                    </p>
+                    <div className="text-[10px] text-slate-400 mt-1 font-mono">
+                      Auto-failover to FamGateway if suspended
+                    </div>
+                  </button>
+                );
+              })()}
 
-              {/* Preset 3: Direct UPI QR */}
-              <button
-                type="button"
-                onClick={() => {
-                  setGatewayConfig(prev => ({
-                    ...prev,
-                    gatewayName: 'Direct Peer-to-Peer UPI',
-                    gatewayType: 'DIRECT_UPI' as any,
-                    upiVpa: '8056317218@fam',
-                    upiMerchantName: 'FamPay',
-                  }));
-                  showToastSuccess('Direct UPI Preset Applied');
-                }}
-                className="p-3.5 rounded-2xl bg-black/50 border border-white/10 hover:border-white/20 text-left transition-all"
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <QrCode className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Direct Peer-to-Peer UPI</span>
-                  </span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">
-                    0% FEE
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 line-clamp-1 font-mono">
-                  8056317218@fam (FamPay)
-                </p>
-                <div className="text-[10px] text-slate-500 mt-1 font-mono">Internal instant QR renderer</div>
-              </button>
+              {/* Gateway 3: Direct UPI QR */}
+              {(() => {
+                const isDirectUpiActive = gatewayConfig.gatewayType === 'DIRECT_UPI';
+                return (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSwitchGatewayLive(
+                        {
+                          gatewayName: 'Direct Peer-to-Peer UPI',
+                          gatewayType: 'DIRECT_UPI' as any,
+                          upiVpa: '8056317218@fam',
+                          upiMerchantName: 'FamPay',
+                        },
+                        'Direct Peer-to-Peer UPI'
+                      )
+                    }
+                    className={`p-3.5 rounded-2xl text-left transition-all cursor-pointer border ${
+                      isDirectUpiActive
+                        ? 'bg-sky-950/40 border-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.2)]'
+                        : 'bg-black/50 border-white/10 hover:border-sky-500/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <QrCode className="w-3.5 h-3.5 text-sky-400" />
+                        <span>3. Direct Peer-to-Peer UPI</span>
+                      </span>
+                      <span
+                        className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold ${
+                          isDirectUpiActive
+                            ? 'bg-sky-500 text-slate-950'
+                            : 'bg-sky-500/20 text-sky-300'
+                        }`}
+                      >
+                        {isDirectUpiActive ? '✓ ACTIVE LIVE' : 'DIRECT · SWITCH'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 line-clamp-1 font-mono">
+                      8056317218@fam (FamPay)
+                    </p>
+                    <div className="text-[10px] text-slate-400 mt-1 font-mono">
+                      Direct UPI VPA QR renderer
+                    </div>
+                  </button>
+                );
+              })()}
             </div>
           </div>
 
@@ -3865,20 +4108,20 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
-                    PAYMENT GATEWAY CONFIGURATION
+                    PAYMENT GATEWAY CONFIGURATION ({gatewayConfig.gatewayName || 'FamGateway Official'})
                   </h3>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Automated peer-to-peer UPI payment verification, order generation, and live webhook receiver
+                  Real-time automated UPI payment verification, dynamic QR generation, and live status polling
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleTestGateway}
-                className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-rose-400 border border-rose-500/30 transition-colors flex items-center justify-center gap-1.5 self-start sm:self-auto"
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-xs font-semibold text-emerald-300 border border-emerald-500/30 transition-colors flex items-center justify-center gap-1.5 self-start sm:self-auto cursor-pointer"
               >
                 <Radio className="w-3.5 h-3.5" />
-                <span>Test Gateway Ping</span>
+                <span>Test Live Gateway Ping</span>
               </button>
             </div>
 
@@ -3891,7 +4134,7 @@ export const AdminPage: React.FC = () => {
                   type="text"
                   value={gatewayConfig.gatewayName || ''}
                   onChange={e => setGatewayConfig({ ...gatewayConfig, gatewayName: e.target.value })}
-                  placeholder="FamPay UPI Payment Gateway"
+                  placeholder="FamGateway Official (famgateway.in)"
                   className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
                 />
               </div>
@@ -3904,7 +4147,7 @@ export const AdminPage: React.FC = () => {
                   type="text"
                   value={gatewayConfig.apiKey || ''}
                   onChange={e => setGatewayConfig({ ...gatewayConfig, apiKey: e.target.value })}
-                  placeholder="fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe"
+                  placeholder="fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e"
                   className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
                 />
               </div>
@@ -3915,9 +4158,9 @@ export const AdminPage: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={gatewayConfig.apiUrl || 'https://payment-gateway-87gk.onrender.com/api/create-order'}
+                  value={gatewayConfig.apiUrl || 'https://famgateway.in/api/create-order'}
                   onChange={e => setGatewayConfig({ ...gatewayConfig, apiUrl: e.target.value })}
-                  placeholder="https://payment-gateway-87gk.onrender.com/api/create-order"
+                  placeholder="https://famgateway.in/api/create-order"
                   className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
                 />
               </div>
@@ -3928,9 +4171,9 @@ export const AdminPage: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={gatewayConfig.qrAliasUrl || 'https://payment-gateway-87gk.onrender.com/api/qr.php'}
+                  value={gatewayConfig.qrAliasUrl || 'https://famgateway.in/api/qr.php'}
                   onChange={e => setGatewayConfig({ ...gatewayConfig, qrAliasUrl: e.target.value })}
-                  placeholder="https://payment-gateway-87gk.onrender.com/api/qr.php"
+                  placeholder="https://famgateway.in/api/qr.php"
                   className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
                 />
               </div>
@@ -3941,9 +4184,9 @@ export const AdminPage: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={gatewayConfig.successUrl || gatewayConfig.redirectUrl || 'https://yoursite.com/success'}
+                  value={gatewayConfig.successUrl || gatewayConfig.redirectUrl || 'https://yoursite.com/payment-success'}
                   onChange={e => setGatewayConfig({ ...gatewayConfig, successUrl: e.target.value, redirectUrl: e.target.value })}
-                  placeholder="https://yoursite.com/success"
+                  placeholder="https://yoursite.com/payment-success"
                   className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
                 />
               </div>
@@ -3954,9 +4197,9 @@ export const AdminPage: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={gatewayConfig.cancelUrl || 'https://yoursite.com/cancel'}
+                  value={gatewayConfig.cancelUrl || 'https://yoursite.com/payment-cancel'}
                   onChange={e => setGatewayConfig({ ...gatewayConfig, cancelUrl: e.target.value })}
-                  placeholder="https://yoursite.com/cancel"
+                  placeholder="https://yoursite.com/payment-cancel"
                   className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
                 />
               </div>
@@ -3980,9 +4223,9 @@ export const AdminPage: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={gatewayConfig.upiMerchantName || 'FamPay'}
+                  value={gatewayConfig.upiMerchantName || 'Kalam Kalam'}
                   onChange={e => setGatewayConfig({ ...gatewayConfig, upiMerchantName: e.target.value })}
-                  placeholder="FamPay"
+                  placeholder="Kalam Kalam"
                   className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
                 />
               </div>
@@ -4005,7 +4248,7 @@ export const AdminPage: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  value={gatewayConfig.paymentExpiryMinutes || 5}
+                  value={gatewayConfig.paymentExpiryMinutes || 10}
                   onChange={e => setGatewayConfig({ ...gatewayConfig, paymentExpiryMinutes: Number(e.target.value) })}
                   className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
                 />
@@ -4024,21 +4267,33 @@ export const AdminPage: React.FC = () => {
                 />
               </div>
 
-              {/* Fake / Test Payment Mode Toggle */}
-              <div className="sm:col-span-2 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-4">
+              {/* Real-Time Mode vs Test Mode Toggle */}
+              <div className="sm:col-span-2 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-xs font-bold text-amber-300 uppercase tracking-wide flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-400" />
-                    <span>⚡ TEST / FAKE PAYMENT MODE (INSTANT APPROVAL)</span>
+                  <div className="text-xs font-bold text-emerald-300 uppercase tracking-wide flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-emerald-400" />
+                    <span>
+                      {gatewayConfig.testMode
+                        ? '⚠️ TEST / DEMO PAYMENT MODE ACTIVE (FAKE APPROVAL ON)'
+                        : '✓ REAL-TIME LIVE BANK VERIFICATION MODE ACTIVE (FAKE PAYMENTS BLOCKED)'}
+                    </span>
                   </div>
                   <p className="text-[11px] text-slate-300 mt-1">
-                    When enabled, users can test wallet deposits using Fake/Demo Pay or manual UTR submissions instantly without real bank transactions.
+                    {gatewayConfig.testMode
+                      ? 'Test mode is currently ON. Uncheck this box to enforce strict real-time UPI payment verification via FamGateway.'
+                      : 'Strict Real-Time Mode is ON. Wallet deposits are only credited when FamGateway verifies a real UPI payment.'}
                   </p>
                 </div>
                 <input
                   type="checkbox"
                   checked={!!gatewayConfig.testMode}
-                  onChange={e => setGatewayConfig({ ...gatewayConfig, testMode: e.target.checked })}
+                  onChange={e => {
+                    const nextTestMode = e.target.checked;
+                    handleSwitchGatewayLive(
+                      { testMode: nextTestMode },
+                      nextTestMode ? 'Test Payment Mode' : 'Real-Time Live Verification Mode'
+                    );
+                  }}
                   className="w-6 h-6 accent-amber-500 rounded cursor-pointer shrink-0"
                 />
               </div>
@@ -4047,12 +4302,12 @@ export const AdminPage: React.FC = () => {
             <div className="pt-2 flex items-center justify-between">
               <button
                 type="submit"
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-rose-950/40"
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-rose-950/40 cursor-pointer"
               >
                 Save Gateway Settings
               </button>
               <span className="text-[11px] font-mono text-slate-400">
-                Peer-to-Peer 0% Fee Engine: <span className="text-emerald-400 font-bold">ACTIVE</span>
+                Real-Time 0% Fee Engine: <span className="text-emerald-400 font-bold">ACTIVE</span>
               </span>
             </div>
           </form>
@@ -4069,7 +4324,7 @@ export const AdminPage: React.FC = () => {
                     PAYMENT GATEWAY LIVE ORDER &amp; QR TEST CONSOLE
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Live dispatch test for <span className="font-mono text-emerald-400">{gatewayConfig.apiUrl || 'https://payment-gateway-87gk.onrender.com/api/v1/order/create'}</span>
+                    Live dispatch test for <span className="font-mono text-emerald-400">{gatewayConfig.apiUrl || 'https://famgateway.in/api/create-order'}</span>
                   </p>
                 </div>
               </div>
@@ -4194,8 +4449,8 @@ export const AdminPage: React.FC = () => {
                     onClick={() => {
                       const snippet =
                         testFgMethod === 'POST'
-                          ? `curl -X POST "${gatewayConfig.apiUrl || 'https://payment-gateway-87gk.onrender.com/api/create-order'}" \\\n  -H "Content-Type: application/json" \\\n  -H "X-Api-Key: ${gatewayConfig.apiKey || 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe'}" \\\n  -d '{\n    "amount": ${testFgAmount.toFixed(2)},\n    "customer_name": "${testFgCustomerName}",\n    "customer_email": "${testFgCustomerEmail}",\n    "redirect_url": "${gatewayConfig.successUrl || gatewayConfig.redirectUrl || 'https://yoursite.com/payment-success'}"\n  }'`
-                          : `curl -X GET "${gatewayConfig.qrAliasUrl || 'https://payment-gateway-87gk.onrender.com/api/qr.php'}?api_key=${gatewayConfig.apiKey || 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe'}&amount=${testFgAmount}&customer_name=${encodeURIComponent(testFgCustomerName)}"`;
+                          ? `curl -X POST "${gatewayConfig.apiUrl || 'https://famgateway.in/api/create-order'}" \\\n  -H "Content-Type: application/json" \\\n  -H "X-Api-Key: ${gatewayConfig.apiKey || 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e'}" \\\n  -d '{\n    "amount": ${testFgAmount.toFixed(2)},\n    "customer_name": "${testFgCustomerName}",\n    "customer_email": "${testFgCustomerEmail}",\n    "redirect_url": "${gatewayConfig.successUrl || gatewayConfig.redirectUrl || 'https://yoursite.com/payment-success'}"\n  }'`
+                          : `curl -X GET "${gatewayConfig.qrAliasUrl || 'https://famgateway.in/api/qr.php'}?api_key=${gatewayConfig.apiKey || 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e'}&amount=${testFgAmount}&customer_name=${encodeURIComponent(testFgCustomerName)}"`;
                       navigator.clipboard.writeText(snippet);
                       showToastSuccess('Curl command copied to clipboard');
                     }}
@@ -4209,9 +4464,9 @@ export const AdminPage: React.FC = () => {
                 <div className="text-slate-300 overflow-x-auto p-2 bg-[#08080c] rounded-xl text-[10px] leading-relaxed select-all">
                   {testFgMethod === 'POST' ? (
                     <>
-                      <span className="text-amber-400">curl</span> -X POST <span className="text-emerald-300">"{gatewayConfig.apiUrl || 'https://payment-gateway-87gk.onrender.com/api/create-order'}"</span> \<br />
+                      <span className="text-amber-400">curl</span> -X POST <span className="text-emerald-300">"{gatewayConfig.apiUrl || 'https://famgateway.in/api/create-order'}"</span> \<br />
                       &nbsp;&nbsp;-H <span className="text-emerald-300">"Content-Type: application/json"</span> \<br />
-                      &nbsp;&nbsp;-H <span className="text-emerald-300">"X-Api-Key: {gatewayConfig.apiKey ? `${gatewayConfig.apiKey.slice(0, 10)}...` : 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe'}"</span> \<br />
+                      &nbsp;&nbsp;-H <span className="text-emerald-300">"X-Api-Key: {gatewayConfig.apiKey || 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e'}"</span> \<br />
                       &nbsp;&nbsp;-d <span className="text-purple-300">'{JSON.stringify({
                         amount: Number(testFgAmount.toFixed(2)),
                         customer_name: testFgCustomerName,
@@ -4221,7 +4476,7 @@ export const AdminPage: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <span className="text-amber-400">curl</span> -X GET <span className="text-emerald-300">"{gatewayConfig.qrAliasUrl || 'https://payment-gateway-87gk.onrender.com/api/qr.php'}?api_key={gatewayConfig.apiKey || 'fam_67c5e10fc423d5ef37aac212a20e55c63d51b7fe'}&amp;amount={testFgAmount}&amp;customer_name={encodeURIComponent(testFgCustomerName)}"</span>
+                      <span className="text-amber-400">curl</span> -X GET <span className="text-emerald-300">"{gatewayConfig.qrAliasUrl || 'https://famgateway.in/api/qr.php'}?api_key={gatewayConfig.apiKey || 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e'}&amp;amount={testFgAmount}&amp;customer_name={encodeURIComponent(testFgCustomerName)}"</span>
                     </>
                   )}
                 </div>
@@ -4944,21 +5199,63 @@ export const AdminPage: React.FC = () => {
           </div>
 
           {/* Quick Mail Provider Presets */}
-          <div className="p-5 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="p-5 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-white/5">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-rose-400" />
+                <Globe className="w-4 h-4 text-rose-400" />
                 <h4 className="font-display font-black text-xs text-white uppercase tracking-wider">
-                  ONE-CLICK EMAIL SERVER PRESETS
+                  UNIVERSAL EMAIL &amp; IMAP ENGINE (ANY EMAIL SUPPORTED)
                 </h4>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Click to auto-populate recommended host &amp; port settings
+              <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                Gmail · Outlook · Yahoo · Zoho · iCloud · cPanel / Custom Domain
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Preset 1: Gmail */}
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Use any email provider you want (Gmail, Outlook, Yahoo, Zoho, cPanel Webmail, or custom domain). 
+              Select a 1-click preset below or type any custom email to auto-configure SMTP &amp; IMAP:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {/* Preset 1: Custom Webmail / cPanel */}
+              <button
+                type="button"
+                onClick={() => {
+                  const domain = (emailConfig.senderEmail || '').includes('@')
+                    ? emailConfig.senderEmail.split('@')[1]
+                    : 'yourdomain.com';
+                  setEmailConfig((prev: any) => ({
+                    ...prev,
+                    protocol: 'smtp',
+                    smtpHost: `mail.${domain}`,
+                    smtpPort: 465,
+                    secure: true,
+                    imapHost: `mail.${domain}`,
+                    imapPort: 993,
+                    imapSecure: true,
+                    smtpUser: prev.senderEmail || `admin@${domain}`,
+                    imapUser: prev.senderEmail || `admin@${domain}`,
+                  }));
+                  showToastSuccess('Custom Domain / cPanel Preset Loaded', `mail.${domain}:465 (SSL)`);
+                }}
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-emerald-500/30 hover:border-emerald-500/60 text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 group-hover:text-emerald-400 transition-colors">
+                    <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>cPanel / Custom Domain</span>
+                  </span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                    ANY DOMAIN
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">mail.yourdomain.com:465 (SSL)</p>
+                <p className="text-[10px] text-slate-500 font-mono">IMAP: mail.yourdomain.com:993</p>
+              </button>
+
+              {/* Preset 2: Gmail */}
               <button
                 type="button"
                 onClick={() => {
@@ -4972,6 +5269,7 @@ export const AdminPage: React.FC = () => {
                     imapPort: 993,
                     imapSecure: true,
                     smtpUser: prev.senderEmail || 'kalamkalam1234kd@gmail.com',
+                    imapUser: prev.senderEmail || 'kalamkalam1234kd@gmail.com',
                   }));
                   showToastSuccess('Gmail Preset Loaded', 'SMTP: smtp.gmail.com:587 | IMAP: imap.gmail.com:993');
                 }}
@@ -4983,14 +5281,14 @@ export const AdminPage: React.FC = () => {
                     <span>Google / Gmail</span>
                   </span>
                   <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">
-                    RECOMMENDED
+                    POPULAR
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 font-mono">smtp.gmail.com:587</p>
+                <p className="text-[10px] text-slate-400 font-mono">smtp.gmail.com:587 (STARTTLS)</p>
                 <p className="text-[10px] text-slate-500 font-mono">imap.gmail.com:993</p>
               </button>
 
-              {/* Preset 2: Microsoft Outlook */}
+              {/* Preset 3: Microsoft Outlook */}
               <button
                 type="button"
                 onClick={() => {
@@ -5003,54 +5301,60 @@ export const AdminPage: React.FC = () => {
                     imapHost: 'outlook.office365.com',
                     imapPort: 993,
                     imapSecure: true,
+                    smtpUser: prev.senderEmail || '',
+                    imapUser: prev.senderEmail || '',
                   }));
-                  showToastSuccess('Outlook Preset Loaded');
+                  showToastSuccess('Outlook Preset Loaded', 'SMTP: smtp-mail.outlook.com:587');
                 }}
-                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-white/20 text-left transition-all cursor-pointer group"
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-blue-500/30 hover:border-blue-500/60 text-left transition-all cursor-pointer group"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors">
-                    Microsoft Outlook
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 group-hover:text-blue-400 transition-colors">
+                    <Mail className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Microsoft Outlook</span>
                   </span>
                   <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">
                     Port 587
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 font-mono">smtp-mail.outlook.com</p>
-                <p className="text-[10px] text-slate-500 font-mono">outlook.office365.com</p>
+                <p className="text-[10px] text-slate-400 font-mono">smtp-mail.outlook.com:587</p>
+                <p className="text-[10px] text-slate-500 font-mono">outlook.office365.com:993</p>
               </button>
 
-              {/* Preset 3: Custom Webmail / cPanel */}
+              {/* Preset 4: Yahoo Mail */}
               <button
                 type="button"
                 onClick={() => {
                   setEmailConfig((prev: any) => ({
                     ...prev,
-                    protocol: 'imap_smtp',
-                    smtpHost: 'mail.nexapanel.com',
+                    protocol: 'smtp',
+                    smtpHost: 'smtp.mail.yahoo.com',
                     smtpPort: 465,
                     secure: true,
-                    imapHost: 'mail.nexapanel.com',
+                    imapHost: 'imap.mail.yahoo.com',
                     imapPort: 993,
                     imapSecure: true,
+                    smtpUser: prev.senderEmail || '',
+                    imapUser: prev.senderEmail || '',
                   }));
-                  showToastSuccess('cPanel / Webmail Preset Loaded');
+                  showToastSuccess('Yahoo Mail Preset Loaded', 'smtp.mail.yahoo.com:465');
                 }}
-                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-white/20 text-left transition-all cursor-pointer group"
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-purple-500/30 hover:border-purple-500/60 text-left transition-all cursor-pointer group"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors">
-                    cPanel / Webmail (SSL)
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 group-hover:text-purple-400 transition-colors">
+                    <Mail className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Yahoo Mail</span>
                   </span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">
                     Port 465
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 font-mono">mail.yourdomain.com:465</p>
-                <p className="text-[10px] text-slate-500 font-mono">IMAP SSL: 993</p>
+                <p className="text-[10px] text-slate-400 font-mono">smtp.mail.yahoo.com:465</p>
+                <p className="text-[10px] text-slate-500 font-mono">imap.mail.yahoo.com:993</p>
               </button>
 
-              {/* Preset 4: Zoho Mail */}
+              {/* Preset 5: Zoho Mail */}
               <button
                 type="button"
                 onClick={() => {
@@ -5063,14 +5367,17 @@ export const AdminPage: React.FC = () => {
                     imapHost: 'imap.zoho.com',
                     imapPort: 993,
                     imapSecure: true,
+                    smtpUser: prev.senderEmail || '',
+                    imapUser: prev.senderEmail || '',
                   }));
-                  showToastSuccess('Zoho Mail Preset Loaded');
+                  showToastSuccess('Zoho Mail Preset Loaded', 'smtp.zoho.com:465');
                 }}
-                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-white/20 text-left transition-all cursor-pointer group"
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-amber-500/30 hover:border-amber-500/60 text-left transition-all cursor-pointer group"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors">
-                    Zoho Mail
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 group-hover:text-amber-400 transition-colors">
+                    <Mail className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Zoho Mail</span>
                   </span>
                   <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
                     Port 465
@@ -5079,34 +5386,164 @@ export const AdminPage: React.FC = () => {
                 <p className="text-[10px] text-slate-400 font-mono">smtp.zoho.com:465</p>
                 <p className="text-[10px] text-slate-500 font-mono">imap.zoho.com:993</p>
               </button>
+
+              {/* Preset 6: Apple iCloud */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailConfig((prev: any) => ({
+                    ...prev,
+                    protocol: 'smtp',
+                    smtpHost: 'smtp.mail.me.com',
+                    smtpPort: 587,
+                    secure: false,
+                    imapHost: 'imap.mail.me.com',
+                    imapPort: 993,
+                    imapSecure: true,
+                    smtpUser: prev.senderEmail || '',
+                    imapUser: prev.senderEmail || '',
+                  }));
+                  showToastSuccess('Apple iCloud Preset Loaded', 'smtp.mail.me.com:587');
+                }}
+                className="p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] border border-cyan-500/30 hover:border-cyan-500/60 text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 group-hover:text-cyan-400 transition-colors">
+                    <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Apple iCloud</span>
+                  </span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
+                    Port 587
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">smtp.mail.me.com:587</p>
+                <p className="text-[10px] text-slate-500 font-mono">imap.mail.me.com:993</p>
+              </button>
             </div>
           </div>
 
           <form onSubmit={handleSaveEmailSettings} className="space-y-6">
             {/* 1. SENDER IDENTITY CONFIGURATION ("My Email") */}
             <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-white/5">
-                <AtSign className="w-4 h-4 text-rose-400" />
-                <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
-                  1. SENDER IDENTITY ("MY EMAIL")
-                </h4>
+              <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <AtSign className="w-4 h-4 text-rose-400" />
+                  <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    1. SENDER IDENTITY ("MY EMAIL")
+                  </h4>
+                </div>
+                {(() => {
+                  const detected = detectEmailProvider(emailConfig.senderEmail || '');
+                  return detected ? (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-rose-400" />
+                      <span>{detected.badge}</span>
+                    </span>
+                  ) : null;
+                })()}
+              </div>
+
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-slate-900 to-black border border-emerald-500/20 text-xs text-slate-300 flex items-start gap-2.5">
+                <Zap className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-white font-bold">
+                    🌐 Universal Email Support: Works with ANY email provider!
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    You can enter ANY email address (Gmail, Outlook, Yahoo, Zoho, cPanel Webmail, or custom company domain). OTP codes will be delivered directly from the email you configure below.
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                    MY SENDER EMAIL (DISPATCH ADDRESS) *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      MY SENDER EMAIL (DISPATCH ADDRESS) *
+                    </label>
+                    {authUser?.email && authUser.email.toLowerCase() !== (emailConfig.senderEmail || '').toLowerCase() && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEmailConfig((prev: any) => ({
+                            ...prev,
+                            senderEmail: authUser.email,
+                            smtpUser: authUser.email,
+                            imapUser: authUser.email,
+                          }))
+                        }
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold transition-colors cursor-pointer"
+                        title="Click to auto-fill with your currently logged-in admin email"
+                      >
+                        ⚡ Match Logged-in Email ({authUser.email})
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="email"
                     value={emailConfig.senderEmail || ''}
-                    onChange={e =>
-                      setEmailConfig((prev: any) => ({ ...prev, senderEmail: e.target.value }))
-                    }
-                    placeholder="e.g. kalamkalam1234kd@gmail.com"
+                    onChange={e => {
+                      const nextEmail = e.target.value;
+                      setEmailConfig((prev: any) => ({
+                        ...prev,
+                        senderEmail: nextEmail,
+                      }));
+                    }}
+                    placeholder="e.g. kalamkalam1234kd@gmail.com or admin@yourdomain.com"
                     required
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                   />
+
+                  {/* Smart Auto-Config Action Row */}
+                  {emailConfig.senderEmail && (
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      {(() => {
+                        const detected = detectEmailProvider(emailConfig.senderEmail);
+                        if (!detected) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmailConfig((prev: any) => ({
+                                ...prev,
+                                smtpHost: detected.smtpHost,
+                                smtpPort: detected.smtpPort,
+                                secure: detected.secure,
+                                imapHost: detected.imapHost,
+                                imapPort: detected.imapPort,
+                                imapSecure: detected.imapSecure,
+                                smtpUser: prev.senderEmail,
+                                imapUser: prev.senderEmail,
+                              }));
+                              showToastSuccess(`Auto-Configured for ${detected.name}`);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            <span>Auto-Configure Hosts for {detected.name}</span>
+                          </button>
+                        );
+                      })()}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const curr = emailConfig.senderEmail || '';
+                          setEmailConfig((prev: any) => ({
+                            ...prev,
+                            smtpUser: curr,
+                            imapUser: curr,
+                          }));
+                          showToastSuccess('Synced!', `Set SMTP User & IMAP User to "${curr}"`);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>🔗 Sync to SMTP &amp; IMAP Username</span>
+                      </button>
+                    </div>
+                  )}
+
                   <p className="text-[10px] text-slate-500 mt-1">
                     This is your personal or company email address from which OTP codes will be sent.
                   </p>
@@ -5158,7 +5595,7 @@ export const AdminPage: React.FC = () => {
                     onChange={e =>
                       setEmailConfig((prev: any) => ({ ...prev, smtpHost: e.target.value }))
                     }
-                    placeholder="smtp.gmail.com"
+                    placeholder="e.g. smtp.gmail.com or mail.yourdomain.com"
                     required
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                   />
@@ -5171,9 +5608,14 @@ export const AdminPage: React.FC = () => {
                   <input
                     type="number"
                     value={emailConfig.smtpPort || 587}
-                    onChange={e =>
-                      setEmailConfig((prev: any) => ({ ...prev, smtpPort: Number(e.target.value) }))
-                    }
+                    onChange={e => {
+                      const nextPort = Number(e.target.value);
+                      setEmailConfig((prev: any) => ({
+                        ...prev,
+                        smtpPort: nextPort,
+                        secure: nextPort === 465 ? true : nextPort === 587 ? false : prev.secure,
+                      }));
+                    }}
                     placeholder="587"
                     required
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
@@ -5189,16 +5631,21 @@ export const AdminPage: React.FC = () => {
                       <input
                         type="checkbox"
                         checked={Boolean(emailConfig.secure)}
-                        onChange={e =>
-                          setEmailConfig((prev: any) => ({ ...prev, secure: e.target.checked }))
-                        }
+                        onChange={e => {
+                          const isChecked = e.target.checked;
+                          setEmailConfig((prev: any) => ({
+                            ...prev,
+                            secure: isChecked,
+                            smtpPort: isChecked && prev.smtpPort === 587 ? 465 : !isChecked && prev.smtpPort === 465 ? 587 : prev.smtpPort,
+                          }));
+                        }}
                         className="rounded border-white/20 bg-white/5 text-rose-600 focus:ring-rose-500"
                       />
-                      <span>SSL/TLS (Port 465)</span>
+                      <span>Direct SSL (Port 465)</span>
                     </label>
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1">
-                    Unchecked = STARTTLS (Port 587). Checked = Direct SSL (Port 465).
+                    Checked = Direct SSL (Port 465). Unchecked = STARTTLS (Port 587).
                   </p>
                 </div>
               </div>
@@ -5214,7 +5661,7 @@ export const AdminPage: React.FC = () => {
                     onChange={e =>
                       setEmailConfig((prev: any) => ({ ...prev, smtpUser: e.target.value }))
                     }
-                    placeholder="kalamkalam1234kd@gmail.com"
+                    placeholder={emailConfig.senderEmail || 'kalamkalam1234kd@gmail.com'}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                   />
                   <p className="text-[10px] text-slate-500 mt-1">
@@ -5225,7 +5672,7 @@ export const AdminPage: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      EMAIL PASSWORD / GOOGLE APP PASSWORD *
+                      EMAIL PASSWORD / APP PASSWORD *
                     </label>
                     <button
                       type="button"
@@ -5243,15 +5690,20 @@ export const AdminPage: React.FC = () => {
                         setEmailConfig((prev: any) => ({ ...prev, smtpPass: e.target.value }))
                       }
                       placeholder={
-                        emailConfig.hasSmtpPass ? '•••••••• (Stored Securely)' : 'Enter 16-character App Password'
+                        emailConfig.hasSmtpPass ? '•••••••• (Stored Securely)' : 'Enter Email Password or 16-char App Key'
                       }
                       className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                     />
                     <Lock className="w-4 h-4 text-slate-500 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
-                  <div className="p-2.5 mt-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-300">
-                    💡 <strong>For Gmail accounts:</strong> Turn ON 2-Step Verification in Google Account, then generate a 16-character <strong>App Password</strong> at{' '}
-                    <span className="font-mono text-white underline">myaccount.google.com/apppasswords</span>. Do not use your regular Google account password.
+                  <div className="p-2.5 mt-2 rounded-xl bg-white/[0.02] border border-white/10 text-[11px] text-slate-300 space-y-1">
+                    <div>
+                      💡 <strong>Gmail:</strong> Requires 16-character <strong>App Password</strong> from{' '}
+                      <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-rose-400 underline">myaccount.google.com/apppasswords</a>.
+                    </div>
+                    <div>
+                      💡 <strong>cPanel / Custom Domain / Webmail:</strong> Enter your standard email account password directly.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -5263,11 +5715,11 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Inbox className="w-4 h-4 text-rose-400" />
                   <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
-                    3. INCOMING MAIL SERVER (IMAP SETUP)
+                    3. INCOMING MAIL SERVER (IMAP SETUP - ANY EMAIL)
                   </h4>
                 </div>
                 <span className="text-[10px] text-slate-400 font-mono">
-                  IMAP protocol configuration for inbox verification &amp; sync
+                  IMAP protocol configuration for inbox sync
                 </span>
               </div>
 
@@ -5282,7 +5734,7 @@ export const AdminPage: React.FC = () => {
                     onChange={e =>
                       setEmailConfig((prev: any) => ({ ...prev, imapHost: e.target.value }))
                     }
-                    placeholder="imap.gmail.com"
+                    placeholder="e.g. imap.gmail.com or mail.yourdomain.com"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                   />
                 </div>
@@ -5333,7 +5785,7 @@ export const AdminPage: React.FC = () => {
                     onChange={e =>
                       setEmailConfig((prev: any) => ({ ...prev, imapUser: e.target.value }))
                     }
-                    placeholder="kalamkalam1234kd@gmail.com"
+                    placeholder={emailConfig.senderEmail || 'kalamkalam1234kd@gmail.com'}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                   />
                 </div>
@@ -5358,7 +5810,7 @@ export const AdminPage: React.FC = () => {
                       setEmailConfig((prev: any) => ({ ...prev, imapPass: e.target.value }))
                     }
                     placeholder={
-                      emailConfig.hasImapPass ? '•••••••• (Stored Securely)' : 'Same as App Password'
+                      emailConfig.hasImapPass ? '•••••••• (Stored Securely)' : 'Same as SMTP / App Password'
                     }
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                   />
@@ -5453,7 +5905,7 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-400">
-              Verify your SMTP connection and send a test OTP email right now to make sure messages arrive in the user's inbox with no issues.
+              Verify your SMTP connection, test native IMAP mailbox sync, or run a full suite test right now:
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -5462,55 +5914,199 @@ export const AdminPage: React.FC = () => {
                   type="email"
                   value={testRecipientEmail}
                   onChange={e => setTestRecipientEmail(e.target.value)}
-                  placeholder="Enter recipient email (e.g. kalamkalam1234kd@gmail.com)"
+                  placeholder="Enter recipient email (e.g. your personal email)"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                 />
               </div>
-              <button
-                type="button"
-                onClick={handleTestEmailConnection}
-                disabled={isTestingEmail}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-50"
-              >
-                {isTestingEmail ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Send className="w-3.5 h-3.5" />
-                )}
-                <span>SEND TEST OTP EMAIL</span>
-              </button>
+
+              <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleTestEmailConnection('smtp')}
+                  disabled={isTestingEmail}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Sends real test OTP code to recipient email"
+                >
+                  {isTestingEmail ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  <span>SEND TEST OTP (SMTP)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTestEmailConnection('imap')}
+                  disabled={isTestingEmail}
+                  className="px-4 py-2.5 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Performs socket handshake and authentication test against IMAP port 993/143"
+                >
+                  {isTestingEmail ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Inbox className="w-3.5 h-3.5" />}
+                  <span>TEST IMAP SYNC</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTestEmailConnection('both')}
+                  disabled={isTestingEmail}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600/40 to-amber-600/40 hover:from-rose-600/60 hover:to-amber-600/60 text-white border border-rose-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Tests both SMTP sending and IMAP incoming in one click"
+                >
+                  {isTestingEmail ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-400" />}
+                  <span>TEST FULL SUITE</span>
+                </button>
+              </div>
             </div>
 
             {/* Test Result Diagnostic Card */}
-            {emailTestResult && (
-              <div
-                className={`p-4 rounded-2xl border text-xs font-mono space-y-2 ${
-                  emailTestResult.success
-                    ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
-                    : 'bg-rose-950/30 border-rose-500/40 text-rose-200'
-                }`}
-              >
-                <div className="flex items-center gap-2 font-bold text-sm">
-                  {emailTestResult.success ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>SMTP Handshake Successful!</span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertTriangle className="w-4 h-4 text-rose-400" />
-                      <span>SMTP Connection Failed</span>
-                    </>
+            {emailTestResult && (() => {
+              const isBadCredentials =
+                emailTestResult.message?.includes('535') ||
+                emailTestResult.message?.includes('BadCredentials') ||
+                emailTestResult.message?.includes('Username and Password not accepted') ||
+                emailTestResult.message?.includes('AUTHENTICATIONFAILED') ||
+                emailTestResult.details?.guidance?.isBadCredentials ||
+                emailTestResult.details?.code === 'EAUTH';
+
+              const testedAccount =
+                emailTestResult.details?.smtpUser ||
+                emailTestResult.details?.user ||
+                emailConfig.smtpUser ||
+                emailConfig.senderEmail;
+
+              const isAccountMismatch =
+                authUser?.email &&
+                authUser.email.toLowerCase() !== (emailConfig.senderEmail || '').toLowerCase();
+
+              const guidance = emailTestResult.details?.guidance;
+              const providerName = emailTestResult.details?.provider || (guidance?.provider ?? 'Mail Server');
+
+              return (
+                <div className="space-y-3">
+                  <div
+                    className={`p-4 rounded-2xl border text-xs font-mono space-y-2 ${
+                      emailTestResult.success
+                        ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                        : 'bg-rose-950/30 border-rose-500/40 text-rose-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                      {emailTestResult.success ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Mail Server Verification Successful!</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="w-4 h-4 text-rose-400" />
+                          <span>Mail Server Connection Issue</span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-white font-sans text-xs leading-relaxed">{emailTestResult.message}</p>
+                    {emailTestResult.details && (
+                      <pre className="p-3 rounded-xl bg-black/50 text-[11px] overflow-x-auto text-slate-300">
+                        {JSON.stringify(emailTestResult.details, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+
+                  {/* Multi-Provider Interactive Diagnostic & Resolution Wizard */}
+                  {!emailTestResult.success && isBadCredentials && (
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-rose-950/40 via-red-950/20 to-black/60 border border-rose-500/40 shadow-xl space-y-4">
+                      <div className="flex items-center gap-2 pb-2 border-b border-rose-500/20">
+                        <Lock className="w-4 h-4 text-rose-400" />
+                        <h5 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                          HOW TO RESOLVE {providerName.toUpperCase()} AUTHENTICATION (ERROR 535)
+                        </h5>
+                      </div>
+
+                      <div className="text-xs text-slate-300 space-y-2 leading-relaxed">
+                        <p>
+                          Authentication failed for{' '}
+                          <span className="font-mono text-white font-bold px-1.5 py-0.5 rounded bg-white/10">
+                            {testedAccount}
+                          </span>
+                          .
+                        </p>
+                        {guidance?.steps && (
+                          <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1.5 text-[11px] text-slate-300">
+                            <span className="font-bold text-white block mb-1">Recommended Solution:</span>
+                            {guidance.steps.map((st: string, idx: number) => (
+                              <p key={idx}>{st}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Account Mismatch Warning & 1-Click Fix */}
+                      {isAccountMismatch && authUser?.email && (
+                        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                            <span>Email Account Mismatch Detected</span>
+                          </div>
+                          <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                            You are logged in as <strong className="text-white underline">{authUser.email}</strong>, but your SMTP sender is set to <strong className="text-white underline">{emailConfig.senderEmail}</strong>. If you created your App Password under <strong>{authUser.email}</strong>, the mail server will reject the login!
+                          </p>
+                          <button
+                            type="button"
+                            disabled={isApplyingFix}
+                            onClick={() => handleQuickFixAppPass(authUser.email)}
+                            className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                          >
+                            {isApplyingFix ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                            <span>Switch Sender &amp; Users to "{authUser.email}" &amp; Retest</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Quick Password Input & Retest */}
+                      <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Update Password / App Password &amp; Retest Immediately
+                        </label>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="text"
+                            value={quickAppPassInput}
+                            onChange={e => setQuickAppPassInput(e.target.value)}
+                            placeholder="Enter password or 16-character App Password"
+                            className="flex-1 px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            disabled={isApplyingFix || !quickAppPassInput.trim()}
+                            onClick={() => handleQuickFixAppPass(undefined, quickAppPassInput)}
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+                          >
+                            {isApplyingFix ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            <span>SAVE &amp; RETEST NOW</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Helpful External Links */}
+                      {guidance?.helpUrl && (
+                        <div className="pt-1">
+                          <a
+                            href={guidance.helpUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-white/20 transition-all flex items-center justify-between group"
+                          >
+                            <div>
+                              <span className="text-[10px] font-mono text-emerald-400 font-bold block">DIRECT LINK</span>
+                              <span className="text-xs font-bold text-white group-hover:text-emerald-300">
+                                Open {providerName} Security &amp; App Passwords Page
+                              </span>
+                            </div>
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-white shrink-0 ml-2" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-                <p>{emailTestResult.message}</p>
-                {emailTestResult.details && (
-                  <pre className="p-3 rounded-xl bg-black/50 text-[11px] overflow-x-auto text-slate-300">
-                    {JSON.stringify(emailTestResult.details, null, 2)}
-                  </pre>
-                )}
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
       )}
@@ -5570,10 +6166,10 @@ export const AdminPage: React.FC = () => {
                   <span className="text-[11px] font-mono text-emerald-400">Zero Balance Loss</span>
                 </div>
                 <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider">
-                  டொமைன் மாற்றினாலும் யூசர்களின் பேலன்ஸ் அழியாது!
+                  Changing domains will never affect user wallet balances!
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Domain URL என்பது உங்கள் தளத்தின் முகவரி (Address) மட்டுமே. யூசர்களின் பேலன்ஸ் (Wallet Balance), ஆர்டர்கள் (Orders) மற்றும் டிஜிட்டல் கீகள் (Digital Keys) அனைத்தும் உங்கள் சர்வர் டேட்டாபேஸில் (<code className="px-1 py-0.5 rounded bg-black/50 text-emerald-300 font-mono text-[11px]">database/nexa_panel.json</code>) பத்திரமாக சேமிக்கப்பட்டுள்ளன. நீங்கள் எத்தனை முறை டொமைனை மாற்றினாலும் அல்லது ஹோஸ்டிங்கை மாற்றினாலும் யூசர்களின் ஒரு பைசா கூட குறையாது.
+                  The domain URL is simply your website's web address. User wallet balances, orders, and digital license keys are all securely stored in your server database (<code className="px-1 py-0.5 rounded bg-black/50 text-emerald-300 font-mono text-[11px]">database/nexa_panel.json</code>). No matter how many times you change domains or hosting providers, not a single penny of your users' funds is ever lost.
                 </p>
               </div>
             </div>
@@ -5618,7 +6214,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  முழு டேட்டாபேஸ் தகவல்களையும் (யூசர்கள், பாஸ்வேர்டுகள், பேலன்ஸ், ஆர்டர்கள், கீகள், settings) ஒரே கிளிக்கில் கணினியில் சேமித்துக் கொள்ளலாம்.
+                  Export complete database records (users, credentials, balances, orders, keys, and configurations) with a single click.
                 </p>
               </div>
 
@@ -5650,7 +6246,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  புதிய ஹோஸ்டிங் அல்லது புதிய டொமைனுக்கு மாறும்போது, நீங்கள் டவுன்லோட் செய்த பேக்கப் பைலை அப்லோட் செய்து அனைத்தையும் பழையபடி மீட்கலாம்.
+                  When migrating to a new hosting provider or domain, upload your previously exported backup snapshot to restore all records instantly.
                 </p>
               </div>
 
@@ -5680,7 +6276,7 @@ export const AdminPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <Globe className="w-5 h-5 text-rose-400" />
               <h3 className="font-display font-black text-sm sm:text-base text-white uppercase tracking-wider">
-                இலவச ஹோஸ்டிங் &amp; இலவச டொமைன் வழிகாட்டி (FREE HOSTING &amp; DOMAIN GUIDE)
+                FREE HOSTING &amp; DOMAIN DEPLOYMENT GUIDE
               </h3>
             </div>
 
@@ -5690,17 +6286,17 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-emerald-400" />
                   <h4 className="font-bold text-white text-xs uppercase tracking-wide">
-                    1. எங்கே இலவசமாக ஹோஸ்ட் செய்யலாம்? (Free Hosting)
+                    1. Where can I host for free? (Free Hosting)
                   </h4>
                 </div>
 
                 <div className="space-y-2.5 text-xs text-slate-300 leading-relaxed">
                   <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
                     <span className="font-bold text-emerald-300 font-mono text-[11px] block">
-                      A. Render.com (மிகவும் சிறந்தது - Best for Node.js)
+                      A. Render.com (Recommended - Best for Node.js)
                     </span>
                     <p className="text-[11px] text-slate-400">
-                      GitHub ரெபாசிட்டரியை இணைத்தால் தானாகவே deploy செய்து தரும். 100% இலவச Web Service tier உள்ளது. இலவசமாக <code className="text-white">yourname.onrender.com</code> டொமைனும் Free SSL-உம் கிடைக்கும்.
+                      Connect your GitHub repository for automated deployment. 100% Free Web Service tier includes free SSL and a <code className="text-white">yourname.onrender.com</code> subdomain.
                     </p>
                   </div>
 
@@ -5709,16 +6305,16 @@ export const AdminPage: React.FC = () => {
                       B. Railway.app &amp; Koyeb.com
                     </span>
                     <p className="text-[11px] text-slate-400">
-                      Node.js Express + React மிக வேகமாக இயங்கும். Free trial credits &amp; இலவச சப்டொமைன் வசதி உண்டு.
+                      Fast Node.js Express + React execution with free trial credits and free subdomain capabilities.
                     </p>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
                     <span className="font-bold text-purple-300 font-mono text-[11px] block">
-                      C. Google Cloud Run (தற்போது இயங்கும் முறை)
+                      C. Google Cloud Run (Current Deployment)
                     </span>
                     <p className="text-[11px] text-slate-400">
-                      Google Cloud Run இலவசமாக மாதத்திற்கு 2 மில்லியன் requests தருகிறது. அதிவேக சர்வர் பாதுகாப்பு.
+                      Google Cloud Run provides 2 million free requests per month with ultra-fast server security.
                     </p>
                   </div>
                 </div>
@@ -5729,35 +6325,35 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-cyan-400" />
                   <h4 className="font-bold text-white text-xs uppercase tracking-wide">
-                    2. இலவச டொமைன் என்ன பண்ணலாம்? (Free Domain Options)
+                    2. Free Domain &amp; Subdomain Options
                   </h4>
                 </div>
 
                 <div className="space-y-2.5 text-xs text-slate-300 leading-relaxed">
                   <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
                     <span className="font-bold text-cyan-300 font-mono text-[11px] block">
-                      விருப்பம் 1: ஹோஸ்டிங் தரும் இலவச Subdomain (100% Free Forever)
+                      Option 1: Free Hosting Subdomain (100% Free Forever)
                     </span>
                     <p className="text-[11px] text-slate-400">
-                      Render (<code className="text-white">yourbrand.onrender.com</code>) அல்லது Vercel (<code className="text-white">yourbrand.vercel.app</code>) தரும் டொமைன் வாழ்நாள் முழுவதும் இலவசம். இதில் SSL தானாகவே வரும்.
+                      Subdomains provided by Render (<code className="text-white">yourbrand.onrender.com</code>) or Vercel (<code className="text-white">yourbrand.vercel.app</code>) are free forever with automated SSL.
                     </p>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
                     <span className="font-bold text-emerald-300 font-mono text-[11px] block">
-                      விருப்பம் 2: DuckDNS.org (100% Free Custom Subdomain)
+                      Option 2: DuckDNS.org (100% Free Custom Subdomain)
                     </span>
                     <p className="text-[11px] text-slate-400">
-                      <a href="https://www.duckdns.org" target="_blank" rel="noreferrer" className="text-emerald-400 underline">DuckDNS.org</a> தளத்தில் இலவசமாக <code className="text-white">yourbrand.duckdns.org</code> உருவாக்கி உங்கள் சர்வருடன் இணைக்கலாம்.
+                      Create a free <code className="text-white">yourbrand.duckdns.org</code> subdomain on <a href="https://www.duckdns.org" target="_blank" rel="noreferrer" className="text-emerald-400 underline">DuckDNS.org</a> and point it directly to your server.
                     </p>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
                     <span className="font-bold text-rose-300 font-mono text-[11px] block">
-                      விருப்பம் 3: மலிவான சொந்த டொமைன் (₹80 - ₹150 மட்டும்)
+                      Option 3: Affordable Custom Domain (₹80 - ₹150)
                     </span>
                     <p className="text-[11px] text-slate-400">
-                      தொழில்முறை தோற்றத்திற்கு <code className="text-white">.top</code>, <code className="text-white">.xyz</code> அல்லது <code className="text-white">.in</code> டொமைனை Cloudflare Registrar அல்லது Hostinger-ல் ₹80 - ₹150 கொடுத்து வாங்கினால் மிக பாதுகாப்பாக இருக்கும்.
+                      For a professional brand presence, register a <code className="text-white">.top</code>, <code className="text-white">.xyz</code>, or <code className="text-white">.in</code> domain on Cloudflare Registrar or Hostinger for ₹80 - ₹150 per year.
                     </p>
                   </div>
                 </div>
@@ -5768,21 +6364,21 @@ export const AdminPage: React.FC = () => {
             <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/20 via-black/40 to-cyan-950/20 border border-white/5 space-y-3">
               <h4 className="font-bold text-white text-xs uppercase tracking-wide flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>டொமைன் மாற்றும் போது செய்ய வேண்டிய 3 எளிய முறைகள் (Checklist):</span>
+                <span>3 Simple Steps When Migrating Domains (Checklist):</span>
               </h4>
               <ol className="list-decimal list-inside space-y-1.5 text-xs text-slate-300">
                 <li>
-                  <strong className="text-white">டேட்டாபேஸ் பேக்கப்:</strong> மேலே உள்ள <span className="text-rose-400 font-bold">"Download Database Snapshot"</span> பட்டனை அழுத்தி ஒரு பேக்கப் டவுன்லோட் செய்து வைத்துக் கொள்ளுங்கள்.
+                  <strong className="text-white">Database Backup:</strong> Click <span className="text-rose-400 font-bold">"Download Database Snapshot"</span> above to save a backup to your computer.
                 </li>
                 <li>
-                  <strong className="text-white">புதிய டொமைனில் ஃபைல் சேமிப்பு:</strong> உங்கள் புதிய ஹோஸ்டிங் சர்வரில் <code className="text-emerald-300">database/nexa_panel.json</code> ஃபைல் அதே இடத்தில் இருப்பதை உறுதி செய்யுங்கள் (அல்லது இந்த பக்கத்தில் உள்ள Restore பட்டனை பயன்படுத்தி பேக்கப்பை அப்லோட் செய்யுங்கள்).
+                  <strong className="text-white">File Placement on New Server:</strong> Ensure <code className="text-emerald-300">database/nexa_panel.json</code> is located in the database/ directory on your new server (or use the Restore button to upload your backup).
                 </li>
                 <li>
-                  <strong className="text-white">Firebase Google Login (தேவைப்பட்டால்):</strong> நீங்கள் Google Sign-In பயன்படுத்துகிறீர்கள் என்றால், Firebase Console ➔ Authentication ➔ Settings ➔ Authorized Domains பகுதிக்குச் சென்று உங்கள் புதிய டொமைனை Add செய்யுங்கள்.
+                  <strong className="text-white">Firebase Google Login (If Enabled):</strong> If using Google Sign-In, add your new domain under Firebase Console ➔ Authentication ➔ Settings ➔ Authorized Domains.
                 </li>
               </ol>
               <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 font-mono">
-                ✅ யூசர்கள் தங்கள் பழைய Email மற்றும் Password மூலமாகவே புதிய டொமைனில் லாகின் செய்யலாம். அவர்களின் பேலன்ஸ் மற்றும் ஆர்டர்கள் 100% அப்படியே இருக்கும்!
+                ✅ Users can log in on the new domain using their existing email and password. All balances and licenses remain 100% intact!
               </div>
             </div>
           </div>
@@ -6059,7 +6655,7 @@ export const AdminPage: React.FC = () => {
                   className="w-full px-3.5 py-2 bg-black/40 border border-amber-500/30 rounded-xl text-amber-300 font-mono font-bold text-xs focus:border-amber-500 focus:outline-none"
                 />
                 <p className="text-[10px] text-slate-400 leading-relaxed">
-                  💡 இந்த தயாரிப்பின் அனைத்து கால அளவுகளுக்கும் இது பொதுவான Upstream PID ஆகும்.
+                  💡 Common Upstream Product PID shared across all duration plans for this package.
                 </p>
               </div>
 
@@ -6410,7 +7006,7 @@ export const AdminPage: React.FC = () => {
                   className="w-full px-3.5 py-2 bg-black/40 border border-amber-500/30 rounded-xl text-amber-300 font-mono font-bold text-xs focus:border-amber-500 focus:outline-none"
                 />
                 <p className="text-[10px] text-slate-400 leading-relaxed">
-                  💡 இந்த தயாரிப்பின் அனைத்து கால அளவுகளுக்கும் இது பொதுவான Upstream PID ஆகும்.
+                  💡 Common Upstream Product PID shared across all duration plans for this package.
                 </p>
               </div>
 
@@ -6766,7 +7362,7 @@ export const AdminPage: React.FC = () => {
                         className="w-full px-3.5 py-2.5 bg-black/50 border border-amber-500/30 rounded-xl text-amber-300 font-mono font-bold placeholder-amber-500/30 focus:border-amber-500 focus:outline-none"
                       />
                       <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                        ஒவ்வொரு ரீசெல்லருக்கும் இந்த குறியீடு மாறும் (எ.கா: <span className="text-amber-300 font-mono">1D, 24h, 1_DAY, d1</span>).
+                        Duration identifier for reseller API (e.g., <span className="text-amber-300 font-mono">1D, 24h, 1_DAY, d1</span>).
                       </p>
                     </div>
 
@@ -6782,7 +7378,7 @@ export const AdminPage: React.FC = () => {
                         className="w-full px-3.5 py-2.5 bg-black/50 border border-white/10 rounded-xl text-white font-mono font-bold focus:border-rose-500 focus:outline-none"
                       />
                       <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                        Product PID தானாகப் பொருந்தும். தனி PID தேவைப்பட்டால் மட்டும் மாற்றவும்.
+                        Inherits default Product PID. Only customize if upstream uses a different PID for this duration.
                       </p>
                     </div>
                   </div>
@@ -7116,7 +7712,7 @@ export const AdminPage: React.FC = () => {
                       className="w-full px-3.5 py-2.5 bg-black/40 border border-amber-500/30 rounded-xl text-amber-300 font-mono font-bold placeholder-amber-500/30 focus:border-amber-500 focus:outline-none"
                     />
                     <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                      ரீசெல்லர் API-க்கான குறியீடு (எ.கா: <span className="text-amber-300 font-mono">1D, 24h, 1_DAY, d1</span>).
+                      Duration identifier for reseller API (e.g., <span className="text-amber-300 font-mono">1D, 24h, 1_DAY, d1</span>).
                     </p>
                   </div>
 
@@ -7132,7 +7728,7 @@ export const AdminPage: React.FC = () => {
                       className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white font-mono font-bold focus:border-amber-500 focus:outline-none"
                     />
                     <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                      Product PID தானாகப் பொருந்தும். குறிப்பிட்ட மாற்றம் தேவைப்பட்டால் மாற்றவும்.
+                      Inherits default Product PID. Only customize if upstream uses a different PID for this duration.
                     </p>
                   </div>
                 </div>

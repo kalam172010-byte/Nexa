@@ -12,18 +12,18 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentPage, onNavigate })
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
 
   const navItems = [
-    { id: 'dashboard', label: 'Home', icon: Home },
-    { id: 'deposit', label: 'Deposit', icon: Wallet },
-    { id: 'buy', label: 'Buy Keys', icon: ShoppingBag },
-    { id: 'keys', label: 'My Keys', icon: KeyRound },
+    { id: 'dashboard', label: 'Overview', icon: Home, color: 'text-rose-400' },
+    { id: 'buy', label: 'Buy Key', icon: ShoppingBag, color: 'text-amber-400' },
+    { id: 'keys', label: 'My Keys', icon: KeyRound, color: 'text-emerald-400' },
+    { id: 'deposit', label: 'Deposit', icon: Wallet, color: 'text-cyan-400' },
     isReseller
-      ? { id: 'api', label: 'Reseller API', icon: Terminal }
-      : { id: 'history', label: 'History', icon: History },
+      ? { id: 'api', label: 'API', icon: Terminal, color: 'text-violet-400' }
+      : { id: 'history', label: 'Ledger', icon: History, color: 'text-sky-400' },
   ];
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0a0a0f]/95 backdrop-blur-xl border-t border-white/10 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(0,0,0,0.8)]">
-      <div className="grid grid-cols-5 items-center h-16 px-1">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0b0d14]/95 backdrop-blur-xl border-t border-white/[0.08] pb-[env(safe-area-inset-bottom)]">
+      <div className="grid grid-cols-5 items-center h-14 px-1">
         {navItems.map(item => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
@@ -32,26 +32,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentPage, onNavigate })
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className="relative flex flex-col items-center justify-center h-full min-h-[44px] py-1 transition-all group focus:outline-none"
+              className="relative flex flex-col items-center justify-center h-full min-h-[44px] py-1 transition-colors group focus:outline-none cursor-pointer"
             >
-              {/* Active indicator bar */}
               {isActive && (
-                <div className="absolute top-0 w-8 h-[2px] bg-gradient-to-r from-red-500 to-rose-500 shadow-[0_0_10px_#f43f5e]" />
+                <div className="absolute top-0 w-7 h-[2.5px] bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 rounded-full" />
               )}
 
-              <div
-                className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-200 ${
+              <Icon
+                className={`w-4 h-4 transition-colors ${
                   isActive
-                    ? 'text-rose-400 scale-110'
-                    : 'text-slate-400 group-hover:text-slate-200'
+                    ? `${item.color} stroke-[2.3]`
+                    : `${item.color} opacity-65 group-hover:opacity-100 stroke-[1.9]`
                 }`}
-              >
-                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
-              </div>
+              />
 
               <span
-                className={`text-[10px] tracking-tight font-medium mt-0.5 transition-colors ${
-                  isActive ? 'text-rose-400 font-extrabold' : 'text-slate-400 group-hover:text-slate-300'
+                className={`text-[10px] tracking-tight mt-1 whitespace-nowrap truncate ${
+                  isActive ? 'text-white font-bold' : 'text-slate-400 font-medium'
                 }`}
               >
                 {item.label}

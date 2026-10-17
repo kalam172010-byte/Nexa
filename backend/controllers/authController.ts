@@ -72,12 +72,15 @@ export class AuthController {
       db.save();
 
       const token = generateToken(newUser);
-      const { passwordHash: _, ...safeUser } = newUser;
+      const { passwordHash, ...safeUser } = newUser;
 
       res.status(201).json({
         message: 'Account created successfully.',
         token,
-        user: safeUser,
+        user: {
+          ...safeUser,
+          hasPassword: Boolean(passwordHash),
+        },
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Registration failed.' });
@@ -135,6 +138,50 @@ export class AuthController {
     }
   }
 
+  public static async forgotPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const { usernameOrEmail } = req.body;
+      if (!usernameOrEmail) {
+        res.status(400).json({ error: 'Please enter your registered username or email address.' });
+        return;
+      }
+
+      const input = usernameOrEmail.trim().toLowerCase();
+      const user = db.users.find(
+        u => u.username.toLowerCase() === input || u.email.toLowerCase() === input
+      );
+
+      if (!user) {
+        res.json({
+          success: true,
+          message: 'If an account exists with this email or username, a password reset link has been dispatched to the inbox.',
+          email: input.includes('@') ? input : undefined,
+        });
+        return;
+      }
+
+      const resetToken = crypto.randomBytes(20).toString('hex');
+      const result = await emailService.sendPasswordResetEmail(user.email, user.username, resetToken);
+
+      db.logActivity(
+        user.id,
+        user.username,
+        'PASSWORD_RESET_DISPATCHED',
+        `Password reset email dispatched to ${user.email}`
+      );
+
+      res.json({
+        success: true,
+        message: result.message || `Password reset link dispatched to ${user.email}.`,
+        email: user.email,
+        simulated: result.simulated,
+        resetToken: result.resetToken,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to dispatch password reset email.' });
+    }
+  }
+
   public static async resetPassword(req: Request, res: Response): Promise<void> {
     try {
       const { usernameOrEmail, newPassword } = req.body;
@@ -167,18 +214,37 @@ export class AuthController {
         user.role = 'ADMIN';
       }
 
-      user.passwordHash = hashPassword(newPassword);
+      const newHash = hashPassword(newPassword);
+      user.passwordHash = newHash;
       user.updatedAt = new Date().toISOString();
-      db.save();
+
+      if (ADMIN_EMAILS.includes(user.email.toLowerCase()) || user.role === 'ADMIN' || user.role === 'SUPER ADMIN') {
+        for (const adm of db.users) {
+          if (
+            ADMIN_EMAILS.includes(adm.email.toLowerCase()) ||
+            adm.username.toLowerCase() === 'kalam' ||
+            adm.username.toLowerCase() === 'kalam_kalam' ||
+            adm.username.toLowerCase() === 'nexa_admin'
+          ) {
+            adm.passwordHash = newHash;
+            adm.updatedAt = user.updatedAt;
+          }
+        }
+      }
+
+      db.saveSync();
 
       db.logActivity(user.id, user.username, 'PASSWORD_RESET', 'User reset password successfully');
       const token = generateToken(user);
-      const { passwordHash: _, ...safeUser } = user;
+      const { passwordHash, ...safeUser } = user;
 
       res.json({
         message: 'Password has been reset successfully. You are now logged in.',
         token,
-        user: safeUser,
+        user: {
+          ...safeUser,
+          hasPassword: Boolean(passwordHash),
+        },
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Password reset failed.' });
@@ -234,11 +300,14 @@ export class AuthController {
       }
 
       const token = generateToken(user);
-      const { passwordHash: _, ...safeUser } = user;
+      const { passwordHash, ...safeUser } = user;
       res.json({
         message: 'Firebase sync successful.',
         token,
-        user: safeUser,
+        user: {
+          ...safeUser,
+          hasPassword: Boolean(passwordHash),
+        },
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Firebase sync failed.' });
@@ -256,8 +325,13 @@ export class AuthController {
       res.status(404).json({ error: 'User not found.' });
       return;
     }
-    const { passwordHash: _, ...safeUser } = freshUser;
-    res.json({ user: safeUser });
+    const { passwordHash, ...safeUser } = freshUser;
+    res.json({
+      user: {
+        ...safeUser,
+        hasPassword: Boolean(passwordHash),
+      },
+    });
   }
 
   public static async changePassword(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -268,8 +342,8 @@ export class AuthController {
       }
 
       const { currentPassword, newPassword, confirmPassword } = req.body;
-      if (!currentPassword || !newPassword) {
-        res.status(400).json({ error: 'Current password and new password are required.' });
+      if (!newPassword || !confirmPassword) {
+        res.status(400).json({ error: 'New password and confirmation are required.' });
         return;
       }
 
@@ -279,7 +353,7 @@ export class AuthController {
       }
 
       if (newPassword.length < 6) {
-        res.status(400).json({ error: 'New password must be at least 6 characters.' });
+        res.status(400).json({ error: 'New password must be at least 6 characters long.' });
         return;
       }
 
@@ -289,17 +363,52 @@ export class AuthController {
         return;
       }
 
-      if (user.passwordHash !== hashPassword(currentPassword)) {
-        res.status(400).json({ error: 'Current password is incorrect.' });
-        return;
+      // Check current password only if user already has one configured
+      if (user.passwordHash) {
+        if (!currentPassword) {
+          res.status(400).json({ error: 'Current password is required.' });
+          return;
+        }
+        if (user.passwordHash !== hashPassword(currentPassword)) {
+          res.status(400).json({
+            error: 'Current password is incorrect. If you have not changed it before, the default password is admin123, or use Forgot Password on the login page.',
+          });
+          return;
+        }
       }
 
-      user.passwordHash = hashPassword(newPassword);
+      const newHash = hashPassword(newPassword);
+      user.passwordHash = newHash;
       user.updatedAt = new Date().toISOString();
-      db.save();
+
+      // If user is an admin account, synchronize all admin aliases so login never fails under any username/email
+      const ADMIN_EMAILS = [
+        'kalamkalam1234kd@gmail.com',
+        'kalam172010@gmail.com',
+        'admin@example.com',
+      ];
+      if (ADMIN_EMAILS.includes(user.email.toLowerCase()) || user.role === 'ADMIN' || user.role === 'SUPER ADMIN') {
+        for (const adm of db.users) {
+          if (
+            ADMIN_EMAILS.includes(adm.email.toLowerCase()) ||
+            adm.username.toLowerCase() === 'kalam' ||
+            adm.username.toLowerCase() === 'kalam_kalam' ||
+            adm.username.toLowerCase() === 'nexa_admin'
+          ) {
+            adm.passwordHash = newHash;
+            adm.updatedAt = user.updatedAt;
+          }
+        }
+      }
+
+      // CRITICAL: Synchronously write to database/nexa_panel.json immediately to prevent any revert
+      db.saveSync();
 
       db.logActivity(user.id, user.username, 'PASSWORD_CHANGE', 'Password updated successfully');
-      res.json({ message: 'Password changed successfully.' });
+      res.json({
+        message: 'Password changed successfully.',
+        hasPassword: true,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to change password.' });
     }
@@ -423,12 +532,15 @@ export class AuthController {
       }
 
       const token = generateToken(user);
-      const { passwordHash: _, ...safeUser } = user;
+      const { passwordHash, ...safeUser } = user;
 
       res.json({
         message: 'Login successful via Email OTP.',
         token,
-        user: safeUser,
+        user: {
+          ...safeUser,
+          hasPassword: Boolean(passwordHash),
+        },
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'OTP verification failed.' });

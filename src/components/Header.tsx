@@ -3,16 +3,6 @@ import {
   Menu,
   Wallet,
   User as UserIcon,
-  Shield,
-  Sparkles,
-  LayoutDashboard,
-  ShoppingBag,
-  KeyRound,
-  History,
-  LifeBuoy,
-  Share2,
-  Terminal,
-  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useSite } from '../context/SiteContext.js';
@@ -23,114 +13,128 @@ interface HeaderProps {
   currentPage: string;
 }
 
-const PAGE_META: Record<string, { label: string; icon: any }> = {
-  dashboard: { label: 'Dashboard', icon: LayoutDashboard },
-  deposit: { label: 'Deposit', icon: Wallet },
-  buy: { label: 'Buy Keys', icon: ShoppingBag },
-  keys: { label: 'My Keys', icon: KeyRound },
-  history: { label: 'History', icon: History },
-  tickets: { label: 'Support', icon: LifeBuoy },
-  refer: { label: 'Refer & Earn', icon: Share2 },
-  profile: { label: 'Profile', icon: UserIcon },
-  api: { label: 'Reseller API', icon: Terminal },
-  admin: { label: 'Admin Panel', icon: ShieldCheck },
+const PAGE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  deposit: 'Deposit',
+  buy: 'Buy Key',
+  keys: 'My Keys',
+  history: 'History',
+  tickets: 'Support',
+  refer: 'Refer & Earn',
+  profile: 'Profile',
+  api: 'Developer API',
+  admin: 'Administration',
 };
 
 export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate, currentPage }) => {
-  const { user, balance, role } = useAuth();
+  const { user, balance } = useAuth();
   const { siteConfig } = useSite();
 
-  const brandInitials = siteConfig.siteTitle
-    ? siteConfig.siteTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
-    : 'KF';
-
-  const activePageInfo = PAGE_META[currentPage] || { label: currentPage, icon: LayoutDashboard };
-  const ActiveIcon = activePageInfo.icon;
+  const activeLabel = PAGE_LABELS[currentPage] || 'Dashboard';
 
   return (
-    <header className="sticky top-0 z-30 w-full h-14 bg-[#0a0a0f]/90 backdrop-blur-md border-b border-white/5 px-3 sm:px-6 flex items-center justify-between">
-      {/* Left zone: Hamburger menu + Brand emblem & status dot + Current Page Indicator */}
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+    <header className="sticky top-0 z-30 w-full h-14 bg-[#0b0d16]/90 backdrop-blur-xl border-b border-rose-500/20 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-8 shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
+      {/* Zone 1: Brand Wordmark & Contextual Breadcrumb */}
+      <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onOpenDrawer}
-          className="w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-slate-300 hover:text-white transition-all border border-white/5"
+          className="md:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 transition-colors border border-rose-500/30"
           aria-label="Open Navigation Menu"
         >
-          <Menu className="w-5 h-5 text-rose-500" />
+          <Menu className="w-5 h-5" />
         </button>
 
-        <button
-          onClick={() => onNavigate('dashboard')}
-          className="flex items-center gap-2 text-left group focus:outline-none shrink-0"
-        >
-          <div className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500/20 to-red-600/30 border border-rose-500/40 text-rose-400 group-hover:border-rose-400 transition-all shadow-[0_0_12px_rgba(244,63,94,0.3)] overflow-hidden">
-            {siteConfig.logoUrl ? (
-              <img src={siteConfig.logoUrl} alt="Logo" className="w-full h-full object-cover" />
-            ) : (
-              <span className="font-extrabold text-sm tracking-tighter">{brandInitials}</span>
-            )}
-            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-[#070709] animate-pulse" />
-          </div>
-
-          <div className="flex flex-col hidden xs:flex">
-            <div className="flex items-center gap-1.5">
-              <span className="font-display font-black tracking-wider text-base text-white group-hover:text-rose-400 transition-colors uppercase">
-                {siteConfig.siteTitle || 'KALAM FF PANEL'}
-              </span>
-              {role === 'RESELLER' && (
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold tracking-wider uppercase">
-                  VIP
-                </span>
-              )}
-              {role === 'ADMIN' && (
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30 font-semibold tracking-wider uppercase">
-                  ADMIN
-                </span>
-              )}
-            </div>
-          </div>
-        </button>
-
-        {/* Current Active Page Pill / Indicator on Header */}
-        <div className="flex items-center gap-1.5 pl-2 sm:pl-3 border-l border-white/10 shrink-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-white shadow-[0_0_10px_rgba(244,63,94,0.2)]">
-            <ActiveIcon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-            <span className="font-display font-black text-[11px] sm:text-xs uppercase tracking-wider text-rose-200">
-              {activePageInfo.label}
-            </span>
-          </div>
+        <div className="flex items-center gap-2.5 min-w-0 text-sm">
+          <button
+            onClick={() => onNavigate('dashboard')}
+            className="font-display font-bold tracking-tight bg-gradient-to-r from-white via-rose-200 to-amber-200 bg-clip-text text-transparent hover:opacity-90 transition-opacity whitespace-nowrap shrink-0 focus:outline-none cursor-pointer"
+          >
+            {siteConfig.siteTitle || 'Nexa Panel'}
+          </button>
+          <span aria-hidden="true" className="text-slate-600 select-none">/</span>
+          <span className="font-semibold text-rose-400 truncate whitespace-nowrap">
+            {activeLabel}
+          </span>
         </div>
       </div>
 
-      {/* Right zone: Live wallet balance & profile avatar */}
-      <div className="flex items-center gap-2 sm:gap-3">
-        {/* Dynamic Balance Indicator */}
+      {/* Zone 2: Quick Navigation Links (Desktop) */}
+      <nav className="hidden lg:flex items-center gap-6 text-xs font-medium text-slate-400">
+        <button
+          onClick={() => onNavigate('dashboard')}
+          className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 cursor-pointer ${
+            currentPage === 'dashboard' ? 'text-rose-400 font-semibold underline underline-offset-8 decoration-rose-500 decoration-2' : ''
+          }`}
+        >
+          Overview
+        </button>
+        <button
+          onClick={() => onNavigate('buy')}
+          className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 cursor-pointer ${
+            currentPage === 'buy' ? 'text-rose-400 font-semibold underline underline-offset-8 decoration-rose-500 decoration-2' : ''
+          }`}
+        >
+          Buy Key
+        </button>
+        <button
+          onClick={() => onNavigate('keys')}
+          className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 cursor-pointer ${
+            currentPage === 'keys' ? 'text-amber-400 font-semibold underline underline-offset-8 decoration-amber-500 decoration-2' : ''
+          }`}
+        >
+          My Keys
+        </button>
         <button
           onClick={() => onNavigate('deposit')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-transparent border border-rose-500/30 hover:border-rose-500/60 transition-all active:scale-95 group shadow-[0_0_15px_-3px_rgba(244,63,94,0.15)]"
+          className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 cursor-pointer ${
+            currentPage === 'deposit' ? 'text-emerald-400 font-semibold underline underline-offset-8 decoration-emerald-500 decoration-2' : ''
+          }`}
         >
-          <Wallet className="w-3.5 h-3.5 text-rose-400 group-hover:text-rose-300 transition-colors" />
-          <div className="flex items-baseline gap-0.5">
-            <span className="text-xs text-rose-400 font-bold">{siteConfig.currencySymbol || '₹'}</span>
-            <span className="font-mono text-sm font-bold text-white tabular-nums tracking-tight">
-              {balance.toFixed(2)}
-            </span>
-          </div>
-          <span className="text-[10px] text-rose-400/80 font-medium ml-1 hidden xs:inline">+ Add</span>
+          Deposit
+        </button>
+        <button
+          onClick={() => onNavigate('history')}
+          className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 cursor-pointer ${
+            currentPage === 'history' ? 'text-sky-400 font-semibold underline underline-offset-8 decoration-sky-500 decoration-2' : ''
+          }`}
+        >
+          Ledger
+        </button>
+        <button
+          onClick={() => onNavigate('tickets')}
+          className={`hover:text-white transition-colors whitespace-nowrap shrink-0 py-1 cursor-pointer ${
+            currentPage === 'tickets' ? 'text-violet-400 font-semibold underline underline-offset-8 decoration-violet-500 decoration-2' : ''
+          }`}
+        >
+          Support
+        </button>
+      </nav>
+
+      {/* Zone 3: Primary Wallet Action + Profile */}
+      <div className="flex items-center gap-2.5 shrink-0">
+        <button
+          onClick={() => onNavigate('deposit')}
+          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-semibold transition-all shadow-md shadow-rose-950/50 flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+        >
+          <Wallet className="w-3.5 h-3.5 shrink-0" />
+          <span className="font-mono tabular-nums font-bold">
+            {siteConfig.currencySymbol || '₹'}{balance.toFixed(2)}
+          </span>
+          <span className="text-rose-100 hidden sm:inline">· Deposit</span>
         </button>
 
-        {/* Profile Avatar */}
         <button
           onClick={() => onNavigate('profile')}
-          className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 hover:border-rose-500/50 flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-95 overflow-hidden"
-          aria-label="User Profile"
+          className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500/20 to-violet-600/20 hover:from-rose-500/30 hover:to-violet-600/30 border border-rose-500/30 flex items-center justify-center text-rose-300 hover:text-white transition-colors shrink-0 cursor-pointer"
+          aria-label="Account Settings"
+          title={user?.username ? `@${user.username}` : 'Profile'}
         >
           {user?.username ? (
-            <span className="font-display font-bold text-xs uppercase text-rose-400">
+            <span className="font-display font-bold text-xs uppercase text-rose-300">
               {user.username.slice(0, 2)}
             </span>
           ) : (
-            <UserIcon className="w-4 h-4 text-slate-300" />
+            <UserIcon className="w-4 h-4 text-rose-300" />
           )}
         </button>
       </div>
