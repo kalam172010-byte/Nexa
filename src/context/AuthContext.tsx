@@ -120,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               username,
               email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
               role: 'USER',
-              balance: 100,
+              balance: 0.0,
               referralCode: `REF_${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
               twoFactorEnabled: false,
               isBanned: false,

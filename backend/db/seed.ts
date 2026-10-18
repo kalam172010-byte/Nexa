@@ -18,7 +18,7 @@ export function seedDatabaseIfEmpty() {
       email: 'user@example.com',
       passwordHash: hashPassword('user123'),
       role: 'USER',
-      balance: 500.0,
+      balance: 0.0,
       referralCode: 'NEXA99PRO',
       twoFactorEnabled: false,
       isBanned: false,
@@ -32,7 +32,7 @@ export function seedDatabaseIfEmpty() {
       email: 'reseller@example.com',
       passwordHash: hashPassword('reseller123'),
       role: 'RESELLER',
-      balance: 1000.0,
+      balance: 0.0,
       referralCode: 'APEXVIP77',
       twoFactorEnabled: false,
       isBanned: false,
@@ -59,6 +59,7 @@ export function seedDatabaseIfEmpty() {
 
   // Ensure primary admin accounts have ADMIN privileges without overriding custom passwords
   const adminEmails = [
+    { email: 'kk7953926@gmail.com', username: 'kk7953926', id: 'USR-1792242683123' },
     { email: 'kalam172010@gmail.com', username: 'kalam', id: 'USR-KALAM-172010' },
     { email: 'kalamkalam1234kd@gmail.com', username: 'kalam_admin', id: 'USR-KALAM-PRIMARY' },
   ];

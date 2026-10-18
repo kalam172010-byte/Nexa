@@ -19,6 +19,7 @@ router.post('/auth/otp/send', AuthController.sendOtp);
 router.post('/auth/otp/verify', AuthController.verifyOtp);
 router.get('/auth/email-status', AuthController.getEmailStatus);
 router.post('/auth/firebase-sync', AuthController.firebaseSync);
+router.post('/auth/token-refresh', AuthController.refreshToken);
 router.post('/auth/reset-password', AuthController.resetPassword);
 router.post('/auth/forgot-password', AuthController.forgotPassword);
 router.get('/auth/me', authenticate as any, AuthController.getCurrentUser as any);
@@ -64,8 +65,9 @@ router.get('/payments/webhook', WalletController.handleWebhook as any);
 router.post('/wallet/upgrade-reseller', authenticate as any, AdminController.upgradeToReseller as any);
 
 // --- Outbound Reseller API (External Websites Connecting to Us) ---
-router.post('/v1/reseller/buy', OutboundResellerController.handleResellerBuy as any);
-router.post('/reseller_v1.php', OutboundResellerController.handleResellerBuy as any);
+router.all('/v1/reseller/buy', OutboundResellerController.handleResellerBuy as any);
+router.all('/reseller_v1.php', OutboundResellerController.handleResellerBuy as any);
+router.all('/reseller/buy', OutboundResellerController.handleResellerBuy as any);
 router.get('/reseller/api-credentials', authenticate as any, OutboundResellerController.getApiCredentials as any);
 router.post('/reseller/api-credentials/regenerate', authenticate as any, OutboundResellerController.regenerateApiKey as any);
 

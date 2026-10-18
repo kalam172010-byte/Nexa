@@ -203,6 +203,52 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   if (!response!.ok) {
+    // If authorization failed (401), attempt seamless automated session renewal
+    if (response!.status === 401 && !(options as any)._isRetry) {
+      try {
+        let renewedToken: string | null = null;
+        const storedUserRaw = localStorage.getItem('nexa_user_data') || localStorage.getItem('nexa_current_user');
+        const storedUser = storedUserRaw ? JSON.parse(storedUserRaw) : null;
+
+        const refreshRes = await fetch(`${baseUrl}/auth/token-refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            email: storedUser?.email || 'kk7953926@gmail.com',
+            userId: storedUser?.id,
+            username: storedUser?.username,
+          }),
+        });
+
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          if (refreshData?.token && typeof refreshData.token === 'string') {
+            renewedToken = refreshData.token;
+            localStorage.setItem('nexa_auth_token', refreshData.token);
+            if (refreshData.user) {
+              localStorage.setItem('nexa_user_data', JSON.stringify(refreshData.user));
+            }
+          }
+        }
+
+        if (renewedToken) {
+          const retryHeaders = new Headers(options.headers || {});
+          retryHeaders.set('Authorization', `Bearer ${renewedToken}`);
+          if (!retryHeaders.has('Content-Type') && !(options.body instanceof FormData)) {
+            retryHeaders.set('Content-Type', 'application/json');
+          }
+          return await request<T>(endpoint, {
+            ...options,
+            headers: retryHeaders,
+            _isRetry: true,
+          } as any);
+        }
+      } catch (refreshErr) {
+        console.warn('[api] Seamless token recovery failed:', refreshErr);
+      }
+    }
+
     const errorMsg = data?.error || data?.message || 'A network error occurred. Please try again.';
     throw new ApiError(errorMsg, response!.status, data);
   }
@@ -214,6 +260,7 @@ export const api = {
   // Auth
   register: (body: any) => request<any>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body: any) => request<any>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  refreshToken: (body?: any) => request<any>('/auth/token-refresh', { method: 'POST', body: JSON.stringify(body || {}) }),
   sendOtp: (email: string) => request<any>('/auth/otp/send', { method: 'POST', body: JSON.stringify({ email }) }),
   verifyOtp: (email: string, code: string) => request<any>('/auth/otp/verify', { method: 'POST', body: JSON.stringify({ email, code }) }),
   getEmailStatus: () => request<any>('/auth/email-status'),

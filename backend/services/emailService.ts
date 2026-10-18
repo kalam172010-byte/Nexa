@@ -92,9 +92,9 @@ export class EmailService {
         rejectUnauthorized: false,
         minVersion: 'TLSv1.2',
       },
-      connectionTimeout: 12000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
+      connectionTimeout: 5000,
+      greetingTimeout: 4000,
+      socketTimeout: 7000,
     });
   }
 

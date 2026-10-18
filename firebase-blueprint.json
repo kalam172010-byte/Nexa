@@ -166,12 +166,25 @@
       "properties": {
         "status": { "type": "string", "maxLength": 32 }
       }
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Platform settings including IMAP, SMTP, and site configurations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string" }
+      }
     }
   },
   "firestore": {
     "/test/{testId}": {
       "schema": "TestConnection",
       "description": "Public health check endpoint to validate Firestore connection"
+    },
+    "/settings/{settingId}": {
+      "schema": "SystemSettings",
+      "description": "Platform configurations including mail server settings"
     },
     "/users/{userId}": {
       "schema": "User",

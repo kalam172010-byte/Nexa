@@ -982,18 +982,40 @@ export class AdminController {
         ...body,
       };
 
+      // Clean and normalize sender email
+      if (body.senderEmail) {
+        updatedData.senderEmail = String(body.senderEmail).trim();
+        // If smtpUser / imapUser were left empty or not provided, sync them to senderEmail
+        if (!body.smtpUser || !String(body.smtpUser).trim()) {
+          updatedData.smtpUser = updatedData.senderEmail;
+        }
+        if (!body.imapUser || !String(body.imapUser).trim()) {
+          updatedData.imapUser = updatedData.senderEmail;
+        }
+      }
+
       // Only update password if user passed a new unmasked password
       if (!body.smtpPass || body.smtpPass.includes('••••')) {
         delete updatedData.smtpPass;
-      }
-      if (!body.imapPass || body.imapPass.includes('••••')) {
-        delete updatedData.imapPass;
+      } else {
+        const raw = String(body.smtpPass).trim();
+        updatedData.smtpPass = raw.replace(/^["']+|["']+$/g, '').trim();
       }
 
-      // If user entered a new password in SMTP but left IMAP blank, sync IMAP to use the same App Password
-      if (updatedData.smtpPass && !updatedData.imapPass && !body.imapPass) {
+      if (!body.imapPass || body.imapPass.includes('••••')) {
+        delete updatedData.imapPass;
+      } else {
+        const raw = String(body.imapPass).trim();
+        updatedData.imapPass = raw.replace(/^["']+|["']+$/g, '').trim();
+      }
+
+      const isSmtpNew = Boolean(updatedData.smtpPass && !updatedData.smtpPass.includes('••••'));
+      const isImapNew = Boolean(updatedData.imapPass && !updatedData.imapPass.includes('••••'));
+
+      // If user entered a new password in SMTP, also update IMAP password
+      if (isSmtpNew && !isImapNew) {
         updatedData.imapPass = updatedData.smtpPass;
-      } else if (updatedData.imapPass && !updatedData.smtpPass && !body.smtpPass) {
+      } else if (isImapNew && !isSmtpNew) {
         updatedData.smtpPass = updatedData.imapPass;
       }
 

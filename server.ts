@@ -39,7 +39,19 @@ async function startServer() {
     req.url = '/reseller_v1.php';
     apiRouter(req, res, next);
   });
+  app.all('/api/reseller_v1.php', (req, res, next) => {
+    req.url = '/reseller_v1.php';
+    apiRouter(req, res, next);
+  });
   app.all('/api/reseller/buy', (req, res, next) => {
+    req.url = '/v1/reseller/buy';
+    apiRouter(req, res, next);
+  });
+  app.all('/v1/reseller/buy', (req, res, next) => {
+    req.url = '/v1/reseller/buy';
+    apiRouter(req, res, next);
+  });
+  app.all('/api/v1/reseller/buy', (req, res, next) => {
     req.url = '/v1/reseller/buy';
     apiRouter(req, res, next);
   });

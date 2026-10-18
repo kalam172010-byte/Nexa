@@ -345,7 +345,7 @@ export class Database {
       ...this.data.emailConfig,
       ...config,
     };
-    this.save();
+    this.saveSync();
     return this.data.emailConfig;
   }
 

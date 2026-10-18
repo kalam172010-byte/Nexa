@@ -6,7 +6,7 @@
       "email": "user@example.com",
       "passwordHash": "011cb1ac857087752ccc7100b2e4c2a6d6cdad77a19c1173d447cec7063d9fcc",
       "role": "USER",
-      "balance": 2220,
+      "balance": 0,
       "referralCode": "NEXA99PRO",
       "twoFactorEnabled": false,
       "isBanned": false,
@@ -19,7 +19,7 @@
       "email": "reseller@example.com",
       "passwordHash": "2820c2c5c5f0fd331d8126f25689911eb833a03f2a8d1e4fcda4338ca5edc758",
       "role": "RESELLER",
-      "balance": 1000,
+      "balance": 0,
       "referralCode": "APEXVIP77",
       "twoFactorEnabled": false,
       "isBanned": false,
@@ -84,14 +84,15 @@
       "id": "USR-1792242683123",
       "username": "kk7953926",
       "email": "kk7953926@gmail.com",
-      "passwordHash": "",
-      "role": "USER",
-      "balance": 0,
+      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
+      "role": "ADMIN",
+      "balance": 5000,
       "referralCode": "NX18EDC3",
-      "twoFactorEnabled": true,
+      "twoFactorEnabled": false,
       "isBanned": false,
+      "apiKey": "nexa_live_7953926_master_key",
       "createdAt": "2026-10-17T13:11:23.123Z",
-      "updatedAt": "2026-10-17T15:08:54.317Z"
+      "updatedAt": "2026-10-18T07:05:28.553Z"
     },
     {
       "id": "USR-1792253604314",
@@ -228,6 +229,42 @@
       "assignedOrderId": "ORD-EXT-1792251217797-EDCC",
       "assignedAt": "2026-10-17T15:33:37.799Z",
       "createdAt": "2026-10-17T15:33:37.799Z"
+    },
+    {
+      "id": "KEY-1792307066383-0-0222",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "keyCode": "NEXA-EXT-3F6B14CC-B83BF36A",
+      "isUsed": true,
+      "status": "USED",
+      "assignedUserId": "USR-1792242683123",
+      "assignedOrderId": "ORD-EXT-1792307066382-C126",
+      "assignedAt": "2026-10-18T07:04:26.383Z",
+      "createdAt": "2026-10-18T07:04:26.383Z"
+    },
+    {
+      "id": "KEY-1792307128543-0-886d",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "keyCode": "NEXA-EXT-473EDBF7-7CD6D8EB",
+      "isUsed": true,
+      "status": "USED",
+      "assignedUserId": "USR-1792242683123",
+      "assignedOrderId": "ORD-EXT-1792307128542-FCBD",
+      "assignedAt": "2026-10-18T07:05:28.543Z",
+      "createdAt": "2026-10-18T07:05:28.543Z"
+    },
+    {
+      "id": "KEY-1792307128554-0-e266",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "keyCode": "NEXA-EXT-CDAE20D8-54859912",
+      "isUsed": true,
+      "status": "USED",
+      "assignedUserId": "USR-1792242683123",
+      "assignedOrderId": "ORD-EXT-1792307128553-68B1",
+      "assignedAt": "2026-10-18T07:05:28.554Z",
+      "createdAt": "2026-10-18T07:05:28.554Z"
     }
   ],
   "orders": [
@@ -282,9 +319,78 @@
       "deliveredKeyCode": "NEXA-EXT-3DFB64D7-54641DDF",
       "status": "COMPLETED",
       "createdAt": "2026-10-17T15:33:37.800Z"
+    },
+    {
+      "id": "ORD-EXT-1792307066382-C126",
+      "userId": "USR-1792242683123",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 850,
+      "deliveredKeyId": "ORD-EXT-1792307066382-C126",
+      "deliveredKeyCode": "NEXA-EXT-3F6B14CC-B83BF36A",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-18T07:04:26.383Z"
+    },
+    {
+      "id": "ORD-EXT-1792307128542-FCBD",
+      "userId": "USR-1792242683123",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 850,
+      "deliveredKeyId": "ORD-EXT-1792307128542-FCBD",
+      "deliveredKeyCode": "NEXA-EXT-473EDBF7-7CD6D8EB",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-18T07:05:28.544Z"
+    },
+    {
+      "id": "ORD-EXT-1792307128553-68B1",
+      "userId": "USR-1792242683123",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 850,
+      "deliveredKeyId": "ORD-EXT-1792307128553-68B1",
+      "deliveredKeyCode": "NEXA-EXT-CDAE20D8-54859912",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-18T07:05:28.554Z"
     }
   ],
   "transactions": [
+    {
+      "id": "TXN-1792307128553-933D4C",
+      "userId": "USR-1792242683123",
+      "type": "PURCHASE",
+      "amount": -850,
+      "description": "External API Purchase (1x): KALAM VIP AIMBOT FF OB55 (60 Days)",
+      "referenceId": "ORD-EXT-1792307128553-68B1",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-18T07:05:28.553Z"
+    },
+    {
+      "id": "TXN-1792307128542-E2724C",
+      "userId": "USR-1792242683123",
+      "type": "PURCHASE",
+      "amount": -850,
+      "description": "External API Purchase (1x): KALAM VIP AIMBOT FF OB55 (60 Days)",
+      "referenceId": "ORD-EXT-1792307128542-FCBD",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-18T07:05:28.542Z"
+    },
+    {
+      "id": "TXN-1792307066382-EC802C",
+      "userId": "USR-1792242683123",
+      "type": "PURCHASE",
+      "amount": -850,
+      "description": "External API Purchase (1x): KALAM VIP AIMBOT FF OB55 (60 Days)",
+      "referenceId": "ORD-EXT-1792307066382-C126",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-18T07:04:26.382Z"
+    },
     {
       "id": "TXN-1792253168933-EB6258",
       "userId": "USR-KALAM-ADMIN",
@@ -566,6 +672,44 @@
     }
   ],
   "deposits": [
+    {
+      "id": "DEP-1792307994352-9A0E",
+      "userId": "USR-1792242683123",
+      "amount": 50,
+      "payableAmount": 50,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792307994352-187B76",
+      "gatewayOrderId": "fg_EBXS3CWB",
+      "qrUrl": "https://famgateway.in/api/qr-image.php?order_id=fg_EBXS3CWB",
+      "checkoutUrl": "https://famgateway.in/pay.php?order_id=fg_EBXS3CWB",
+      "upiIntent": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_EBXS3CWB&am=50.00&cu=INR",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Kalam",
+      "qrPayload": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_EBXS3CWB&am=50.00&cu=INR",
+      "status": "PENDING",
+      "expiresAt": "2026-10-18T07:29:54.352Z",
+      "createdAt": "2026-10-18T07:19:54.459Z"
+    },
+    {
+      "id": "DEP-1792306899656-CF6D",
+      "userId": "USR-1792242683123",
+      "amount": 100,
+      "payableAmount": 100,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792306899656-1B67FE",
+      "gatewayOrderId": "fg_G8QZ1FRU",
+      "qrUrl": "https://famgateway.in/api/qr-image.php?order_id=fg_G8QZ1FRU",
+      "checkoutUrl": "https://famgateway.in/pay.php?order_id=fg_G8QZ1FRU",
+      "upiIntent": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_G8QZ1FRU&am=100.00&cu=INR",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Kalam",
+      "qrPayload": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_G8QZ1FRU&am=100.00&cu=INR",
+      "status": "PENDING",
+      "expiresAt": "2026-10-18T07:11:39.656Z",
+      "createdAt": "2026-10-18T07:01:40.003Z"
+    },
     {
       "id": "DEP-1792253604331-2D1A",
       "userId": "USR-1792253604314",
@@ -1229,6 +1373,209 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1792308397536-c3cc02",
+      "username": "reseller@customgamingdomain.com",
+      "action": "EMAIL_OTP_FALLBACK",
+      "details": "SMTP attempt failed (Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-3acd9c4b4eesm8584951a91.2 - gsmtp). OTP generated for preview: 405677",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:26:37.536Z"
+    },
+    {
+      "id": "LOG-1792308396250-2fe342",
+      "username": "player99@outlook.com",
+      "action": "EMAIL_OTP_FALLBACK",
+      "details": "SMTP attempt failed (Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-2e97e833f1asm26815805ad.43 - gsmtp). OTP generated for preview: 605117",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:26:36.250Z"
+    },
+    {
+      "id": "LOG-1792308394239-d58079",
+      "username": "gamer123@yahoo.com",
+      "action": "EMAIL_OTP_FALLBACK",
+      "details": "SMTP attempt failed (Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-89f54b2eec9sm2750831b3a.8 - gsmtp). OTP generated for preview: 357143",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:26:34.239Z"
+    },
+    {
+      "id": "LOG-1792307994460-8a5249",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792307994352-9A0E (fg_EBXS3CWB) for ₹50",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:19:54.460Z"
+    },
+    {
+      "id": "LOG-1792307994459-c6d1c7",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "GATEWAY_ORDER_CREATED",
+      "details": "Live gateway order fg_EBXS3CWB created for ₹50.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:19:54.459Z"
+    },
+    {
+      "id": "LOG-1792307954772-2ac93b",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:19:14.772Z"
+    },
+    {
+      "id": "LOG-1792307294677-2cce3b",
+      "userId": "USR-1792307294677",
+      "username": "otp_new_gamer",
+      "action": "OTP_SIGNUP",
+      "details": "Registered via Email OTP: otp_new_gamer@example.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:08:14.677Z"
+    },
+    {
+      "id": "LOG-1792307294663-41085a",
+      "username": "otp_new_gamer@example.com",
+      "action": "EMAIL_OTP_FALLBACK",
+      "details": "SMTP attempt failed (Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-3acd05c9255sm5609109a91.2 - gsmtp). OTP generated for preview: 498461",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:08:14.663Z"
+    },
+    {
+      "id": "LOG-1792307292629-5c24d1",
+      "userId": "fb_live_test_user_999",
+      "username": "fb_live_user",
+      "action": "FIREBASE_AUTH_SIGNUP",
+      "details": "Registered via Firebase: fb_live_user@example.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:08:12.629Z"
+    },
+    {
+      "id": "LOG-1792307292617-e6e121",
+      "userId": "USR-1792307292617",
+      "username": "live_user_test1",
+      "action": "USER_REGISTER",
+      "details": "New user registered via referral: None",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:08:12.617Z"
+    },
+    {
+      "id": "LOG-1792307128555-16b9cd",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "RESELLER_API_KEY_SUCCESS",
+      "details": "External API generated 1x keys for KALAM VIP AIMBOT FF OB55 (60 Days) | Total: ₹850",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:05:28.555Z"
+    },
+    {
+      "id": "LOG-1792307128544-be993d",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "RESELLER_API_KEY_SUCCESS",
+      "details": "External API generated 1x keys for KALAM VIP AIMBOT FF OB55 (60 Days) | Total: ₹850",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:05:28.544Z"
+    },
+    {
+      "id": "LOG-1792307128533-315931",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=kk7953926@gmail.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:05:28.533Z"
+    },
+    {
+      "id": "LOG-1792307128518-ef2ef7",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:05:28.518Z"
+    },
+    {
+      "id": "LOG-1792307066384-542f48",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "RESELLER_API_KEY_SUCCESS",
+      "details": "External API generated 1x keys for KALAM VIP AIMBOT FF OB55 (60 Days) | Total: ₹850",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:04:26.384Z"
+    },
+    {
+      "id": "LOG-1792306900004-46864c",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792306899656-CF6D (fg_G8QZ1FRU) for ₹100",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:01:40.004Z"
+    },
+    {
+      "id": "LOG-1792306900003-de5f8a",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "GATEWAY_ORDER_CREATED",
+      "details": "Live gateway order fg_G8QZ1FRU created for ₹100.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:01:40.003Z"
+    },
+    {
+      "id": "LOG-1792306899644-78a66e",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:01:39.644Z"
+    },
+    {
+      "id": "LOG-1792306882377-3edcbf",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "PRODUCT_DELETE",
+      "details": "Permanently deleted product TEST VIP AUTO HEADSHOT (PROD-882350) and its variants",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:01:22.377Z"
+    },
+    {
+      "id": "LOG-1792306882341-cfcb82",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T07:01:22.341Z"
+    },
+    {
+      "id": "LOG-1792306795581-73a829",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "EMAIL_CONFIG_UPDATE",
+      "details": "Admin updated Email/IMAP/SMTP configuration: Sender=test@customdomain.com, Enabled=true",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T06:59:55.581Z"
+    },
+    {
+      "id": "LOG-1792306795571-ca372a",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T06:59:55.571Z"
+    },
+    {
+      "id": "LOG-1792306672542-2374e2",
+      "userId": "USR-1792242683123",
+      "username": "kk7953926",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T06:57:52.542Z"
+    },
     {
       "id": "LOG-1792301745726-2d58cd",
       "userId": "USR-1792301745726",
@@ -3042,22 +3389,23 @@
     "PROD-TROLL-04",
     "PROD-CARROM-05",
     "PROD-709750",
-    "PROD-042859"
+    "PROD-042859",
+    "PROD-882350"
   ],
   "emailConfig": {
     "enabled": true,
     "protocol": "smtp",
-    "senderEmail": "kalamkalam1234kd@gmail.com",
-    "senderName": "KALAM FF PANEL",
+    "senderEmail": "kk7953926@gmail.com",
+    "senderName": "KALAM VIP PANEL",
     "smtpHost": "smtp.gmail.com",
     "smtpPort": 587,
     "secure": false,
-    "smtpUser": "kalamkalam1234kd@gmail.com",
-    "smtpPass": "nrvo khka qtej hyqe",
+    "smtpUser": "kk7953926@gmail.com",
+    "smtpPass": "testpass1234",
     "imapHost": "imap.gmail.com",
     "imapPort": 993,
-    "imapUser": "kalamkalam1234kd@gmail.com",
-    "imapPass": "nrvo khka qtej hyqe",
+    "imapUser": "kk7953926@gmail.com",
+    "imapPass": "testpass1234",
     "imapSecure": true,
     "otpExpiryMinutes": 10,
     "allowOtpSignup": true,

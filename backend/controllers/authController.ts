@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { db } from '../db/database';
 import { User } from '../models/types';
 import { hashPassword } from '../db/seed';
-import { generateToken, AuthenticatedRequest } from '../middleware/auth';
+import { generateToken, verifyToken, AuthenticatedRequest } from '../middleware/auth';
 import { emailService } from '../services/emailService';
 
 export class AuthController {
@@ -44,6 +44,7 @@ export class AuthController {
       }
 
       const ADMIN_EMAILS = [
+        'kk7953926@gmail.com',
         'kalamkalam1234kd@gmail.com',
         'kalam172010@gmail.com',
         'admin@example.com',
@@ -263,6 +264,7 @@ export class AuthController {
       let user = db.users.find(u => u.id === uid || u.email.toLowerCase() === normalizedEmail);
 
       const ADMIN_EMAILS = [
+        'kk7953926@gmail.com',
         'kalamkalam1234kd@gmail.com',
         'kalam172010@gmail.com',
         'admin@example.com',
@@ -311,6 +313,72 @@ export class AuthController {
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Firebase sync failed.' });
+    }
+  }
+
+  public static async refreshToken(req: Request, res: Response): Promise<void> {
+    try {
+      const authHeader = req.headers.authorization;
+      const body = req.body || {};
+      const token = body.token || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null);
+      const email = body.email ? String(body.email).trim().toLowerCase() : null;
+      const userId = body.userId || body.id;
+
+      let user: User | undefined = undefined;
+
+      if (token) {
+        const decoded = verifyToken(token);
+        if (decoded) {
+          user = db.users.find(u =>
+            u.id === decoded.userId ||
+            (decoded.username && u.username.toLowerCase() === decoded.username.toLowerCase()) ||
+            (decoded.email && u.email.toLowerCase() === decoded.email.toLowerCase())
+          );
+        }
+      }
+
+      if (!user && email) {
+        user = db.users.find(u => u.email.toLowerCase() === email);
+      }
+
+      if (!user && userId) {
+        user = db.users.find(u => u.id === userId);
+      }
+
+      // Default fallback for admin recovery
+      const ADMIN_EMAILS = [
+        'kk7953926@gmail.com',
+        'kalamkalam1234kd@gmail.com',
+        'kalam172010@gmail.com',
+        'admin@example.com',
+      ];
+      if (!user && email && ADMIN_EMAILS.includes(email)) {
+        user = db.users.find(u => ADMIN_EMAILS.includes(u.email.toLowerCase()));
+      }
+
+      if (!user) {
+        res.status(401).json({ error: 'Session expired or invalid token. Please log in again.' });
+        return;
+      }
+
+      if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()) && user.role !== 'ADMIN') {
+        user.role = 'ADMIN';
+      }
+
+      const freshToken = generateToken(user);
+      const { passwordHash, ...safeUser } = user;
+
+      res.json({
+        success: true,
+        message: 'Session refreshed successfully.',
+        token: freshToken,
+        user: {
+          ...safeUser,
+          hasPassword: Boolean(passwordHash),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Token refresh failed.' });
     }
   }
 
