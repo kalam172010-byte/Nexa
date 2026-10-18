@@ -109,7 +109,7 @@ export class OrderController {
               expiresAt: expiryDate.toISOString(),
               status: 'ACTIVE',
               purchaseSource: 'WEB',
-              purchaseSourceLabel: 'This Key Buyed by Web',
+              purchaseSourceLabel: 'Buy from Website',
               createdAt: new Date().toISOString(),
             };
             db.digitalKeys.push(extKey);
@@ -167,7 +167,7 @@ export class OrderController {
           deliveredKeyCode: k.keyCode,
           status: 'COMPLETED',
           purchaseSource: 'WEB',
-          purchaseSourceLabel: 'This Key Buyed by Web',
+          purchaseSourceLabel: 'Buy from Website',
           createdAt: new Date().toISOString(),
         };
         db.orders.unshift(order);
@@ -200,7 +200,7 @@ export class OrderController {
           expiresAt: deliveredKey.expiresAt,
           productName: product.name,
           purchaseSource: 'WEB',
-          purchaseSourceLabel: 'This Key Buyed by Web',
+          purchaseSourceLabel: 'Buy from Website',
         },
         key: {
           id: deliveredKey.id,

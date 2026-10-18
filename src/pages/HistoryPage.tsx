@@ -176,8 +176,8 @@ export const HistoryPage: React.FC = () => {
                             (tx.purchaseSource === 'API' ||
                             String(tx.description || '').includes('Buyed by API') ||
                             String(tx.description || '').includes('Outbound API')
-                              ? 'This Key Buyed by API'
-                              : 'This Key Buyed by Web')}
+                              ? 'Buy from API'
+                              : 'Buy from Website')}
                         </span>
                       )}
                     </div>

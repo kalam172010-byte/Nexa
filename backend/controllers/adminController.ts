@@ -648,8 +648,8 @@ export class AdminController {
           purchaseSourceLabel:
             k.isUsed || k.assignedUserId
               ? isApi
-                ? 'This Key Buyed by API'
-                : 'This Key Buyed by Web'
+                ? 'Buy from API'
+                : 'Buy from Website'
               : k.purchaseSourceLabel,
         };
       });
@@ -756,7 +756,7 @@ export class AdminController {
           ...o,
           username: user?.username || 'Unknown',
           purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
-          purchaseSourceLabel: isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web',
+          purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
         };
       });
       orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());

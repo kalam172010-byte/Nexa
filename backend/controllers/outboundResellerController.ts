@@ -286,7 +286,7 @@ export class OutboundResellerController {
                 assignedAt: now.toISOString(),
                 expiresAt: expiryDate.toISOString(),
                 purchaseSource: 'API',
-                purchaseSourceLabel: 'This Key Buyed by API',
+                purchaseSourceLabel: 'Buy from API',
                 createdAt: now.toISOString(),
               };
               db.digitalKeys.unshift(keyObj);
@@ -308,7 +308,7 @@ export class OutboundResellerController {
             keyObj.assignedAt = now.toISOString();
             keyObj.expiresAt = expiryDate.toISOString();
             keyObj.purchaseSource = 'API';
-            keyObj.purchaseSourceLabel = 'This Key Buyed by API';
+            keyObj.purchaseSourceLabel = 'Buy from API';
           } else {
             keyObj = {
               id: `KEY-EXT-${Date.now()}-${i}-${crypto.randomBytes(2).toString('hex')}`,
@@ -322,7 +322,7 @@ export class OutboundResellerController {
               assignedAt: now.toISOString(),
               expiresAt: expiryDate.toISOString(),
               purchaseSource: 'API',
-              purchaseSourceLabel: 'This Key Buyed by API',
+              purchaseSourceLabel: 'Buy from API',
               createdAt: now.toISOString(),
             };
             db.digitalKeys.unshift(keyObj);
@@ -344,7 +344,7 @@ export class OutboundResellerController {
         deliveredKeyCode: deliveredKeys.join(', '),
         status: 'COMPLETED',
         purchaseSource: 'API',
-        purchaseSourceLabel: 'This Key Buyed by API',
+        purchaseSourceLabel: 'Buy from API',
         createdAt: now.toISOString(),
       };
       db.orders.unshift(newOrder);

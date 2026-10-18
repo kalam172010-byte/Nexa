@@ -50,7 +50,7 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
               <h3 className="font-display font-bold text-sm text-white">License Delivered</h3>
               <p className="text-xs text-emerald-400">
                 {keyData.purchaseSourceLabel ||
-                  (keyData.purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web')}
+                  (keyData.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website')}
               </p>
             </div>
           </div>
@@ -81,7 +81,7 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
               }`}
             >
               {keyData.purchaseSourceLabel ||
-                (keyData.purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web')}
+                (keyData.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website')}
             </span>
           </div>
         </div>
@@ -97,7 +97,7 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span>
               {keyData.purchaseSourceLabel ||
-                (keyData.purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web')}
+                (keyData.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website')}
             </span>
           </div>
         </div>

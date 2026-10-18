@@ -673,7 +673,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       description: `[This Key Buyed by API] Outbound API Key Purchase: ${quantity}x ${product.name} (${variant.durationLabel})`,
       referenceId: batchOrderId,
       purchaseSource: 'API',
-      purchaseSourceLabel: 'This Key Buyed by API',
+      purchaseSourceLabel: 'Buy from API',
       createdAt: new Date().toISOString(),
     };
     edgeDb.transactions.unshift(tx);
@@ -699,7 +699,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           unusedKey.assignedAt = new Date().toISOString();
           unusedKey.expiresAt = new Date(Date.now() + (variant.durationHours || 24) * 3600 * 1000).toISOString();
           unusedKey.purchaseSource = 'API';
-          unusedKey.purchaseSourceLabel = 'This Key Buyed by API';
+          unusedKey.purchaseSourceLabel = 'Buy from API';
           keyCode = unusedKey.keyCode;
           deliveredKeyObjects.push(unusedKey);
         } else {
@@ -719,7 +719,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
             expiresAt: new Date(Date.now() + (variant.durationHours || 24) * 3600 * 1000).toISOString(),
             status: 'ACTIVE',
             purchaseSource: 'API',
-            purchaseSourceLabel: 'This Key Buyed by API',
+            purchaseSourceLabel: 'Buy from API',
             createdAt: new Date().toISOString(),
           };
           edgeDb.digitalKeys.unshift(newKeyObj);
@@ -738,7 +738,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           expiresAt: new Date(Date.now() + (variant.durationHours || 24) * 3600 * 1000).toISOString(),
           status: 'ACTIVE',
           purchaseSource: 'API',
-          purchaseSourceLabel: 'This Key Buyed by API',
+          purchaseSourceLabel: 'Buy from API',
           createdAt: new Date().toISOString(),
         };
         edgeDb.digitalKeys.unshift(newKeyObj);
@@ -759,7 +759,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
         deliveredKeyCode: keyCode,
         status: 'COMPLETED',
         purchaseSource: 'API',
-        purchaseSourceLabel: 'This Key Buyed by API',
+        purchaseSourceLabel: 'Buy from API',
         createdAt: new Date().toISOString(),
       };
       edgeDb.orders.unshift(newOrder);
@@ -775,7 +775,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       keyCode: generatedKeyCodes[0],
       license: generatedKeyCodes[0],
       purchase_source: 'API',
-      purchase_source_label: 'This Key Buyed by API',
+      purchase_source_label: 'Buy from API',
       data: {
         key: generatedKeyCodes[0],
         keys: generatedKeyCodes,
@@ -789,7 +789,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
         wallet_deducted: totalPrice,
         remaining_balance: user.balance,
         purchase_source: 'API',
-        purchase_source_label: 'This Key Buyed by API',
+        purchase_source_label: 'Buy from API',
       },
       order_id: batchOrderId,
       product_id: effectivePid,
@@ -814,8 +814,8 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           purchaseSourceLabel:
             o.purchaseSourceLabel ||
             (o.purchaseSource === 'API' || o.id.startsWith('API-ORD-')
-              ? 'This Key Buyed by API'
-              : 'This Key Buyed by Web'),
+              ? 'Buy from API'
+              : 'Buy from Website'),
         }));
       return jsonResponse({ orders: userOrders });
     }
@@ -852,7 +852,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
         description: `[This Key Buyed by Web] Purchased ${qty > 1 ? `${qty}x ` : ''}${product.name} (${variant.durationLabel})`,
         referenceId: orderId,
         purchaseSource: 'WEB',
-        purchaseSourceLabel: 'This Key Buyed by Web',
+        purchaseSourceLabel: 'Buy from Website',
         createdAt: new Date().toISOString(),
       };
       edgeDb.transactions.unshift(tx);
@@ -888,7 +888,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           expiresAt: new Date(Date.now() + (variant.durationHours || 24) * 3600 * 1000).toISOString(),
           status: 'ACTIVE',
           purchaseSource: 'WEB',
-          purchaseSourceLabel: 'This Key Buyed by Web',
+          purchaseSourceLabel: 'Buy from Website',
           createdAt: new Date().toISOString(),
         };
         edgeDb.digitalKeys.unshift(keyObj);
@@ -906,7 +906,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           deliveredKeyCode: keyObj.keyCode,
           status: 'COMPLETED',
           purchaseSource: 'WEB',
-          purchaseSourceLabel: 'This Key Buyed by Web',
+          purchaseSourceLabel: 'Buy from Website',
           createdAt: new Date().toISOString(),
         };
         edgeDb.orders.unshift(ord);
@@ -925,7 +925,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
             expiresAt: firstKey.expiresAt,
             productName: product.name,
             purchaseSource: 'WEB',
-            purchaseSourceLabel: 'This Key Buyed by Web',
+            purchaseSourceLabel: 'Buy from Website',
           },
           key: {
             id: firstKey.id,
@@ -934,7 +934,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
             expiresAt: firstKey.expiresAt,
             productName: product.name,
             purchaseSource: 'WEB',
-            purchaseSourceLabel: 'This Key Buyed by Web',
+            purchaseSourceLabel: 'Buy from Website',
           },
           newBalance: user.balance,
         },
@@ -965,7 +965,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           gameName: prod?.game || 'Mobile Game',
           durationLabel: variant?.durationLabel || 'Standard Key',
           purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
-          purchaseSourceLabel: isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web',
+          purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
         };
       });
 
@@ -1070,7 +1070,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
         ...o,
         username: u?.username || 'User',
         purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
-        purchaseSourceLabel: isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web',
+        purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
       };
     });
     return jsonResponse({ orders });
@@ -1088,7 +1088,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
         durationLabel: variant?.durationLabel || '1 Day',
         assignedUsername: u?.username,
         purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
-        purchaseSourceLabel: isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web',
+        purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
       };
     });
     return jsonResponse({ keys });

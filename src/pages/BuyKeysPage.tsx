@@ -165,7 +165,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
         } else {
           updateBalanceLocally(balance - totalCost);
         }
-        showToastSuccess('This Key Buyed by Web', `${product.name} (${variant.durationLabel}) key is ready to use.`);
+        showToastSuccess('Buy from Website', `${product.name} (${variant.durationLabel}) key is ready to use.`);
 
         setDeliveredKey({
           keyCode: delivered.keyCode,
@@ -173,7 +173,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           durationLabel: variant.durationLabel,
           expiresAt: delivered.expiresAt,
           purchaseSource: delivered.purchaseSource || 'WEB',
-          purchaseSourceLabel: delivered.purchaseSourceLabel || 'This Key Buyed by Web',
+          purchaseSourceLabel: delivered.purchaseSourceLabel || 'Buy from Website',
         });
 
         fetchProducts();
@@ -633,7 +633,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                {src === 'ALL' ? 'All Keys' : src === 'API' ? 'Buyed by API' : 'Buyed by Web'}
+                {src === 'ALL' ? 'All Keys' : src === 'API' ? 'Buy from API' : 'Buy from Website'}
               </button>
             ))}
           </div>
@@ -658,7 +658,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
             <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
               {displayedKeys.slice(0, 25).map(k => {
                 const isApi = k.purchaseSource === 'API';
-                const label = k.purchaseSourceLabel || (isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web');
+                const label = k.purchaseSourceLabel || (isApi ? 'Buy from API' : 'Buy from Website');
                 return (
                   <div
                     key={k.id}

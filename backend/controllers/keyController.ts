@@ -44,7 +44,7 @@ export class KeyController {
             gameName: product ? product.game : 'Mobile Game',
             durationLabel: variant ? variant.durationLabel : 'Standard Key',
             purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
-            purchaseSourceLabel: isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web',
+            purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
           };
         });
 

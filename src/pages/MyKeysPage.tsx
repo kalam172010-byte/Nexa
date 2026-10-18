@@ -127,7 +127,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              {src === 'ALL' ? 'All Sources' : src === 'API' ? 'Buyed by API' : 'Buyed by Web'}
+              {src === 'ALL' ? 'All Sources' : src === 'API' ? 'Buy from API' : 'Buy from Website'}
             </button>
           ))}
         </div>
@@ -165,7 +165,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
             const isUsed = key.status === 'USED';
             const isApiPurchase = key.purchaseSource === 'API';
             const sourceLabel =
-              key.purchaseSourceLabel || (isApiPurchase ? 'This Key Buyed by API' : 'This Key Buyed by Web');
+              key.purchaseSourceLabel || (isApiPurchase ? 'Buy from API' : 'Buy from Website');
 
             return (
               <div
@@ -307,7 +307,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
                     }`}
                   >
                     {viewingKey.purchaseSourceLabel ||
-                      (viewingKey.purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web')}
+                      (viewingKey.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website')}
                   </span>
                 </div>
                 <div className="flex justify-between">

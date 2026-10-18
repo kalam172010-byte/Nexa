@@ -1319,7 +1319,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           expiresAt: new Date(Date.now() + (matchedVar?.durationHours || 24) * 3600 * 1000).toISOString(),
           status: 'ACTIVE',
           purchaseSource: 'WEB',
-          purchaseSourceLabel: 'This Key Buyed by Web',
+          purchaseSourceLabel: 'Buy from Website',
           createdAt: new Date().toISOString(),
         });
       }
@@ -1337,7 +1337,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         deliveredKeyCode: generatedKeys.join(', '),
         status: 'COMPLETED',
         purchaseSource: 'WEB',
-        purchaseSourceLabel: 'This Key Buyed by Web',
+        purchaseSourceLabel: 'Buy from Website',
         createdAt: new Date().toISOString(),
       };
       try {
@@ -1356,7 +1356,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           expiresAt: newKeyRecords[0]?.expiresAt,
           productName: order.productName,
           purchaseSource: 'WEB',
-          purchaseSourceLabel: 'This Key Buyed by Web',
+          purchaseSourceLabel: 'Buy from Website',
         },
         key: {
           id: newKeyRecords[0]?.id,
@@ -1366,7 +1366,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           productName: order.productName,
           durationLabel: order.durationLabel,
           purchaseSource: 'WEB',
-          purchaseSourceLabel: 'This Key Buyed by Web',
+          purchaseSourceLabel: 'Buy from Website',
           updateFileUrl: matchedProd?.updateFileUrl,
           videoUrl: matchedProd?.videoUrl,
         },
@@ -1383,8 +1383,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           purchaseSourceLabel:
             k.purchaseSourceLabel ||
             (k.purchaseSource === 'API' || String(k.assignedOrderId || '').startsWith('API-ORD-')
-              ? 'This Key Buyed by API'
-              : 'This Key Buyed by Web'),
+              ? 'Buy from API'
+              : 'Buy from Website'),
         })),
       } as unknown as T;
     }
