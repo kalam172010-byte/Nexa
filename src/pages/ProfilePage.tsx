@@ -212,9 +212,6 @@ export const ProfilePage: React.FC = () => {
                   <label className="text-xs font-semibold text-rose-300">
                     Current Password
                   </label>
-                  <span className="text-[10px] text-slate-500">
-                    Default is <strong className="text-rose-300 font-mono">admin123</strong> for admin accounts
-                  </span>
                 </div>
                 <div className="relative">
                   <input

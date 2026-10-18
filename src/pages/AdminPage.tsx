@@ -61,7 +61,7 @@ import {
   Lock,
   Download,
 } from 'lucide-react';
-import { api } from '../services/api.js';
+import { api, getEffectiveApiUrl, setCustomApiUrl } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
 import { useSite } from '../context/SiteContext.js';
 import { useAuth } from '../context/AuthContext.js';
@@ -151,39 +151,51 @@ export const AdminPage: React.FC = () => {
   const [deposits, setDeposits] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
-  const [gatewayConfig, setGatewayConfig] = useState<any>({
-    gatewayName: 'FamGateway Official (famgateway.in)',
-    gatewayType: 'FAMGATEWAY',
-    apiUrl: 'https://famgateway.in/api/create-order',
-    qrAliasUrl: 'https://famgateway.in/api/qr.php',
-    statusUrl: 'https://famgateway.in/api/verify-order.php',
-    apiKey: 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e',
-    upiVpa: '8056317218@fam',
-    upiMerchantName: 'Kalam Kalam',
-    minDeposit: 1,
-    paymentExpiryMinutes: 10,
-    testMode: false,
+  const [gatewayConfig, setGatewayConfig] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('nexa_admin_gateway_config');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return {
+      gatewayName: 'FamGateway Official (famgateway.in)',
+      gatewayType: 'FAMGATEWAY',
+      apiUrl: 'https://famgateway.in/api/create-order',
+      qrAliasUrl: 'https://famgateway.in/api/qr.php',
+      statusUrl: 'https://famgateway.in/api/verify-order.php',
+      apiKey: 'fam_a9527c6c2dd4d26ad5223cfc3c4c5fa9289b574e',
+      upiVpa: '8056317218@fam',
+      upiMerchantName: 'Kalam Kalam',
+      minDeposit: 1,
+      paymentExpiryMinutes: 10,
+      testMode: false,
+    };
   });
   const [resellerConfig, setResellerConfig] = useState<any>({});
-  const [emailConfig, setEmailConfig] = useState<any>({
-    enabled: true,
-    protocol: 'smtp',
-    senderEmail: 'kalamkalam1234kd@gmail.com',
-    senderName: 'KALAM FF PANEL',
-    smtpHost: 'smtp.gmail.com',
-    smtpPort: 587,
-    secure: false,
-    smtpUser: 'kalamkalam1234kd@gmail.com',
-    smtpPass: '',
-    imapHost: 'imap.gmail.com',
-    imapPort: 993,
-    imapUser: 'kalamkalam1234kd@gmail.com',
-    imapPass: '',
-    imapSecure: true,
-    otpExpiryMinutes: 10,
-    allowOtpSignup: true,
-    hasSmtpPass: false,
-    hasImapPass: false,
+  const [emailConfig, setEmailConfig] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('nexa_admin_email_config');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return {
+      enabled: true,
+      protocol: 'smtp',
+      senderEmail: 'kalamkalam1234kd@gmail.com',
+      senderName: 'KALAM FF PANEL',
+      smtpHost: 'smtp.gmail.com',
+      smtpPort: 587,
+      secure: false,
+      smtpUser: 'kalamkalam1234kd@gmail.com',
+      smtpPass: '',
+      imapHost: 'imap.gmail.com',
+      imapPort: 993,
+      imapUser: 'kalamkalam1234kd@gmail.com',
+      imapPass: '',
+      imapSecure: true,
+      otpExpiryMinutes: 10,
+      allowOtpSignup: true,
+      hasSmtpPass: false,
+      hasImapPass: false,
+    };
   });
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isTestingEmail, setIsTestingEmail] = useState(false);
@@ -194,6 +206,45 @@ export const AdminPage: React.FC = () => {
   const [quickAppPassInput, setQuickAppPassInput] = useState('');
   const [isApplyingFix, setIsApplyingFix] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Custom Backend API Endpoint States (for Cloudflare Pages / Static Hosting)
+  const [customApiInput, setCustomApiInput] = useState<string>(() => {
+    try {
+      return localStorage.getItem('nexa_api_base_url') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [isTestingBackend, setIsTestingBackend] = useState<boolean>(false);
+  const [backendTestStatus, setBackendTestStatus] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleSaveCustomApiUrl = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setCustomApiUrl(customApiInput.trim() || null);
+    showToastSuccess('Backend API Endpoint Updated', customApiInput.trim() ? `Routing to ${customApiInput.trim()}` : 'Reset to default auto-detect.');
+    loadAllAdminData();
+  };
+
+  const handleTestBackendPing = async () => {
+    setIsTestingBackend(true);
+    setBackendTestStatus(null);
+    try {
+      const activeUrl = getEffectiveApiUrl();
+      const res = await fetch(`${activeUrl}/site-settings`);
+      if (res.ok) {
+        setBackendTestStatus({ ok: true, message: `Connected! Response OK (HTTP ${res.status})` });
+        showToastSuccess('Backend Online', `Successfully contacted ${activeUrl}`);
+      } else {
+        setBackendTestStatus({ ok: false, message: `Server replied with HTTP ${res.status}` });
+        showToastError('Connection Issue', `HTTP ${res.status}`);
+      }
+    } catch (err: any) {
+      setBackendTestStatus({ ok: false, message: err.message || 'Network unreachable' });
+      showToastError('Connection Failed', err.message);
+    } finally {
+      setIsTestingBackend(false);
+    }
+  };
 
   // User Search & Real-time Details
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -364,14 +415,22 @@ export const AdminPage: React.FC = () => {
       if (keysRes?.keys) setKeys(keysRes.keys);
       if (depRes?.deposits) setDeposits(depRes.deposits);
       if (ordRes?.orders) setOrders(ordRes.orders);
-      if (gwRes?.config) setGatewayConfig(gwRes.config);
-      if (resRes?.config) setResellerConfig(resRes.config);
+      if (gwRes?.config && Object.keys(gwRes.config).length > 0) {
+        setGatewayConfig((prev: any) => ({ ...prev, ...gwRes.config }));
+        try {
+          localStorage.setItem('nexa_admin_gateway_config', JSON.stringify(gwRes.config));
+        } catch {}
+      }
+      if (resRes?.config && Object.keys(resRes.config).length > 0) setResellerConfig(resRes.config);
       if (siteRes?.config) {
         setSiteForm(prev => ({ ...prev, ...siteRes.config }));
         updateSiteConfigLocally(siteRes.config);
       }
-      if (emailRes?.config) {
+      if (emailRes?.config && Object.keys(emailRes.config).length > 0) {
         setEmailConfig((prev: any) => ({ ...prev, ...emailRes.config }));
+        try {
+          localStorage.setItem('nexa_admin_email_config', JSON.stringify(emailRes.config));
+        } catch {}
         if (emailRes.config.senderEmail) {
           setTestRecipientEmail(emailRes.config.senderEmail);
         }
@@ -450,6 +509,13 @@ export const AdminPage: React.FC = () => {
       const res = await api.updateEmailSettings(emailConfig);
       if (res?.config) {
         setEmailConfig((prev: any) => ({ ...prev, ...res.config }));
+        try {
+          localStorage.setItem('nexa_admin_email_config', JSON.stringify(res.config));
+        } catch {}
+      } else {
+        try {
+          localStorage.setItem('nexa_admin_email_config', JSON.stringify(emailConfig));
+        } catch {}
       }
       showToastSuccess('Email & IMAP/SMTP Settings Saved!', 'Mail server configuration updated successfully.');
       loadAllAdminData();
@@ -1308,11 +1374,17 @@ export const AdminPage: React.FC = () => {
       ...nextGatewayPatch,
     };
     setGatewayConfig(updatedConfig);
+    try {
+      localStorage.setItem('nexa_admin_gateway_config', JSON.stringify(updatedConfig));
+    } catch {}
     setFgTestResult(null);
     try {
       const res = await api.updateGatewaySettings(updatedConfig);
       if (res?.config) {
         setGatewayConfig(res.config);
+        try {
+          localStorage.setItem('nexa_admin_gateway_config', JSON.stringify(res.config));
+        } catch {}
       }
       showToastSuccess(
         `Switched Live to ${label}`,
@@ -1341,9 +1413,15 @@ export const AdminPage: React.FC = () => {
   const handleSaveGatewaySettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      localStorage.setItem('nexa_admin_gateway_config', JSON.stringify(gatewayConfig));
+    } catch {}
+    try {
       const res = await api.updateGatewaySettings(gatewayConfig);
       if (res?.config) {
         setGatewayConfig(res.config);
+        try {
+          localStorage.setItem('nexa_admin_gateway_config', JSON.stringify(res.config));
+        } catch {}
       }
       showToastSuccess('Payment Gateway Settings Saved Live');
     } catch (err: any) {
@@ -6195,6 +6273,87 @@ export const AdminPage: React.FC = () => {
                 <span className="text-base font-black text-rose-400 font-mono">{keys.length} Keys</span>
               </div>
             </div>
+          </div>
+
+          {/* Backend API Endpoint Configuration & Connection Monitor */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-cyan-500/30 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/5 gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
+                  <Terminal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    BACKEND API ROUTING &amp; CLOUDFLARE CONNECTION
+                  </h4>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    Active Endpoint: <span className="text-cyan-300 font-bold">{getEffectiveApiUrl()}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestBackendPing}
+                disabled={isTestingBackend}
+                className="px-3.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-xs font-semibold text-cyan-300 border border-cyan-500/30 transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isTestingBackend ? 'animate-spin' : ''}`} />
+                <span>Test Live Connection</span>
+              </button>
+            </div>
+
+            {backendTestStatus && (
+              <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 font-mono ${
+                backendTestStatus.ok
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}>
+                {backendTestStatus.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
+                <span>{backendTestStatus.message}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveCustomApiUrl} className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  CUSTOM BACKEND API SERVER URL (OPTIONAL OVERRIDE FOR CLOUDFLARE/CUSTOM DOMAINS)
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="url"
+                    value={customApiInput}
+                    onChange={e => setCustomApiInput(e.target.value)}
+                    placeholder="https://your-backend.run.app/api (Leave blank for auto-detect)"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none transition-colors"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shrink-0"
+                    >
+                      Save Endpoint
+                    </button>
+                    {customApiInput && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomApiInput('');
+                          setCustomApiUrl(null);
+                          showToastSuccess('Reset to default auto-detect URL.');
+                          loadAllAdminData();
+                        }}
+                        className="px-3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-400 hover:text-white text-xs font-mono transition-colors cursor-pointer shrink-0"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  If hosted statically on Cloudflare Pages, requests route to the live backend server. Leave blank to automatically use the live AI Studio server.
+                </p>
+              </div>
+            </form>
           </div>
 
           {/* Backup & Restore Controls */}

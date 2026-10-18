@@ -105,6 +105,20 @@
       "isBanned": false,
       "createdAt": "2026-10-17T16:13:24.314Z",
       "updatedAt": "2026-10-17T16:13:24.314Z"
+    },
+    {
+      "id": "USR-1792301745726",
+      "username": "kalam_admin",
+      "email": "kalamkalam1234kd@gmail.com",
+      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
+      "role": "ADMIN",
+      "balance": 5000,
+      "referralCode": "NXE032E6",
+      "twoFactorEnabled": false,
+      "isBanned": false,
+      "createdAt": "2026-10-18T05:35:45.726Z",
+      "updatedAt": "2026-10-18T05:35:45.726Z",
+      "apiKey": "nexa_live_70717a36985c082bab77b1caa8c02d36"
     }
   ],
   "products": [
@@ -1215,6 +1229,23 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1792301745726-2d58cd",
+      "userId": "USR-1792301745726",
+      "username": "kalamkalam1234k",
+      "action": "OTP_SIGNUP",
+      "details": "Registered via Email OTP: kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T05:35:45.726Z"
+    },
+    {
+      "id": "LOG-1792301725351-fa57c8",
+      "username": "kalamkalam1234kd@gmail.com",
+      "action": "EMAIL_OTP_SENT",
+      "details": "Sent real OTP via SMTP (smtp.gmail.com) to kalamkalam1234kd@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T05:35:25.351Z"
+    },
     {
       "id": "LOG-1792301057488-6eccdc",
       "userId": "USR-KALAM-ADMIN",

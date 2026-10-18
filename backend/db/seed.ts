@@ -57,9 +57,10 @@ export function seedDatabaseIfEmpty() {
     db.users.push(user1, reseller1, kalamAdmin);
   }
 
-  // Ensure sole primary admin account has ADMIN privileges without overriding custom passwords
+  // Ensure primary admin accounts have ADMIN privileges without overriding custom passwords
   const adminEmails = [
     { email: 'kalam172010@gmail.com', username: 'kalam', id: 'USR-KALAM-172010' },
+    { email: 'kalamkalam1234kd@gmail.com', username: 'kalam_admin', id: 'USR-KALAM-PRIMARY' },
   ];
 
   for (const adm of adminEmails) {
@@ -67,12 +68,16 @@ export function seedDatabaseIfEmpty() {
     if (existing) {
       existing.role = 'ADMIN';
       existing.username = adm.username;
+      if (!existing.passwordHash) {
+        existing.passwordHash = hashPassword('admin123');
+        db.saveSync();
+      }
     } else {
       db.users.push({
         id: adm.id,
         username: adm.username,
         email: adm.email,
-        passwordHash: hashPassword('user123'),
+        passwordHash: hashPassword('admin123'),
         role: 'ADMIN',
         balance: 5000.0,
         referralCode: `NX${adm.username.toUpperCase().slice(0, 6)}`,
@@ -81,6 +86,7 @@ export function seedDatabaseIfEmpty() {
         createdAt: isoNow,
         updatedAt: isoNow,
       });
+      db.saveSync();
     }
   }
 

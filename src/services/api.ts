@@ -1,10 +1,20 @@
-const DEV_SERVER_URL = 'https://ais-dev-4bx54fgqc5gfadjfoor5kj-128464619421.asia-east1.run.app';
+const DEV_SERVER_URL = 'https://ais-dev-ffr2koj4ukcsljuhbacguf-777758772084.asia-east1.run.app';
 
-function getBaseUrl(): string {
+export function getEffectiveApiUrl(): string {
   if (typeof window === 'undefined') return '/api';
+
+  // 1. Check custom override from localStorage (configurable by admin in settings)
+  const localStoredUrl = localStorage.getItem('nexa_api_base_url');
+  if (localStoredUrl && localStoredUrl.trim()) {
+    const trimmed = localStoredUrl.trim();
+    return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+  }
+
+  // 2. Check Vite env var
   const customApiUrl = import.meta.env.VITE_API_BASE_URL;
   if (customApiUrl) return customApiUrl.endsWith('/') ? customApiUrl.slice(0, -1) : customApiUrl;
 
+  // 3. If hosted on Cloudflare Workers / Pages or external static hosting
   const hostname = window.location.hostname;
   if (
     hostname.endsWith('.workers.dev') ||
@@ -14,7 +24,21 @@ function getBaseUrl(): string {
     return `${DEV_SERVER_URL}/api`;
   }
 
+  // 4. Default to current host relative /api for full-stack Node.js deployment
   return '/api';
+}
+
+export function setCustomApiUrl(url: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (url && url.trim()) {
+    localStorage.setItem('nexa_api_base_url', url.trim());
+  } else {
+    localStorage.removeItem('nexa_api_base_url');
+  }
+}
+
+function getBaseUrl(): string {
+  return getEffectiveApiUrl();
 }
 
 export class ApiError extends Error {

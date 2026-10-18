@@ -112,7 +112,7 @@ export class AuthController {
           // Initialize password for accounts created via social or sync
           user.passwordHash = hashedInput;
           user.updatedAt = new Date().toISOString();
-          db.save();
+          db.saveSync();
         } else {
           res.status(401).json({ error: 'Invalid username/email or password.' });
           return;
@@ -371,7 +371,7 @@ export class AuthController {
         }
         if (user.passwordHash !== hashPassword(currentPassword)) {
           res.status(400).json({
-            error: 'Current password is incorrect. If you have not changed it before, the default password is admin123, or use Forgot Password on the login page.',
+            error: 'Current password is incorrect. Please check your password or use Forgot Password on the login page.',
           });
           return;
         }
