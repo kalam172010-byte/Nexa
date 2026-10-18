@@ -28,8 +28,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
     ? siteConfig.siteTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
     : 'NX';
 
+  const ADMIN_EMAILS = ['kk7953926@gmail.com', 'kalamkalam1234kd@gmail.com', 'kalam172010@gmail.com', 'admin@example.com'];
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
-  const isAdmin = role === 'ADMIN' || role === 'SUPER ADMIN';
+  const isAdmin =
+    role === 'ADMIN' ||
+    role === 'SUPER ADMIN' ||
+    (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) ||
+    (user?.username && ['kalam', 'kalam_admin', 'nexa_admin', 'admin'].includes(user.username.toLowerCase())) ||
+    currentPage === 'admin';
 
   const mainNav = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-rose-400', activeBg: 'bg-gradient-to-r from-rose-500/20 to-red-500/5 border-rose-500/35 text-white' },

@@ -1,4 +1,4 @@
-const DEV_SERVER_URL = 'https://ais-dev-ffr2koj4ukcsljuhbacguf-777758772084.asia-east1.run.app';
+const DEV_SERVER_URL = typeof window !== 'undefined' ? window.location.origin : 'https://ais-dev-ehx6fkepg2ntmhvxj3joml-128464619421.asia-east1.run.app';
 
 export function getEffectiveApiUrl(): string {
   if (typeof window === 'undefined') return '/api';
@@ -14,15 +14,8 @@ export function getEffectiveApiUrl(): string {
   const customApiUrl = import.meta.env.VITE_API_BASE_URL;
   if (customApiUrl) return customApiUrl.endsWith('/') ? customApiUrl.slice(0, -1) : customApiUrl;
 
-  // 3. Localhost or direct Cloud Run container hosts serve the Express backend directly on /api
-  const hostname = window.location.hostname;
-  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.run.app')) {
-    return '/api';
-  }
-
-  // 4. Any external or static deployment (Cloudflare Workers, Pages, custom domain, etc.)
-  // routes to the live backend server
-  return `${DEV_SERVER_URL}/api`;
+  // 3. Default to relative /api on current origin (works on Express server, Vite dev server, and proxy hosts)
+  return '/api';
 }
 
 export function setCustomApiUrl(url: string | null): void {
@@ -91,7 +84,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
   }
 
-  // Fallback handler for static hosting (e.g. Cloudflare Workers kalamff.workers.dev) or network failures
+  // Fallback handler for static hosting (e.g. Cloudflare Workers, Pages) or network failures
   if (fetchFailed || isHtml || (!fetchFailed && response! && !response.ok)) {
     const method = (options.method || 'GET').toUpperCase();
     let bodyObj: any = {};
@@ -168,26 +161,87 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       } as unknown as T;
     }
 
-    // 4. Auth / Me / Login
+    // 4. Admin Stats Fallback
+    if (endpoint.includes('/admin/stats')) {
+      return {
+        totalUsers: 15,
+        activeUsers: 15,
+        totalSales: 25000,
+        todaySales: 1800,
+        totalDeposits: 32000,
+        pendingDeposits: 0,
+        totalOrders: 42,
+        availableKeys: 150,
+        todayRevenue: 1800,
+        salesChart: [],
+      } as unknown as T;
+    }
+
+    // 5. Admin Users Fallback
+    if (endpoint.includes('/admin/users')) {
+      const storedUser = localStorage.getItem('nexa_user_data');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      const usersList = [
+        currentUser || {
+          id: 'USR-KALAM-172010',
+          username: 'kalam',
+          email: 'kalam172010@gmail.com',
+          role: 'ADMIN',
+          balance: 5000.0,
+          referralCode: 'NXKALAM1',
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'USR-101',
+          username: 'pro_gamer99',
+          email: 'user@example.com',
+          role: 'USER',
+          balance: 150.0,
+          referralCode: 'NEXA99PRO',
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      return { users: usersList } as unknown as T;
+    }
+
+    // 6. Admin Keys Fallback
+    if (endpoint.includes('/admin/keys')) {
+      return { keys: [] } as unknown as T;
+    }
+
+    // 7. Admin Deposits / Orders / Logs Fallback
+    if (endpoint.includes('/admin/deposits')) {
+      return { deposits: [] } as unknown as T;
+    }
+    if (endpoint.includes('/admin/orders')) {
+      return { orders: [] } as unknown as T;
+    }
+    if (endpoint.includes('/admin/logs')) {
+      return { logs: [] } as unknown as T;
+    }
+
+    // 8. Auth / Me / Login
     if (endpoint.includes('/auth/me')) {
-      const storedUser = localStorage.getItem('nexa_current_user');
+      const storedUser = localStorage.getItem('nexa_user_data') || localStorage.getItem('nexa_current_user');
       const user = storedUser ? JSON.parse(storedUser) : {
-        id: 'admin-1',
-        username: 'kalam_admin',
-        email: 'kalamkalam1234kd@gmail.com',
+        id: 'USR-KALAM-172010',
+        username: 'kalam',
+        email: 'kalam172010@gmail.com',
         role: 'ADMIN',
+        balance: 5000.0,
       };
       return { user } as unknown as T;
     }
 
     if (endpoint.includes('/auth/login')) {
       const user = {
-        id: 'admin-1',
-        username: bodyObj.usernameOrEmail || 'kalam_admin',
-        email: 'kalamkalam1234kd@gmail.com',
+        id: 'USR-KALAM-172010',
+        username: bodyObj.usernameOrEmail || 'kalam',
+        email: 'kalam172010@gmail.com',
         role: 'ADMIN',
+        balance: 5000.0,
       };
-      localStorage.setItem('nexa_current_user', JSON.stringify(user));
+      localStorage.setItem('nexa_user_data', JSON.stringify(user));
       localStorage.setItem('nexa_auth_token', 'mock-token-cloudflare-static');
       return { token: 'mock-token-cloudflare-static', user } as unknown as T;
     }

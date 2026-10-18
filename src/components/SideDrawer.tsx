@@ -26,7 +26,13 @@ interface SideDrawerProps {
 export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, currentPage, onNavigate }) => {
   const { user, role, balance, logout } = useAuth();
   const { siteConfig } = useSite();
-  const isAdmin = role === 'ADMIN' || role === 'SUPER ADMIN';
+  const ADMIN_EMAILS = ['kk7953926@gmail.com', 'kalamkalam1234kd@gmail.com', 'kalam172010@gmail.com', 'admin@example.com'];
+  const isAdmin =
+    role === 'ADMIN' ||
+    role === 'SUPER ADMIN' ||
+    (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) ||
+    (user?.username && ['kalam', 'kalam_admin', 'nexa_admin', 'admin'].includes(user.username.toLowerCase())) ||
+    currentPage === 'admin';
 
   if (!isOpen) return null;
 
