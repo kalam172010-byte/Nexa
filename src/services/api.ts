@@ -14,18 +14,15 @@ export function getEffectiveApiUrl(): string {
   const customApiUrl = import.meta.env.VITE_API_BASE_URL;
   if (customApiUrl) return customApiUrl.endsWith('/') ? customApiUrl.slice(0, -1) : customApiUrl;
 
-  // 3. If hosted on Cloudflare Workers / Pages or external static hosting
+  // 3. Localhost or direct Cloud Run container hosts serve the Express backend directly on /api
   const hostname = window.location.hostname;
-  if (
-    hostname.endsWith('.workers.dev') ||
-    hostname.endsWith('.pages.dev') ||
-    hostname.endsWith('.cloudflare.com')
-  ) {
-    return `${DEV_SERVER_URL}/api`;
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.run.app')) {
+    return '/api';
   }
 
-  // 4. Default to current host relative /api for full-stack Node.js deployment
-  return '/api';
+  // 4. Any external or static deployment (Cloudflare Workers, Pages, custom domain, etc.)
+  // routes to the live backend server
+  return `${DEV_SERVER_URL}/api`;
 }
 
 export function setCustomApiUrl(url: string | null): void {

@@ -433,7 +433,9 @@ export class EmailService {
    * Performs a native IMAP socket and authentication handshake on port 993 (SSL) or 143 (STARTTLS/Plain)
    * to verify that incoming mailbox synchronization is working for ANY email provider.
    */
-  public async testImapConfiguration(overrideConfig?: Partial<EmailConfig>): Promise<{
+  public async testImapConfiguration(
+    overrideConfig?: Partial<EmailConfig>
+  ): Promise<{
     success: boolean;
     message: string;
     details?: any;
@@ -461,24 +463,31 @@ export class EmailService {
       };
     }
 
-    // Determine clean password
-    const noSpacePass = pass.replace(/[\s\u00a0]+/g, '');
-    let imapPass = pass;
-    if (/^[a-zA-Z]{16}$/.test(noSpacePass)) {
-      imapPass = host.toLowerCase().includes('gmail') ? noSpacePass.toLowerCase() : noSpacePass;
-    } else {
-      imapPass = pass.replace(/^["']+|["']+$/g, '').trim();
-    }
+    // Determine clean primary password and alternate password candidate (e.g. smtpPass)
+    const cleanPassword = (raw: string) => {
+      const noSpace = (raw || '').replace(/[\s\u00a0]+/g, '');
+      if (/^[a-zA-Z]{16}$/.test(noSpace)) {
+        return host.toLowerCase().includes('gmail') ? noSpace.toLowerCase() : noSpace;
+      }
+      return (raw || '').replace(/^["']+|["']+$/g, '').trim();
+    };
+
+    let imapPass = cleanPassword(pass);
+    const altSmtpPass = cleanPassword(config.smtpPass || db.emailConfig.smtpPass || '');
 
     return new Promise((resolve) => {
       let isResolved = false;
       let socket: any = null;
+      let timer: any = null;
+      let hasTriedAltPass = false;
 
       const finish = (result: { success: boolean; message: string; details?: any }) => {
         if (!isResolved) {
           isResolved = true;
+          if (timer) clearTimeout(timer);
           try {
             if (socket) {
+              socket.removeAllListeners();
               socket.destroy();
             }
           } catch {}
@@ -486,7 +495,7 @@ export class EmailService {
         }
       };
 
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         finish({
           success: false,
           message: `IMAP connection to ${host}:${port} timed out after 10 seconds. Check if host and port are open and accessible.`,
@@ -496,16 +505,31 @@ export class EmailService {
 
       try {
         socket = secure
-          ? tls.connect(port, host, { rejectUnauthorized: false, minVersion: 'TLSv1.2', timeout: 8000 })
-          : net.connect(port, host);
+          ? tls.connect({
+              host,
+              port,
+              servername: host,
+              rejectUnauthorized: false,
+              minVersion: 'TLSv1.2',
+              timeout: 8000,
+            })
+          : net.connect({ host, port, timeout: 8000 });
       } catch (err: any) {
-        clearTimeout(timer);
         return finish({
           success: false,
           message: `Failed to initiate IMAP socket connection to ${host}:${port}: ${err.message}`,
           details: { host, port, secure, user, error: err.message },
         });
       }
+
+      socket.setTimeout(8000);
+      socket.on('timeout', () => {
+        finish({
+          success: false,
+          message: `IMAP socket to ${host}:${port} timed out during data transfer. Check network firewall.`,
+          details: { host, port, secure, user },
+        });
+      });
 
       let buffer = '';
       let hasGreeted = false;
@@ -521,8 +545,10 @@ export class EmailService {
             if (imapPass) {
               // Send IMAP LOGIN command
               socket.write(`a001 LOGIN "${user}" "${imapPass}"\r\n`);
+            } else if (altSmtpPass) {
+              imapPass = altSmtpPass;
+              socket.write(`a001 LOGIN "${user}" "${imapPass}"\r\n`);
             } else {
-              clearTimeout(timer);
               finish({
                 success: true,
                 message: `IMAP server ${host}:${port} responded with greeting: "${line}". (Provide IMAP password to verify authentication).`,
@@ -531,8 +557,12 @@ export class EmailService {
               return;
             }
           } else if (hasGreeted) {
-            if (line.startsWith('a001 OK')) {
-              clearTimeout(timer);
+            if (line.startsWith('a001 OK') || line.startsWith('a002 OK')) {
+              // Persist working credentials to database if alternative was used
+              if (hasTriedAltPass && altSmtpPass) {
+                db.emailConfig.imapPass = altSmtpPass;
+                db.saveSync();
+              }
               finish({
                 success: true,
                 message: `✅ IMAP Connection & Authentication Successful! Connected to ${host}:${port} as "${user}".`,
@@ -540,7 +570,27 @@ export class EmailService {
               });
               return;
             } else if (line.startsWith('a001 NO') || line.startsWith('a001 BAD')) {
-              clearTimeout(timer);
+              // If primary password failed and we have an alternative SMTP password, try it automatically!
+              if (!hasTriedAltPass && altSmtpPass && altSmtpPass !== imapPass) {
+                hasTriedAltPass = true;
+                socket.write(`a002 LOGIN "${user}" "${altSmtpPass}"\r\n`);
+                return;
+              }
+
+              const isGmail = host.toLowerCase().includes('gmail') || user.toLowerCase().endsWith('@gmail.com');
+              let help = `IMAP server rejected credentials (${line}).`;
+              if (isGmail) {
+                help += ' For Gmail, ensure IMAP is enabled in Gmail Settings and use a 16-character Google App Password.';
+              } else {
+                help += ' Check username and email password in your hosting/cPanel webmail settings.';
+              }
+              finish({
+                success: false,
+                message: help,
+                details: { host, port, secure, user, error: line },
+              });
+              return;
+            } else if (line.startsWith('a002 NO') || line.startsWith('a002 BAD')) {
               const isGmail = host.toLowerCase().includes('gmail') || user.toLowerCase().endsWith('@gmail.com');
               let help = `IMAP server rejected credentials (${line}).`;
               if (isGmail) {
@@ -560,12 +610,21 @@ export class EmailService {
       });
 
       socket.on('error', (err: any) => {
-        clearTimeout(timer);
         finish({
           success: false,
           message: `IMAP connection failed (${host}:${port}): ${err.message}`,
           details: { host, port, secure, user, error: err.message, code: err.code },
         });
+      });
+
+      socket.on('close', (hadError: boolean) => {
+        if (!isResolved) {
+          finish({
+            success: false,
+            message: `IMAP connection closed by server (${host}:${port}). Check if port requires SSL/TLS.`,
+            details: { host, port, secure, user, hadError },
+          });
+        }
       });
     });
   }
@@ -595,7 +654,11 @@ export class EmailService {
 
     // If IMAP only requested
     if (testType === 'imap') {
-      return this.testImapConfiguration(cleanOverride);
+      const imapOverride = { ...cleanOverride };
+      if (!imapOverride.imapPass && cleanOverride.smtpPass) {
+        imapOverride.imapPass = cleanOverride.smtpPass;
+      }
+      return this.testImapConfiguration(imapOverride);
     }
 
     const { senderEmail, senderName, smtpHost, port, smtpUser, smtpPass } = this.resolveSmtpSettings(config);

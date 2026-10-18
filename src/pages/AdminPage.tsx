@@ -653,7 +653,7 @@ export const AdminPage: React.FC = () => {
       const updatedConfig = {
         ...emailConfig,
         ...(newEmail ? { senderEmail: newEmail.trim(), smtpUser: newEmail.trim(), imapUser: newEmail.trim() } : {}),
-        ...(cleanPass ? { smtpPass: cleanPass, hasSmtpPass: true } : {}),
+        ...(cleanPass ? { smtpPass: cleanPass, imapPass: cleanPass, hasSmtpPass: true, hasImapPass: true } : {}),
       };
 
       setEmailConfig(updatedConfig);

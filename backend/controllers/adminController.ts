@@ -990,6 +990,13 @@ export class AdminController {
         delete updatedData.imapPass;
       }
 
+      // If user entered a new password in SMTP but left IMAP blank, sync IMAP to use the same App Password
+      if (updatedData.smtpPass && !updatedData.imapPass && !body.imapPass) {
+        updatedData.imapPass = updatedData.smtpPass;
+      } else if (updatedData.imapPass && !updatedData.smtpPass && !body.smtpPass) {
+        updatedData.smtpPass = updatedData.imapPass;
+      }
+
       if (body.smtpPort) {
         updatedData.smtpPort = Number(body.smtpPort);
         // Prevent TLS version mismatch: port 587 uses STARTTLS (secure: false), port 465 uses implicit SSL (secure: true)
