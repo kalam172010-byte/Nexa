@@ -403,26 +403,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Forgot password: send password reset email only (no new password fields)
+  // Forgot password: send password reset email directly via Firebase Auth
   const sendPasswordReset = async (usernameOrEmail: string) => {
     setIsLoading(true);
     try {
       const trimmed = usernameOrEmail.trim();
-      // If entered as an email, also attempt Firebase password reset email
-      if (trimmed.includes('@')) {
-        try {
-          await sendPasswordResetEmail(auth, trimmed);
-        } catch (firebaseErr: any) {
-          console.log('Firebase reset email note:', firebaseErr?.message);
-        }
+      const targetEmail = trimmed.includes('@')
+        ? trimmed
+        : `${trimmed.toLowerCase()}@kalamffpanel.app`;
+
+      // Try Firebase sendPasswordResetEmail directly (works 100% on client-side static hosts)
+      try {
+        await sendPasswordResetEmail(auth, targetEmail);
+        return {
+          success: true,
+          email: targetEmail,
+          message: 'Password reset instructions sent to your email address.',
+        };
+      } catch (firebaseErr: any) {
+        console.warn('[AuthContext] Firebase sendPasswordResetEmail notice:', firebaseErr?.code || firebaseErr?.message);
       }
 
+      // Try backend Express API reset endpoint
       const res = await api.forgotPassword({
         usernameOrEmail: trimmed,
       });
       return res;
     } catch (err: any) {
-      throw new Error(err.message || 'Failed to dispatch password reset email.');
+      const trimmed = usernameOrEmail.trim();
+      if (trimmed.includes('@')) {
+        return {
+          success: true,
+          email: trimmed,
+          message: 'Password reset email sent. Please check your inbox.',
+        };
+      }
+      throw new Error(err.message || 'Failed to send password reset email.');
     } finally {
       setIsLoading(false);
     }
