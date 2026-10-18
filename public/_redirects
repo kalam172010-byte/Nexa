@@ -1,2 +1,0 @@
-# Cloudflare Workers Redirects
-# SPA routing is handled by wrangler.jsonc ("not_found_handling": "single-page-application")

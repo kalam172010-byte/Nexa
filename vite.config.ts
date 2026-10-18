@@ -2,32 +2,78 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig, Plugin } from 'vite';
 
-function spaFallbackPlugin() {
-  return {
-    name: 'spa-fallback',
-    closeBundle() {
+/**
+ * Cloudflare SPA Routing Plugin:
+ * Cloudflare Workers / Pages natively routes all unmatched paths to `index.html`
+ * when configured with `not_found_handling: "single-page-application"`.
+ *
+ * This plugin strips out any legacy `_redirects` or secondary HTML files (e.g. 200.html)
+ * that would otherwise cause infinite redirect loops [code: 100324] in Cloudflare's asset router.
+ */
+function cloudflareSpaPlugin(): Plugin {
+  const purgeDistRedirects = () => {
+    const distRedirects = path.resolve(import.meta.dirname, 'dist/_redirects');
+    try {
+      if (fs.existsSync(distRedirects)) {
+        fs.unlinkSync(distRedirects);
+      }
+    } catch {
+      // Safe ignore
+    }
+  };
+
+  const purgeAllConflictingFiles = () => {
+    const conflictingFiles = [
+      path.resolve(import.meta.dirname, 'dist/_redirects'),
+      path.resolve(import.meta.dirname, 'public/_redirects'),
+      path.resolve(import.meta.dirname, '_redirects'),
+      path.resolve(import.meta.dirname, 'dist/200.html'),
+      path.resolve(import.meta.dirname, 'public/200.html'),
+    ];
+
+    for (const file of conflictingFiles) {
       try {
-        const indexPath = path.resolve(import.meta.dirname, 'dist/index.html');
-        const fallback200 = path.resolve(import.meta.dirname, 'dist/200.html');
-        if (fs.existsSync(indexPath) && !fs.existsSync(fallback200)) {
-          fs.copyFileSync(indexPath, fallback200);
+        if (fs.existsSync(file)) {
+          fs.unlinkSync(file);
         }
       } catch {
-        // ignore
+        // Safe ignore
       }
+    }
+  };
+
+  return {
+    name: 'cloudflare-spa-cleaner',
+    buildStart() {
+      purgeAllConflictingFiles();
+    },
+    writeBundle() {
+      // Explicitly delete any _redirects file written to dist
+      purgeDistRedirects();
+    },
+    closeBundle() {
+      // Explicitly delete any _redirects file upon build completion
+      purgeDistRedirects();
+      purgeAllConflictingFiles();
     },
   };
 }
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), spaFallbackPlugin()],
+    plugins: [react(), tailwindcss(), cloudflareSpaPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),
       },
+    },
+    build: {
+      outDir: 'dist',
+      assetsDir: 'assets',
+      emptyOutDir: true,
+      sourcemap: false,
     },
     server: {
       host: '0.0.0.0',
