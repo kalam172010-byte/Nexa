@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
@@ -234,25 +236,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [token]);
 
-  // Google Login via Firebase Popup
+  // Handle Google redirect sign-in result if coming back from redirect
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          console.log('[AuthContext] getRedirectResult returned user:', result.user.email);
+          await syncUserWithBackend(result.user);
+        }
+      })
+      .catch((err) => {
+        console.warn('[AuthContext] getRedirectResult notice:', err?.message || err);
+      });
+  }, [syncUserWithBackend]);
+
+  // Google Login via Firebase Popup (with automatic fallback to Redirect on mobile/blocked popups)
   const loginWithGoogle = async () => {
     setIsLoading(true);
+    console.log('[AuthContext] loginWithGoogle triggered...');
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      if (result.user) {
+      let result;
+      try {
+        result = await signInWithPopup(auth, googleProvider);
+      } catch (popupErr: any) {
+        console.warn('[AuthContext] signInWithPopup blocked or failed:', popupErr?.code || popupErr?.message);
+        if (
+          popupErr?.code === 'auth/popup-blocked' ||
+          popupErr?.code === 'auth/popup-closed-by-user' ||
+          popupErr?.message?.includes('popup')
+        ) {
+          console.log('[AuthContext] Fallback to signInWithRedirect for mobile/blocked popup...');
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+        throw popupErr;
+      }
+
+      if (result?.user) {
+        console.log('[AuthContext] Google popup sign-in successful for:', result.user.email);
         await syncUserWithBackend(result.user);
       }
     } catch (err: any) {
       if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
         console.warn('Google Sign-In notice: Current domain is not added to Firebase Authorized Domains list.');
-        throw new Error('Google Sign-In is not enabled for this preview domain. Please sign in or register below using your Username or Email with password.');
-      }
-      if (err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked')) {
-        console.warn('Google Sign-In notice: popup blocked by browser.');
-        throw new Error('Google Sign-In popup was blocked by browser. Please enable popups or sign in with your Username/Email.');
-      }
-      if (err?.code === 'auth/popup-closed-by-user') {
-        throw new Error('Google Sign-In popup was closed. Please try again or use Username/Email login.');
+        throw new Error('Google Sign-In is not authorized for this domain yet. Please add kalamffpanel.kalamff.workers.dev in Firebase Console -> Authentication -> Settings -> Authorized Domains.');
       }
       console.warn('Google Sign-in notice:', err?.message || err);
       throw new Error(err?.message || 'Google sign-in failed. Please try again.');
@@ -270,17 +297,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(res.token);
       setUser(res.user);
     } catch (err: any) {
-      if (err?.data?.isStaticFallback || err?.status === 404 || err?.message?.includes('Unable to connect') || err?.message?.includes('HTML')) {
-        try {
-          const email = usernameOrEmail.includes('@') ? usernameOrEmail.trim() : `${usernameOrEmail.trim().toLowerCase()}@kalamffpanel.app`;
-          const userCred = await signInWithEmailAndPassword(auth, email, password);
-          if (userCred.user) {
-            await syncUserWithBackend(userCred.user, usernameOrEmail);
-            return;
-          }
-        } catch (fbErr: any) {
-          throw new Error(fbErr.message || 'Invalid username/email or password.');
+      console.warn('[AuthContext] Backend login API failed or unreachable, trying Firebase Auth fallback:', err);
+      try {
+        const cleanIdentifier = usernameOrEmail.trim();
+        const email = cleanIdentifier.includes('@')
+          ? cleanIdentifier
+          : `${cleanIdentifier.toLowerCase()}@kalamffpanel.app`;
+
+        const userCred = await signInWithEmailAndPassword(auth, email, password);
+        if (userCred.user) {
+          await syncUserWithBackend(userCred.user, cleanIdentifier);
+          return;
         }
+      } catch (fbErr: any) {
+        console.error('[AuthContext] Firebase auth login fallback error:', fbErr);
+        if (
+          fbErr?.code === 'auth/invalid-credential' ||
+          fbErr?.code === 'auth/user-not-found' ||
+          fbErr?.code === 'auth/wrong-password' ||
+          fbErr?.code === 'auth/invalid-email'
+        ) {
+          throw new Error('Invalid username/email or password.');
+        }
+        throw new Error(fbErr.message || 'Authentication failed. Please check your credentials.');
       }
       throw new Error(err.message || 'Invalid username/email or password.');
     } finally {
@@ -307,18 +346,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(res.token);
       setUser(res.user);
     } catch (err: any) {
-      if (err?.data?.isStaticFallback || err?.status === 404 || err?.message?.includes('Unable to connect') || err?.message?.includes('HTML')) {
-        try {
-          const cleanEmail = email.trim().toLowerCase();
-          const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-          if (userCred.user) {
-            await updateProfile(userCred.user, { displayName: username.trim() });
-            await syncUserWithBackend(userCred.user, username.trim());
-            return;
-          }
-        } catch (fbErr: any) {
-          throw new Error(fbErr.message || 'Registration failed. Please check your credentials.');
+      console.warn('[AuthContext] Backend register API failed or unreachable, trying Firebase Auth fallback:', err);
+      try {
+        const cleanEmail = email.trim().toLowerCase();
+        const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        if (userCred.user) {
+          await updateProfile(userCred.user, { displayName: username.trim() });
+          await syncUserWithBackend(userCred.user, username.trim());
+          return;
         }
+      } catch (fbErr: any) {
+        console.error('[AuthContext] Firebase auth register fallback error:', fbErr);
+        if (fbErr?.code === 'auth/email-already-in-use') {
+          throw new Error('An account with this email address already exists. Please sign in instead.');
+        }
+        if (fbErr?.code === 'auth/weak-password') {
+          throw new Error('Password should be at least 6 characters.');
+        }
+        throw new Error(fbErr.message || 'Registration failed. Please check your credentials.');
       }
       throw new Error(err.message || 'Registration failed. Please check your credentials.');
     } finally {
