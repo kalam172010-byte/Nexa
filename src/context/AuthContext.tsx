@@ -10,7 +10,7 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../firebase.js';
 import { User, UserRole } from '../types/index.js';
 import { api } from '../services/api.js';
@@ -298,7 +298,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [syncUserWithBackend, saveUserSession, clearUserSession]);
 
-  // Real-time balance and user state background polling (Every 6 seconds + on focus)
+  // Instant real-time Firestore listener for live wallet balance and role updates
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const userDocRef = doc(db, 'users', user.id);
+      const unsubscribe = onSnapshot(
+        userDocRef,
+        snap => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (typeof data.balance === 'number') {
+              setUser(prev => {
+                if (!prev) return prev;
+                if (prev.balance !== data.balance || prev.role !== data.role || prev.isBanned !== data.isBanned) {
+                  const updated = {
+                    ...prev,
+                    balance: Number(data.balance),
+                    role: data.role || prev.role,
+                    isBanned: Boolean(data.isBanned),
+                  };
+                  localStorage.setItem('nexa_user_data', JSON.stringify(updated));
+                  return updated;
+                }
+                return prev;
+              });
+            }
+          }
+        },
+        err => {
+          console.warn('[AuthContext] Real-time Firestore snapshot listener notice:', err);
+        }
+      );
+      return () => unsubscribe();
+    } catch (err) {
+      console.warn('[AuthContext] Failed to attach Firestore real-time listener:', err);
+    }
+  }, [user?.id]);
+
+  // Real-time balance and user state background polling (Every 3 seconds + on focus)
   useEffect(() => {
     if (!token) return;
 
@@ -309,7 +347,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(prev => {
             if (!prev) return data.user;
             if (prev.balance !== data.user.balance || prev.role !== data.user.role || prev.isBanned !== data.user.isBanned) {
-              return { ...prev, ...data.user };
+              const updated = { ...prev, ...data.user };
+              localStorage.setItem('nexa_user_data', JSON.stringify(updated));
+              return updated;
             }
             return prev;
           });
@@ -319,7 +359,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    const interval = setInterval(syncBalance, 6000);
+    const interval = setInterval(syncBalance, 3000);
     window.addEventListener('focus', syncBalance);
 
     return () => {

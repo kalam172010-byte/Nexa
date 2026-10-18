@@ -167,6 +167,8 @@ export interface AdminStats {
   activeUsers: number;
   totalSales: number;
   todaySales: number;
+  monthlySales?: number;
+  todayOrders?: number;
   totalDeposits: number;
   pendingDeposits: number;
   totalOrders: number;

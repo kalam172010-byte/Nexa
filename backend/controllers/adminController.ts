@@ -17,17 +17,25 @@ export class AdminController {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
 
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+
       const totalUsers = db.users.length;
       const activeUsers = db.users.filter(u => !u.isBanned).length;
 
-      const totalSales = db.orders.reduce((sum, o) => sum + o.pricePaid, 0);
+      const totalSales = db.orders.reduce((sum, o) => sum + (Number(o.pricePaid) || 0), 0);
       const todaySales = db.orders
         .filter(o => new Date(o.createdAt) >= startOfDay)
-        .reduce((sum, o) => sum + o.pricePaid, 0);
+        .reduce((sum, o) => sum + (Number(o.pricePaid) || 0), 0);
+
+      const monthlySales = db.orders
+        .filter(o => new Date(o.createdAt) >= startOfMonth)
+        .reduce((sum, o) => sum + (Number(o.pricePaid) || 0), 0);
+
+      const todayOrders = db.orders.filter(o => new Date(o.createdAt) >= startOfDay).length;
 
       const totalDeposits = db.deposits
         .filter(d => d.status === 'SUCCESS')
-        .reduce((sum, d) => sum + d.amount, 0);
+        .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
       const pendingDeposits = db.deposits.filter(d => d.status === 'PENDING').length;
       const totalOrders = db.orders.length;
@@ -46,8 +54,8 @@ export class AdminController {
 
         salesChart.push({
           date: dateStr.slice(5), // MM-DD
-          sales: dayOrders.reduce((sum, o) => sum + o.pricePaid, 0),
-          deposits: dayDeposits.reduce((sum, dep) => sum + dep.amount, 0),
+          sales: dayOrders.reduce((sum, o) => sum + (Number(o.pricePaid) || 0), 0),
+          deposits: dayDeposits.reduce((sum, dep) => sum + (Number(dep.amount) || 0), 0),
           orders: dayOrders.length,
         });
       }
@@ -57,6 +65,8 @@ export class AdminController {
         activeUsers,
         totalSales,
         todaySales,
+        monthlySales,
+        todayOrders,
         totalDeposits,
         pendingDeposits,
         totalOrders,

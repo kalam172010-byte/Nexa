@@ -664,6 +664,16 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     user.balance = Number((currentBalance - totalPrice).toFixed(2));
     user.updatedAt = new Date().toISOString();
 
+    // Sync user balance directly to Firestore document in real-time
+    try {
+      const fsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(user.id)}?updateMask.fieldPaths=balance&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      fetch(fsUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { balance: { doubleValue: Number(user.balance) } } })
+      }).catch(() => {});
+    } catch {}
+
     const batchOrderId = `API-ORD-${Date.now()}-${generateRandomHex(4).toUpperCase()}`;
     const tx: EdgeTransaction = {
       id: `TX-${Date.now()}-${generateRandomHex(4)}`,

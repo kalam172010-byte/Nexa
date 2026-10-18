@@ -506,6 +506,75 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         storedUser.balance = data.newBalance;
         localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
       }
+      if (data.order) {
+        try {
+          const rawOrders = localStorage.getItem('nexa_cached_orders');
+          const prevOrders = rawOrders ? JSON.parse(rawOrders) : [];
+          if (!prevOrders.some((o: any) => o.id === data.order.id)) {
+            localStorage.setItem('nexa_cached_orders', JSON.stringify([data.order, ...prevOrders]));
+          }
+        } catch {}
+      }
+      if (data.deliveredKey || data.key) {
+        const newK = data.deliveredKey || data.key;
+        if (newK && newK.id) {
+          const currentKeys = getCachedKeys();
+          if (!currentKeys.some((k: any) => k.id === newK.id)) {
+            saveCachedKeys([newK, ...currentKeys]);
+          }
+        }
+      }
+    } else if ((endpoint.includes('/reseller/buy') || endpoint.includes('reseller_v1.php')) && data && (data.status === true || data.success === true)) {
+      if (typeof data.remaining_balance === 'number' && storedUser) {
+        storedUser.balance = data.remaining_balance;
+        localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+        saveCachedUsers(getCachedUsers().map(u => (u.id === storedUser.id ? { ...u, balance: data.remaining_balance } : u)));
+      }
+      const ordId = data.order_id || data.transaction_id || `API-ORD-${Date.now()}`;
+      const delKey = data.key || (Array.isArray(data.keys) ? data.keys.join(', ') : '');
+      const newOrd = {
+        id: ordId,
+        userId: storedUser?.id || 'USR-KALAM-172010',
+        productName: data.product_name || 'VIP Gaming Panel',
+        durationLabel: data.duration || '1 Day',
+        pricePaid: Number(data.total_price || data.wallet_deducted) || 0,
+        deliveredKeyId: `KEY-API-${Date.now()}`,
+        deliveredKeyCode: delKey,
+        status: 'COMPLETED',
+        purchaseSource: 'API',
+        purchaseSourceLabel: 'Buy from API',
+        createdAt: new Date().toISOString(),
+      };
+      try {
+        const rawOrders = localStorage.getItem('nexa_cached_orders');
+        const prevOrders = rawOrders ? JSON.parse(rawOrders) : [];
+        if (!prevOrders.some((o: any) => o.id === newOrd.id)) {
+          localStorage.setItem('nexa_cached_orders', JSON.stringify([newOrd, ...prevOrders]));
+        }
+      } catch {}
+      if (delKey) {
+        const newKeyRec = {
+          id: `KEY-API-${Date.now()}`,
+          productId: data.product_id || '155',
+          productName: data.product_name || 'VIP Gaming Panel',
+          durationLabel: data.duration || '1 Day',
+          keyCode: delKey,
+          isUsed: false,
+          assignedUserId: storedUser?.id || 'USR-KALAM-172010',
+          assignedOrderId: ordId,
+          assignedAt: new Date().toISOString(),
+          status: 'ACTIVE',
+          purchaseSource: 'API',
+          purchaseSourceLabel: 'Buy from API',
+          createdAt: new Date().toISOString(),
+        };
+        const currentKeys = getCachedKeys();
+        saveCachedKeys([newKeyRec, ...currentKeys]);
+      }
+    } else if ((endpoint.includes('/admin/orders') || endpoint === '/orders') && Array.isArray(data.orders)) {
+      try {
+        localStorage.setItem('nexa_cached_orders', JSON.stringify(data.orders));
+      } catch {}
     } else if (endpoint.startsWith('/admin/users/') && endpoint.endsWith('/adjust-balance') && method === 'POST' && data) {
       const targetId = endpoint.replace('/admin/users/', '').replace('/adjust-balance', '');
       const updatedBal = typeof data.newBalance === 'number' ? data.newBalance : data.currentBalance;
@@ -1400,17 +1469,62 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const products = getCachedProducts();
       const keys = getCachedKeys();
       const users = getCachedUsers();
+      const rawOrders = localStorage.getItem('nexa_cached_orders');
+      const orders: any[] = rawOrders ? JSON.parse(rawOrders) : [];
+      const rawDeposits = localStorage.getItem('nexa_cached_deposits');
+      const deposits: any[] = rawDeposits ? JSON.parse(rawDeposits) : [];
+
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const totalSales = orders.reduce((sum, o) => sum + (Number(o.pricePaid) || 0), 0);
+      const todaySales = orders
+        .filter(o => new Date(o.createdAt) >= startOfDay)
+        .reduce((sum, o) => sum + (Number(o.pricePaid) || 0), 0);
+      const monthlySales = orders
+        .filter(o => new Date(o.createdAt) >= startOfMonth)
+        .reduce((sum, o) => sum + (Number(o.pricePaid) || 0), 0);
+      const todayOrders = orders.filter(o => new Date(o.createdAt) >= startOfDay).length;
+
+      const totalDeposits = deposits
+        .filter(d => d.status === 'SUCCESS')
+        .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+      const pendingDeposits = deposits.filter(d => d.status === 'PENDING').length;
+
+      const salesChart: Array<{ date: string; sales: number; deposits: number; orders: number }> = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+
+        const dayOrders = orders.filter(o => String(o.createdAt || '').startsWith(dateStr));
+        const dayDeposits = deposits.filter(dep => dep.status === 'SUCCESS' && String(dep.createdAt || '').startsWith(dateStr));
+
+        salesChart.push({
+          date: dateStr.slice(5),
+          sales: dayOrders.reduce((sum, o) => sum + (Number(o.pricePaid) || 0), 0),
+          deposits: dayDeposits.reduce((sum, dep) => sum + (Number(dep.amount) || 0), 0),
+          orders: dayOrders.length,
+        });
+      }
+
       return {
-        totalUsers: users.length || 15,
-        activeUsers: users.filter((u: any) => !u.isBanned).length || 15,
-        totalSales: 25000,
-        todaySales: 1800,
-        totalDeposits: 32000,
-        pendingDeposits: 0,
-        totalOrders: 42,
-        availableKeys: keys.length || products.reduce((acc, p) => acc + (p.variants?.length || 0) * 15, 0),
-        todayRevenue: 1800,
-        salesChart: [],
+        totalUsers: users.length || 1,
+        activeUsers: users.filter((u: any) => !u.isBanned).length || 1,
+        totalSales,
+        todaySales,
+        monthlySales,
+        todayOrders,
+        totalDeposits,
+        pendingDeposits,
+        totalOrders: orders.length,
+        availableKeys: keys.filter(k => !k.isUsed && k.status === 'ACTIVE').length,
+        todayRevenue: todaySales,
+        salesChart,
       } as unknown as T;
     }
 

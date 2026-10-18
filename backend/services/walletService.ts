@@ -2,6 +2,21 @@ import crypto from 'crypto';
 import { db } from '../db/database';
 import { User, Transaction } from '../models/types';
 
+function syncUserBalanceToFirestore(userId: string, balance: number): void {
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(userId)}?updateMask.fieldPaths=balance&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+    fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          balance: { doubleValue: Number(balance) }
+        }
+      })
+    }).catch(() => {});
+  } catch {}
+}
+
 export class WalletService {
   public static getBalance(userId: string): number {
     const user = db.users.find(u => u.id === userId);
@@ -38,6 +53,7 @@ export class WalletService {
 
     db.transactions.unshift(transaction);
     db.saveSync();
+    syncUserBalanceToFirestore(user.id, user.balance);
 
     return { user, transaction };
   }
@@ -75,6 +91,7 @@ export class WalletService {
 
     db.transactions.unshift(transaction);
     db.saveSync();
+    syncUserBalanceToFirestore(user.id, user.balance);
 
     return { user, transaction };
   }

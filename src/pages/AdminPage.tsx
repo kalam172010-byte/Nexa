@@ -2312,16 +2312,22 @@ export const AdminPage: React.FC = () => {
               <span className="text-[10px] text-emerald-400">{stats?.activeUsers ?? 0} active</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase font-mono">Total Sales</span>
-              <div className="font-mono text-2xl font-black text-rose-400">₹{(Number(stats?.totalSales) || 0).toFixed(0)}</div>
-              <span className="text-[10px] text-slate-400">All time orders</span>
+            <div className="p-4 rounded-2xl bg-[#0d0d14] border border-emerald-500/20 bg-emerald-950/10 space-y-1">
+              <span className="text-[10px] text-emerald-400 uppercase font-mono font-bold">Today Sales</span>
+              <div className="font-mono text-2xl font-black text-emerald-400">₹{(Number(stats?.todaySales) || 0).toFixed(0)}</div>
+              <span className="text-[10px] text-emerald-400 font-bold">{stats?.todayOrders ?? 0} orders today (Web &amp; API)</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#0d0d14] border border-rose-500/20 bg-rose-950/10 space-y-1">
+              <span className="text-[10px] text-rose-400 uppercase font-mono font-bold">Monthly Sales</span>
+              <div className="font-mono text-2xl font-black text-rose-400">₹{(Number(stats?.monthlySales) || 0).toFixed(0)}</div>
+              <span className="text-[10px] text-slate-400">Current calendar month</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase font-mono">Today Revenue</span>
-              <div className="font-mono text-2xl font-black text-emerald-400">₹{(Number(stats?.todayRevenue || stats?.todaySales) || 0).toFixed(0)}</div>
-              <span className="text-[10px] text-emerald-400">Calculated today</span>
+              <span className="text-[10px] text-slate-400 uppercase font-mono">Total Sales (All Time)</span>
+              <div className="font-mono text-2xl font-black text-white">₹{(Number(stats?.totalSales) || 0).toFixed(0)}</div>
+              <span className="text-[10px] text-slate-400">{stats?.totalOrders ?? 0} total orders</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
@@ -2340,12 +2346,6 @@ export const AdminPage: React.FC = () => {
               <span className="text-[10px] text-slate-400 uppercase font-mono">Pending Deposits</span>
               <div className="font-mono text-2xl font-black text-amber-400">{stats?.pendingDeposits ?? 0}</div>
               <span className="text-[10px] text-amber-400">Awaiting UTR confirm</span>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase font-mono">Total Orders</span>
-              <div className="font-mono text-2xl font-black text-white">{stats?.totalOrders ?? 0}</div>
-              <span className="text-[10px] text-slate-400">Automated fulfilled</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
