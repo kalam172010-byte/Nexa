@@ -75,9 +75,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn('Firestore user profile sync non-critical warning:', firestoreErr);
         }
       }
-    } catch (err) {
-      console.error('Failed to sync user with backend:', err);
-      throw err;
+    } catch (err: any) {
+      console.warn('Backend sync API failed, using client-side Firestore auth state fallback:', err);
+      try {
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        let clientUser: User;
+        if (userDocSnap.exists()) {
+          clientUser = userDocSnap.data() as User;
+        } else {
+          const username =
+            customUsername ||
+            firebaseUser.displayName ||
+            firebaseUser.email?.split('@')[0] ||
+            `user_${firebaseUser.uid.slice(0, 6)}`;
+
+          clientUser = {
+            id: firebaseUser.uid,
+            username,
+            email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
+            role: 'USER',
+            balance: 100,
+            referralCode: `REF_${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
+            twoFactorEnabled: false,
+            isBanned: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          await setDoc(userDocRef, clientUser, { merge: true });
+        }
+
+        const fallbackToken = `fb_token_${firebaseUser.uid}`;
+        localStorage.setItem('nexa_auth_token', fallbackToken);
+        setToken(fallbackToken);
+        setUser(clientUser);
+      } catch (fallbackErr) {
+        console.error('Client auth fallback failed:', fallbackErr);
+        throw err;
+      }
     }
   }, []);
 
@@ -102,24 +138,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Listen to Firebase auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('[AuthContext] onAuthStateChanged listener triggered. Firebase User:', firebaseUser ? `${firebaseUser.uid} (${firebaseUser.email || 'no-email'})` : 'null');
       if (firebaseUser) {
         try {
+          console.log('[AuthContext] Syncing user session for Firebase UID:', firebaseUser.uid);
           await syncUserWithBackend(firebaseUser);
+          console.log('[AuthContext] User session synced successfully.');
         } catch (err) {
-          console.error('Error during Firebase auth state synchronization:', err);
+          console.error('[AuthContext] Error during Firebase auth state synchronization:', err);
           const storedToken = localStorage.getItem('nexa_auth_token');
+          console.log('[AuthContext] Fallback token check from localStorage:', storedToken ? 'Token present' : 'No token');
           if (storedToken) {
             try {
               const data = await api.getMe();
               if (data?.user) {
+                console.log('[AuthContext] Recovered user session from token:', data.user.id);
                 setUser(data.user);
                 setToken(storedToken);
               } else {
+                console.warn('[AuthContext] Token validation failed. Clearing session.');
                 setUser(null);
                 setToken(null);
                 localStorage.removeItem('nexa_auth_token');
               }
             } catch {
+              console.warn('[AuthContext] Failed to validate token with backend. Clearing session.');
               setUser(null);
               setToken(null);
               localStorage.removeItem('nexa_auth_token');
@@ -132,10 +175,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         // If no Firebase user, check if we have a valid backend session token (e.g., Demo or password login)
         const storedToken = localStorage.getItem('nexa_auth_token');
+        console.log('[AuthContext] No Firebase user present. Local token check:', storedToken ? 'Token present' : 'No token');
         if (storedToken) {
           try {
             const data = await api.getMe();
             if (data?.user) {
+              console.log('[AuthContext] Restored user session from token:', data.user.id);
               setUser(data.user);
               setToken(storedToken);
             } else {
@@ -225,6 +270,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(res.token);
       setUser(res.user);
     } catch (err: any) {
+      if (err?.data?.isStaticFallback || err?.status === 404 || err?.message?.includes('Unable to connect') || err?.message?.includes('HTML')) {
+        try {
+          const email = usernameOrEmail.includes('@') ? usernameOrEmail.trim() : `${usernameOrEmail.trim().toLowerCase()}@kalamffpanel.app`;
+          const userCred = await signInWithEmailAndPassword(auth, email, password);
+          if (userCred.user) {
+            await syncUserWithBackend(userCred.user, usernameOrEmail);
+            return;
+          }
+        } catch (fbErr: any) {
+          throw new Error(fbErr.message || 'Invalid username/email or password.');
+        }
+      }
       throw new Error(err.message || 'Invalid username/email or password.');
     } finally {
       setIsLoading(false);
@@ -250,6 +307,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(res.token);
       setUser(res.user);
     } catch (err: any) {
+      if (err?.data?.isStaticFallback || err?.status === 404 || err?.message?.includes('Unable to connect') || err?.message?.includes('HTML')) {
+        try {
+          const cleanEmail = email.trim().toLowerCase();
+          const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+          if (userCred.user) {
+            await updateProfile(userCred.user, { displayName: username.trim() });
+            await syncUserWithBackend(userCred.user, username.trim());
+            return;
+          }
+        } catch (fbErr: any) {
+          throw new Error(fbErr.message || 'Registration failed. Please check your credentials.');
+        }
+      }
       throw new Error(err.message || 'Registration failed. Please check your credentials.');
     } finally {
       setIsLoading(false);

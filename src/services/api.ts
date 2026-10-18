@@ -1,4 +1,21 @@
-const BASE_URL = '/api';
+const DEV_SERVER_URL = 'https://ais-dev-4bx54fgqc5gfadjfoor5kj-128464619421.asia-east1.run.app';
+
+function getBaseUrl(): string {
+  if (typeof window === 'undefined') return '/api';
+  const customApiUrl = import.meta.env.VITE_API_BASE_URL;
+  if (customApiUrl) return customApiUrl.endsWith('/') ? customApiUrl.slice(0, -1) : customApiUrl;
+
+  const hostname = window.location.hostname;
+  if (
+    hostname.endsWith('.workers.dev') ||
+    hostname.endsWith('.pages.dev') ||
+    hostname.endsWith('.cloudflare.com')
+  ) {
+    return `${DEV_SERVER_URL}/api`;
+  }
+
+  return '/api';
+}
 
 export class ApiError extends Error {
   public status: number;
@@ -24,22 +41,29 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Authorization', `Bearer ${token}`);
   }
 
+  const baseUrl = getBaseUrl();
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}${endpoint}`, {
+    response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
       headers,
     });
   } catch (err: any) {
     throw new ApiError(
       err?.message || 'Unable to connect to Kalam FF Panel API. Please check your network connection.',
-      0
+      0,
+      { isStaticFallback: true }
     );
   }
 
   const contentType = response.headers.get('content-type');
   const isJson = contentType && contentType.includes('application/json');
   const data = isJson ? await response.json() : await response.text();
+
+  // If static asset host returned HTML (index.html SPA fallback) for an API endpoint
+  if (typeof data === 'string' && (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html'))) {
+    throw new ApiError('Backend API endpoint not found on static host.', 404, { isStaticFallback: true });
+  }
 
   if (!response.ok) {
     const errorMsg = data?.error || data?.message || 'A network error occurred. Please try again.';

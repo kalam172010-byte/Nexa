@@ -83,7 +83,14 @@ const MainLayout: React.FC = () => {
 
   // If user not authenticated, strictly show login/register screen only
   if (!user) {
-    return <AuthPage onSuccess={() => setCurrentPage('dashboard')} />;
+    return (
+      <AuthPage
+        onSuccess={() => {
+          console.log('[MainLayout] AuthPage onSuccess callback invoked. Setting active page to dashboard...');
+          setCurrentPage('dashboard');
+        }}
+      />
+    );
   }
 
   const handleNavigate = (pageId: string) => {

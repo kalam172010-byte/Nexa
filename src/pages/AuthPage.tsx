@@ -113,11 +113,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     }
 
     setIsOtpVerifying(true);
+    console.log('[AuthPage] Verifying OTP code for email:', email);
     try {
       await loginWithOtp(email, code);
+      console.log('[AuthPage] OTP login successful. Triggering onSuccess redirect...');
       showToastSuccess('Login Successful', `Welcome to ${siteConfig.siteTitle || 'Nexa Panel'}!`);
       onSuccess();
     } catch (err: any) {
+      console.error('[AuthPage] OTP verification failed:', err);
       showToastError('Verification Failed', err.message || 'Invalid or expired OTP code.');
     } finally {
       setIsOtpVerifying(false);
@@ -126,11 +129,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
+    console.log('[AuthPage] Initiating Google sign-in...');
     try {
       await loginWithGoogle();
+      console.log('[AuthPage] Google sign-in successful. Triggering onSuccess redirect...');
       showToastSuccess('Google Sign-In Successful', `Welcome to ${siteConfig.siteTitle || 'Nexa Panel'}.`);
       onSuccess();
     } catch (err: any) {
+      console.error('[AuthPage] Google sign-in failed:', err);
       showToastError('Google Sign-In Notice', err.message || 'Could not authenticate with Google.');
     } finally {
       setIsGoogleLoading(false);
@@ -148,6 +154,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     setIsSubmitting(true);
     setPreviewResetToken(null);
     try {
+      console.log('[AuthPage] Sending password reset email for:', identifier);
       const res = await sendPasswordReset(identifier);
       setIsResetSent(true);
       const targetEmail = res.email || identifier;
@@ -158,6 +165,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
       }
       showToastSuccess('Reset Instructions Sent', 'Please check your inbox to reset your password.');
     } catch (err: any) {
+      console.error('[AuthPage] Password reset request failed:', err);
       showToastError('Reset Error', 'Could not send password reset instructions. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -183,7 +191,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
           showToastError('Validation Error', 'Please enter your password.');
           return;
         }
+        console.log('[AuthPage] Submitting login request for:', identifier);
         await login(identifier, password);
+        console.log('[AuthPage] Login successful. Triggering onSuccess redirect...');
         showToastSuccess('Welcome Back!', 'Signed in successfully.');
         onSuccess();
       } else if (mode === 'register') {
@@ -197,11 +207,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
           showToastError('Validation Error', 'Password must be at least 6 characters.');
           return;
         }
+        console.log('[AuthPage] Submitting registration for:', u, em);
         await register(u, em, password, referralCode.trim() || undefined);
+        console.log('[AuthPage] Registration successful. Triggering onSuccess redirect...');
         showToastSuccess('Account Created!', `Welcome to ${siteConfig.siteTitle || 'Nexa Panel'}.`);
         onSuccess();
       }
     } catch (err: any) {
+      console.error('[AuthPage] Authentication error:', err);
       showToastError('Authentication Error', err.message || 'Please check your credentials.');
     } finally {
       setIsSubmitting(false);
