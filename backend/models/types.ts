@@ -62,6 +62,8 @@ export interface DigitalKey {
   assignedAt?: string;
   expiresAt?: string;
   status: 'ACTIVE' | 'USED' | 'EXPIRED';
+  purchaseSource?: 'API' | 'WEB';
+  purchaseSourceLabel?: string;
   createdAt: string;
 }
 
@@ -76,6 +78,8 @@ export interface Order {
   deliveredKeyId: string;
   deliveredKeyCode: string;
   status: 'COMPLETED' | 'REFUNDED' | 'FAILED';
+  purchaseSource?: 'API' | 'WEB';
+  purchaseSourceLabel?: string;
   createdAt: string;
 }
 
@@ -86,6 +90,8 @@ export interface Transaction {
   amount: number;
   description: string;
   referenceId?: string;
+  purchaseSource?: 'API' | 'WEB';
+  purchaseSourceLabel?: string;
   status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'EXPIRED';
   createdAt: string;
 }

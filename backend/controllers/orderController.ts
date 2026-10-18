@@ -108,6 +108,8 @@ export class OrderController {
               assignedAt: new Date().toISOString(),
               expiresAt: expiryDate.toISOString(),
               status: 'ACTIVE',
+              purchaseSource: 'WEB',
+              purchaseSourceLabel: 'This Key Buyed by Web',
               createdAt: new Date().toISOString(),
             };
             db.digitalKeys.push(extKey);
@@ -120,11 +122,11 @@ export class OrderController {
             );
 
             if (availableKey) {
-              const localKey = KeyService.allocateKey(user.id, variant, subOrderId);
+              const localKey = KeyService.allocateKey(user.id, variant, subOrderId, 'WEB');
               deliveredKeys.push(localKey);
             } else {
               // Auto-generate high entropy fallback key if upstream fails / out of stock
-              const fallbackKey = KeyService.generateFallbackKey(user.id, product, variant, subOrderId);
+              const fallbackKey = KeyService.generateFallbackKey(user.id, product, variant, subOrderId, 'WEB');
               db.logActivity(
                 user.id,
                 user.username,
@@ -140,10 +142,10 @@ export class OrderController {
             k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE'
           );
           if (availableKey) {
-            const localKey = KeyService.allocateKey(user.id, variant, subOrderId);
+            const localKey = KeyService.allocateKey(user.id, variant, subOrderId, 'WEB');
             deliveredKeys.push(localKey);
           } else {
-            const fallbackKey = KeyService.generateFallbackKey(user.id, product, variant, subOrderId);
+            const fallbackKey = KeyService.generateFallbackKey(user.id, product, variant, subOrderId, 'WEB');
             deliveredKeys.push(fallbackKey);
           }
         }
@@ -164,6 +166,8 @@ export class OrderController {
           deliveredKeyId: k.id,
           deliveredKeyCode: k.keyCode,
           status: 'COMPLETED',
+          purchaseSource: 'WEB',
+          purchaseSourceLabel: 'This Key Buyed by Web',
           createdAt: new Date().toISOString(),
         };
         db.orders.unshift(order);
@@ -179,15 +183,15 @@ export class OrderController {
       db.logActivity(
         user.id,
         user.username,
-        'KEY_PURCHASE',
-        `Purchased ${product.name} [${variant.durationLabel}] for ₹${authoritativePrice}. Key: ${deliveredKey.keyCode}`
+        'KEY_PURCHASE_WEB',
+        `[This Key Buyed by Web] Purchased ${product.name} [${variant.durationLabel}] for ₹${authoritativePrice}. Key: ${deliveredKey.keyCode}`
       );
 
       const latestOrder = db.orders[0];
 
       res.status(201).json({
         success: true,
-        message: 'Purchase successful! Your key has been generated and delivered.',
+        message: 'Purchase successful! This Key Buyed by Web.',
         order: latestOrder,
         deliveredKey: {
           id: deliveredKey.id,
@@ -195,6 +199,8 @@ export class OrderController {
           durationLabel: variant.durationLabel,
           expiresAt: deliveredKey.expiresAt,
           productName: product.name,
+          purchaseSource: 'WEB',
+          purchaseSourceLabel: 'This Key Buyed by Web',
         },
         key: {
           id: deliveredKey.id,
@@ -202,6 +208,8 @@ export class OrderController {
           durationLabel: variant.durationLabel,
           expiresAt: deliveredKey.expiresAt,
           productName: product.name,
+          purchaseSource: 'WEB',
+          purchaseSourceLabel: 'This Key Buyed by Web',
         },
         newBalance: WalletService.getBalance(user.id),
       });
@@ -219,7 +227,16 @@ export class OrderController {
         return;
       }
 
-      const orders = db.orders.filter(o => o.userId === user.id);
+      const orders = db.orders
+        .filter(o => o.userId === user.id)
+        .map(o => {
+          const isApi = o.purchaseSource === 'API' || String(o.id || '').startsWith('API-ORD-');
+          return {
+            ...o,
+            purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
+            purchaseSourceLabel: isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web',
+          };
+        });
       res.json({ orders });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to fetch orders.' });

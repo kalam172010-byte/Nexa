@@ -23,6 +23,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED' | 'USED'>('ALL');
+  const [sourceFilter, setSourceFilter] = useState<'ALL' | 'WEB' | 'API'>('ALL');
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [viewingKey, setViewingKey] = useState<DigitalKey | null>(null);
 
@@ -62,6 +63,11 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
   };
 
   const tabs: ('ALL' | 'ACTIVE' | 'EXPIRED' | 'USED')[] = ['ALL', 'ACTIVE', 'EXPIRED', 'USED'];
+  const filteredKeys = keys.filter(k => {
+    const src = k.purchaseSource === 'API' ? 'API' : 'WEB';
+    if (sourceFilter !== 'ALL' && src !== sourceFilter) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -72,7 +78,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
             My License Keys
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            View delivered software licenses, check expiration dates, and copy keys.
+            View delivered software licenses, check whether each key was Buyed by Web or Buyed by API, and copy keys.
           </p>
         </div>
 
@@ -88,21 +94,43 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
         </div>
       </div>
 
-      {/* Segmented Status Filter */}
-      <div className="flex items-center gap-1.5 p-1 bg-[#10121a] border border-white/[0.08] rounded-xl w-fit max-w-full overflow-x-auto no-scrollbar">
-        {tabs.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setStatusFilter(tab)}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-              statusFilter === tab
-                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold shadow-[0_2px_10px_rgba(244,63,94,0.3)]'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            {tab === 'ALL' ? 'All Keys' : tab.charAt(0) + tab.slice(1).toLowerCase()}
-          </button>
-        ))}
+      {/* Segmented Status & Purchase Source Filters */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 p-1 bg-[#10121a] border border-white/[0.08] rounded-xl w-fit max-w-full overflow-x-auto no-scrollbar">
+          {tabs.map(tab => (
+            <button
+              key={tab}
+              onClick={() => setStatusFilter(tab)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                statusFilter === tab
+                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold shadow-[0_2px_10px_rgba(244,63,94,0.3)]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {tab === 'ALL' ? 'All Keys' : tab.charAt(0) + tab.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1.5 p-1 bg-[#10121a] border border-white/[0.08] rounded-xl w-fit">
+          {(['ALL', 'WEB', 'API'] as const).map(src => (
+            <button
+              key={src}
+              onClick={() => setSourceFilter(src)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                sourceFilter === src
+                  ? src === 'API'
+                    ? 'bg-purple-600 text-white shadow'
+                    : src === 'WEB'
+                    ? 'bg-emerald-600 text-white shadow'
+                    : 'bg-white/10 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {src === 'ALL' ? 'All Sources' : src === 'API' ? 'Buyed by API' : 'Buyed by Web'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Keys List */}
@@ -112,7 +140,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
             <div key={i} className="p-5 rounded-2xl bg-[#10121a] border border-white/[0.06] animate-pulse h-28" />
           ))}
         </div>
-      ) : keys.length === 0 ? (
+      ) : filteredKeys.length === 0 ? (
         <div className="p-12 rounded-2xl bg-[#10121a] border border-white/[0.08] text-center space-y-3">
           <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
             <KeyRound className="w-5 h-5" />
@@ -132,9 +160,12 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
         </div>
       ) : (
         <div className="space-y-3">
-          {keys.map(key => {
+          {filteredKeys.map(key => {
             const isActive = key.status === 'ACTIVE';
             const isUsed = key.status === 'USED';
+            const isApiPurchase = key.purchaseSource === 'API';
+            const sourceLabel =
+              key.purchaseSourceLabel || (isApiPurchase ? 'This Key Buyed by API' : 'This Key Buyed by Web');
 
             return (
               <div
@@ -142,8 +173,19 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
                 className="p-5 rounded-2xl bg-gradient-to-b from-[#131622] to-[#0f111a] border border-white/[0.08] hover:border-rose-500/30 transition-all space-y-3 shadow-md"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <h4 className="font-display font-bold text-sm text-white">{key.productName}</h4>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="font-display font-bold text-sm text-white">{key.productName}</h4>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold tracking-wide border ${
+                          isApiPurchase
+                            ? 'bg-purple-500/15 text-purple-300 border-purple-500/35'
+                            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                        }`}
+                      >
+                        {sourceLabel}
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-cyan-400 font-semibold">{key.gameName}</span>
                       <span aria-hidden="true" className="text-slate-600">·</span>
@@ -255,6 +297,19 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
               </div>
 
               <div className="p-3.5 rounded-xl bg-[#090a0f] border border-white/[0.06] space-y-1.5 font-mono tabular-nums">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-sans">Purchase Source</span>
+                  <span
+                    className={`font-sans font-bold px-2 py-0.5 rounded text-[11px] ${
+                      viewingKey.purchaseSource === 'API'
+                        ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                        : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                    }`}
+                  >
+                    {viewingKey.purchaseSourceLabel ||
+                      (viewingKey.purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web')}
+                  </span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400 font-sans">Status</span>
                   <span className="font-bold text-emerald-400">{viewingKey.status}</span>

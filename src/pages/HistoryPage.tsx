@@ -155,8 +155,31 @@ export const HistoryPage: React.FC = () => {
                   </div>
 
                   <div className="min-w-0 space-y-0.5">
-                    <div className="text-xs sm:text-sm font-semibold text-white truncate">
-                      {tx.description}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-xs sm:text-sm font-semibold text-white truncate">
+                        {tx.description}
+                      </div>
+                      {(tx.purchaseSource ||
+                        tx.type === 'PURCHASE' ||
+                        String(tx.description || '').toLowerCase().includes('purchased') ||
+                        String(tx.description || '').toLowerCase().includes('buyed by')) && (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border ${
+                            tx.purchaseSource === 'API' ||
+                            String(tx.description || '').includes('Buyed by API') ||
+                            String(tx.description || '').includes('Outbound API')
+                              ? 'bg-purple-500/15 text-purple-300 border-purple-500/35'
+                              : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                          }`}
+                        >
+                          {tx.purchaseSourceLabel ||
+                            (tx.purchaseSource === 'API' ||
+                            String(tx.description || '').includes('Buyed by API') ||
+                            String(tx.description || '').includes('Outbound API')
+                              ? 'This Key Buyed by API'
+                              : 'This Key Buyed by Web')}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400">

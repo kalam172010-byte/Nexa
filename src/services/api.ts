@@ -501,16 +501,31 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       try {
         localStorage.setItem('nexa_site_customization', JSON.stringify(data.config));
       } catch {}
+    } else if (endpoint === '/orders' && method === 'POST' && data) {
+      if (typeof data.newBalance === 'number' && storedUser) {
+        storedUser.balance = data.newBalance;
+        localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+      }
+    } else if (endpoint.startsWith('/admin/users/') && endpoint.endsWith('/adjust-balance') && method === 'POST' && data) {
+      const targetId = endpoint.replace('/admin/users/', '').replace('/adjust-balance', '');
+      const updatedBal = typeof data.newBalance === 'number' ? data.newBalance : data.currentBalance;
+      if (typeof updatedBal === 'number') {
+        const users = getCachedUsers().map(u => (u.id === targetId ? { ...u, balance: updatedBal } : u));
+        saveCachedUsers(users);
+        if (storedUser && storedUser.id === targetId) {
+          storedUser.balance = updatedBal;
+          localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+        }
+      }
     } else if (endpoint.includes('/reseller/api-credentials')) {
       const origin = getEffectiveOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
       try {
-        const storedKey = localStorage.getItem('nexa_user_outbound_api_key');
-        if (endpoint.includes('/regenerate') && data.apiKey) {
+        if (data.apiKey) {
           localStorage.setItem('nexa_user_outbound_api_key', data.apiKey);
-        } else if (storedKey) {
-          data.apiKey = storedKey;
-        } else if (data.apiKey) {
-          localStorage.setItem('nexa_user_outbound_api_key', data.apiKey);
+        }
+        if (typeof data.walletBalance === 'number' && storedUser) {
+          storedUser.balance = data.walletBalance;
+          localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
         }
       } catch {}
       if (origin) {
@@ -530,11 +545,19 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     return data as T;
   }
 
-  // PRIORITY 3: Stateful Fallback Handler for Static Hosting (e.g. Cloudflare Workers/Pages) or Offline Backend
+  // PRIORITY 3: Stateful Fallback Handler for Static Hosting or Offline Backend
   if (fetchFailed || isHtml || (!fetchFailed && response && !response.ok)) {
-    // If the real backend returned a 400 validation error with a specific message, surface it unless static
-    if (!fetchFailed && !isHtml && response && response.status === 400 && data?.error) {
-      throw new ApiError(data.error, 400, data);
+    // Surface real backend 400/401/403 validation errors (such as Insufficient wallet balance or Invalid API Key)
+    if (
+      !fetchFailed &&
+      !isHtml &&
+      response &&
+      (response.status === 400 ||
+        ((response.status === 401 || response.status === 403) &&
+          (endpoint.includes('/reseller/buy') || endpoint.includes('reseller_v1.php')))) &&
+      (data?.error || data?.message)
+    ) {
+      throw new ApiError(data.error || data.message, response.status, data);
     }
 
     const method = (options.method || 'GET').toUpperCase();
@@ -1264,44 +1287,113 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const isReseller = storedUser?.role === 'RESELLER' || storedUser?.role === 'ADMIN' || storedUser?.role === 'SUPER ADMIN';
       const unitPrice = isReseller ? Number(matchedVar?.resellerPrice || 38) : Number(matchedVar?.price || 50);
       const total = unitPrice * qty;
-      const curBal = Number(storedUser?.balance ?? 5000);
-      if (curBal < total) {
-        throw new ApiError(`Insufficient wallet balance. Required: ₹${total}, Available: ₹${curBal.toFixed(2)}`, 400);
+      const curBal = Number(storedUser?.balance ?? 0);
+      if (curBal <= 0 || curBal < total) {
+        throw new ApiError(`Insufficient wallet balance. Required: ₹${total.toFixed(2)}, Available: ₹${curBal.toFixed(2)}`, 400);
       }
-      const newBal = curBal - total;
+      const newBal = Number((curBal - total).toFixed(2));
       if (storedUser) {
         storedUser.balance = newBal;
         localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+        const updatedUsers = getCachedUsers().map(u => (u.id === storedUser.id ? { ...u, balance: newBal } : u));
+        saveCachedUsers(updatedUsers);
       }
       const generatedKeys: string[] = [];
+      const newKeyRecords: any[] = [];
+      const orderId = `ORD-${Date.now().toString().slice(-6)}`;
       for (let i = 0; i < qty; i++) {
-        generatedKeys.push(`KALAM-${Math.random().toString(16).slice(2, 6).toUpperCase()}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`);
+        const code = `KALAM-${Math.random().toString(16).slice(2, 6).toUpperCase()}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+        generatedKeys.push(code);
+        newKeyRecords.push({
+          id: `KEY-WEB-${Date.now()}-${i}`,
+          productId: matchedProd?.id,
+          variantId: matchedVar?.id,
+          productName: matchedProd?.name || 'VIP Gaming Panel',
+          gameName: matchedProd?.game || 'Mobile Game',
+          durationLabel: matchedVar?.durationLabel || '1 Day',
+          keyCode: code,
+          isUsed: false,
+          assignedUserId: storedUser?.id || 'USR-KALAM-172010',
+          assignedOrderId: orderId,
+          assignedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + (matchedVar?.durationHours || 24) * 3600 * 1000).toISOString(),
+          status: 'ACTIVE',
+          purchaseSource: 'WEB',
+          purchaseSourceLabel: 'This Key Buyed by Web',
+          createdAt: new Date().toISOString(),
+        });
       }
+      saveCachedKeys([...newKeyRecords, ...getCachedKeys()]);
+
       const order = {
-        id: `ORD-${Date.now().toString().slice(-6)}`,
+        id: orderId,
+        userId: storedUser?.id || 'USR-KALAM-172010',
         productId: matchedProd?.id,
         variantId: matchedVar?.id,
         productName: matchedProd?.name || 'VIP Gaming Panel',
         durationLabel: matchedVar?.durationLabel || '1 Day',
         pricePaid: total,
+        deliveredKeyId: newKeyRecords[0]?.id,
         deliveredKeyCode: generatedKeys.join(', '),
         status: 'COMPLETED',
+        purchaseSource: 'WEB',
+        purchaseSourceLabel: 'This Key Buyed by Web',
         createdAt: new Date().toISOString(),
       };
+      try {
+        const rawOrders = localStorage.getItem('nexa_cached_orders');
+        const prevOrders = rawOrders ? JSON.parse(rawOrders) : [];
+        localStorage.setItem('nexa_cached_orders', JSON.stringify([order, ...prevOrders]));
+      } catch {}
+
       return {
-        message: 'Purchase successful!',
+        message: 'Purchase successful! This Key Buyed by Web.',
         order,
+        deliveredKey: {
+          id: newKeyRecords[0]?.id,
+          keyCode: generatedKeys[0],
+          durationLabel: order.durationLabel,
+          expiresAt: newKeyRecords[0]?.expiresAt,
+          productName: order.productName,
+          purchaseSource: 'WEB',
+          purchaseSourceLabel: 'This Key Buyed by Web',
+        },
         key: {
+          id: newKeyRecords[0]?.id,
           keyCode: generatedKeys.join('\n'),
           keys: generatedKeys,
           quantity: qty,
           productName: order.productName,
           durationLabel: order.durationLabel,
+          purchaseSource: 'WEB',
+          purchaseSourceLabel: 'This Key Buyed by Web',
           updateFileUrl: matchedProd?.updateFileUrl,
           videoUrl: matchedProd?.videoUrl,
         },
         newBalance: newBal,
       } as unknown as T;
+    }
+
+    if (endpoint.startsWith('/keys') && method === 'GET') {
+      const allKeys = getCachedKeys().filter(k => !storedUser?.id || !k.assignedUserId || k.assignedUserId === storedUser.id);
+      return {
+        keys: allKeys.map(k => ({
+          ...k,
+          purchaseSource: k.purchaseSource || (String(k.assignedOrderId || '').startsWith('API-ORD-') ? 'API' : 'WEB'),
+          purchaseSourceLabel:
+            k.purchaseSourceLabel ||
+            (k.purchaseSource === 'API' || String(k.assignedOrderId || '').startsWith('API-ORD-')
+              ? 'This Key Buyed by API'
+              : 'This Key Buyed by Web'),
+        })),
+      } as unknown as T;
+    }
+
+    if (endpoint.startsWith('/keys/') && endpoint.endsWith('/used') && method === 'PATCH') {
+      const keyId = endpoint.replace('/keys/', '').replace('/used', '');
+      const updated = getCachedKeys().map(k => (k.id === keyId ? { ...k, status: 'USED', isUsed: true } : k));
+      saveCachedKeys(updated);
+      return { message: 'Key marked as USED successfully.' } as unknown as T;
     }
 
     if (endpoint.includes('/admin/stats')) {
@@ -1334,13 +1426,17 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       let newBal = 0;
       const users = getCachedUsers().map(u => {
         if (u.id === userId) {
-          newBal = Math.max(0, Number(u.balance || 0) + Number(bodyObj.amount || 0));
+          newBal = Math.max(0, Number((Number(u.balance || 0) + Number(bodyObj.amount || 0)).toFixed(2)));
           return { ...u, balance: newBal };
         }
         return u;
       });
       saveCachedUsers(users);
-      return { message: 'Balance adjusted successfully.', currentBalance: newBal } as unknown as T;
+      if (storedUser && storedUser.id === userId) {
+        storedUser.balance = newBal;
+        localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+      }
+      return { message: 'Balance adjusted successfully.', currentBalance: newBal, newBalance: newBal } as unknown as T;
     }
 
     if (endpoint.startsWith('/admin/users/') && endpoint.endsWith('/ban') && method === 'PATCH') {
@@ -1366,14 +1462,21 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       return { deposits: rawDeps ? JSON.parse(rawDeps) : [] } as unknown as T;
     }
     if (endpoint.includes('/admin/orders') || endpoint === '/orders') {
-      return { orders: [] } as unknown as T;
+      try {
+        const rawOrders = localStorage.getItem('nexa_cached_orders');
+        const orders = rawOrders ? JSON.parse(rawOrders) : [];
+        return { orders } as unknown as T;
+      } catch {
+        return { orders: [] } as unknown as T;
+      }
     }
     if (endpoint.includes('/admin/logs')) {
       return { logs: [] } as unknown as T;
     }
 
     if (endpoint.includes('/auth/me')) {
-      const user = storedUser || {
+      const cachedMatch = storedUser ? getCachedUsers().find(u => u.id === storedUser.id) : null;
+      const user = cachedMatch || storedUser || {
         id: 'USR-KALAM-172010',
         username: 'kalam',
         email: 'kalam172010@gmail.com',

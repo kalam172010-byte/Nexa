@@ -29,6 +29,11 @@ export class KeyController {
         .map(key => {
           const product = db.products.find(p => p.id === key.productId);
           const variant = db.productVariants.find(v => v.id === key.variantId);
+          const order = db.orders.find(o => o.id === key.assignedOrderId || o.deliveredKeyId === key.id);
+          const isApi =
+            key.purchaseSource === 'API' ||
+            order?.purchaseSource === 'API' ||
+            String(key.assignedOrderId || '').startsWith('API-ORD-');
           return {
             id: key.id,
             keyCode: key.keyCode,
@@ -38,6 +43,8 @@ export class KeyController {
             productName: product ? product.name : 'Digital Product',
             gameName: product ? product.game : 'Mobile Game',
             durationLabel: variant ? variant.durationLabel : 'Standard Key',
+            purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
+            purchaseSourceLabel: isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web',
           };
         });
 

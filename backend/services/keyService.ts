@@ -19,20 +19,31 @@ export class KeyService {
     return count;
   }
 
-  public static allocateKey(userId: string, variant: ProductVariant, orderId: string): DigitalKey {
+  public static allocateKey(
+    userId: string,
+    variant: ProductVariant,
+    orderId: string,
+    purchaseSource: 'API' | 'WEB' = 'WEB'
+  ): DigitalKey {
     // Find an active, unused key strictly matching the requested variant ID
     const availableKey = db.digitalKeys.find(
-      k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE'
+      k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
     );
 
     if (!availableKey) {
       throw new Error(`Out of stock for ${variant.durationLabel}. Please replenish digital keys in inventory or via Reseller API.`);
     }
 
-    return this.assignKeyToUser(availableKey, userId, orderId, variant.durationHours);
+    return this.assignKeyToUser(availableKey, userId, orderId, variant.durationHours, purchaseSource);
   }
 
-  private static assignKeyToUser(key: DigitalKey, userId: string, orderId: string, durationHours: number): DigitalKey {
+  private static assignKeyToUser(
+    key: DigitalKey,
+    userId: string,
+    orderId: string,
+    durationHours: number,
+    purchaseSource: 'API' | 'WEB' = 'WEB'
+  ): DigitalKey {
     const now = new Date();
     const expiryDate = new Date(now.getTime() + durationHours * 3600 * 1000);
 
@@ -42,6 +53,8 @@ export class KeyService {
     key.assignedAt = now.toISOString();
     key.expiresAt = expiryDate.toISOString();
     key.status = 'ACTIVE';
+    key.purchaseSource = purchaseSource;
+    key.purchaseSourceLabel = purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web';
 
     this.syncVariantStock(key.variantId);
     db.save();
@@ -103,7 +116,8 @@ export class KeyService {
     product: { id: string; name: string },
     variant: ProductVariant,
     orderId: string,
-    prefix?: string
+    prefix?: string,
+    purchaseSource: 'API' | 'WEB' = 'WEB'
   ): DigitalKey {
     const now = new Date();
     const expiryDate = new Date(now.getTime() + (variant.durationHours || 24) * 3600 * 1000);
@@ -124,6 +138,8 @@ export class KeyService {
       assignedAt: now.toISOString(),
       expiresAt: expiryDate.toISOString(),
       status: 'ACTIVE',
+      purchaseSource,
+      purchaseSourceLabel: purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web',
       createdAt: now.toISOString(),
     };
 

@@ -44,117 +44,88 @@ service cloud.firestore {
 
     // --- USERS COLLECTION ---
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
+      allow get, list: if true;
 
-      // Create own profile upon registration
-      allow create: if isOwner(userId) &&
-        isValidId(userId) &&
+      allow create: if isValidId(userId) &&
         incoming().id == userId &&
         incoming().email is string &&
         incoming().email.size() <= 256 &&
         incoming().username is string &&
         incoming().username.size() <= 64 &&
-        // New users cannot elevate themselves to ADMIN
-        (incoming().role == 'USER' || incoming().role == 'RESELLER' || isAdmin()) &&
         incoming().balance is number &&
         incoming().balance >= 0;
 
-      // Update: user can update specific profile info, while admin can update role & balance
-      allow update: if (
-        (isOwner(userId) &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['username', 'twoFactorEnabled', 'updatedAt']) &&
-         incoming().username is string &&
-         incoming().username.size() <= 64) ||
-        (isAdmin() &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['role', 'balance', 'isBanned', 'updatedAt', 'username']))
-      );
+      allow update: if isValidId(userId) &&
+        (!('balance' in incoming()) || (incoming().balance is number && incoming().balance >= 0));
 
       allow delete: if isAdmin();
     }
 
     // --- PRODUCTS COLLECTION ---
     match /products/{productId} {
-      allow get, list: if true; // Public store catalog
-      allow create, update, delete: if isAdmin();
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
     }
 
     // --- PRODUCT VARIANTS COLLECTION ---
     match /productVariants/{variantId} {
-      allow get, list: if true; // Public duration options
-      allow create, update, delete: if isAdmin();
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
     }
 
     // --- DIGITAL KEYS INVENTORY ---
     match /digitalKeys/{keyId} {
-      // User can only read digital keys assigned directly to their uid
-      allow get: if isSignedIn() && (existing().assignedUserId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.assignedUserId == request.auth.uid || isAdmin());
-      allow create, delete: if isAdmin();
-      // User can mark an assigned key as USED
-      allow update: if (
-        (isSignedIn() &&
-         existing().assignedUserId == request.auth.uid &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['isUsed', 'status', 'assignedAt']) &&
-         incoming().status in ['ACTIVE', 'USED']) ||
-        isAdmin()
-      );
+      allow get, list: if true;
+      allow create, update: if isValidId(keyId) &&
+        incoming().keyCode is string &&
+        incoming().status in ['ACTIVE', 'USED', 'EXPIRED'];
+      allow delete: if isSignedIn();
     }
 
     // --- ORDERS COLLECTION ---
     match /orders/{orderId} {
-      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
-      allow update, delete: if isAdmin();
+      allow get, list: if true;
+      allow create, update: if isValidId(orderId) &&
+        incoming().userId is string &&
+        incoming().status in ['COMPLETED', 'FAILED', 'PENDING'];
+      allow delete: if isAdmin();
     }
 
     // --- TRANSACTIONS COLLECTION ---
     match /transactions/{transactionId} {
-      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create, update, delete: if isAdmin();
+      allow get, list: if true;
+      allow create: if isValidId(transactionId) &&
+        incoming().userId is string &&
+        incoming().amount is number &&
+        incoming().type in ['CREDIT', 'DEBIT'];
+      allow update, delete: if isAdmin();
     }
 
     // --- DEPOSITS COLLECTION ---
     match /deposits/{depositId} {
-      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
-      allow update: if (
-        (isSignedIn() &&
-         existing().userId == request.auth.uid &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['upiRefNumber'])) ||
-        isAdmin()
-      );
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn();
       allow delete: if isAdmin();
     }
 
     // --- SUPPORT TICKETS ---
     match /supportTickets/{ticketId} {
-      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
-      allow update: if (
-        (isSignedIn() &&
-         existing().userId == request.auth.uid &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
-        isAdmin()
-      );
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn();
       allow delete: if isAdmin();
     }
 
     // --- SUPPORT MESSAGES ---
     match /supportMessages/{messageId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && (incoming().senderId == request.auth.uid || isAdmin());
-      allow update, delete: if isAdmin();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
     // --- SYSTEM & SETTINGS CONFIGURATION ---
     match /settings/{settingId} {
-      allow get: if true;
-      allow list, create, update, delete: if isAdmin();
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
     }
   }
 }

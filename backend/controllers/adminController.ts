@@ -89,8 +89,14 @@ export class AdminController {
           ? 'google.com'
           : 'email_otp';
 
+        if (fullUser && !fullUser.apiKey) {
+          fullUser.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+          db.save();
+        }
+
         return {
           ...safeUser,
+          apiKey: fullUser?.apiKey || safeUser.apiKey,
           hasPassword,
           authProvider,
           providerDisplay: hasPassword ? 'Email & Password' : isGoogleUser ? 'Google Account' : 'Email OTP',
@@ -627,11 +633,24 @@ export class AdminController {
         const variant = db.productVariants.find(v => v.id === k.variantId);
         const assignedUser = k.assignedUserId ? db.users.find(u => u.id === k.assignedUserId) : null;
 
+        const order = db.orders.find(o => o.id === k.assignedOrderId || o.deliveredKeyId === k.id);
+        const isApi =
+          k.purchaseSource === 'API' ||
+          order?.purchaseSource === 'API' ||
+          String(k.assignedOrderId || '').startsWith('API-ORD-');
+
         return {
           ...k,
           productName: prod?.name || 'Unknown',
           durationLabel: variant?.durationLabel || 'Unknown',
           assignedUsername: assignedUser?.username,
+          purchaseSource: k.isUsed || k.assignedUserId ? (isApi ? ('API' as const) : ('WEB' as const)) : k.purchaseSource,
+          purchaseSourceLabel:
+            k.isUsed || k.assignedUserId
+              ? isApi
+                ? 'This Key Buyed by API'
+                : 'This Key Buyed by Web'
+              : k.purchaseSourceLabel,
         };
       });
 
@@ -732,9 +751,12 @@ export class AdminController {
     try {
       const orders = db.orders.map(o => {
         const user = db.users.find(u => u.id === o.userId);
+        const isApi = o.purchaseSource === 'API' || String(o.id || '').startsWith('API-ORD-');
         return {
           ...o,
           username: user?.username || 'Unknown',
+          purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
+          purchaseSourceLabel: isApi ? 'This Key Buyed by API' : 'This Key Buyed by Web',
         };
       });
       orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());

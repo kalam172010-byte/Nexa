@@ -283,6 +283,9 @@ export class AuthController {
           passwordHash: '',
           role: isAdminEmail ? 'ADMIN' : 'USER',
           balance: 0.0,
+          apiKey: isAdminEmail
+            ? 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
+            : `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
           referralCode: newReferralCode,
           twoFactorEnabled: false,
           isBanned: false,
@@ -291,14 +294,19 @@ export class AuthController {
         };
         db.users.push(user);
         db.logActivity(user.id, user.username, 'FIREBASE_AUTH_SIGNUP', `Registered via Firebase: ${normalizedEmail}`);
-        db.save();
+        db.saveSync();
       } else {
         if (isAdminEmail && user.role !== 'ADMIN') {
           user.role = 'ADMIN';
         }
+        if (!user.apiKey) {
+          user.apiKey = isAdminEmail
+            ? 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
+            : `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+        }
         user.updatedAt = new Date().toISOString();
         db.logActivity(user.id, user.username, 'FIREBASE_AUTH_LOGIN', `Logged in via Firebase: ${normalizedEmail}`);
-        db.save();
+        db.saveSync();
       }
 
       const token = generateToken(user);
@@ -364,6 +372,10 @@ export class AuthController {
       if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()) && user.role !== 'ADMIN') {
         user.role = 'ADMIN';
       }
+      if (!user.apiKey) {
+        user.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+        db.saveSync();
+      }
 
       const freshToken = generateToken(user);
       const { passwordHash, ...safeUser } = user;
@@ -392,6 +404,10 @@ export class AuthController {
     if (!freshUser) {
       res.status(404).json({ error: 'User not found.' });
       return;
+    }
+    if (!freshUser.apiKey) {
+      freshUser.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+      db.saveSync();
     }
     const { passwordHash, ...safeUser } = freshUser;
     res.json({

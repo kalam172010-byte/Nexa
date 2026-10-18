@@ -60,6 +60,9 @@ export interface DigitalKey {
   productName: string;
   gameName: string;
   durationLabel: string;
+  purchaseSource?: 'API' | 'WEB';
+  purchaseSourceLabel?: string;
+  assignedOrderId?: string;
 }
 
 export interface Order {
@@ -73,6 +76,8 @@ export interface Order {
   deliveredKeyId: string;
   deliveredKeyCode: string;
   status: 'COMPLETED' | 'REFUNDED' | 'FAILED';
+  purchaseSource?: 'API' | 'WEB';
+  purchaseSourceLabel?: string;
   createdAt: string;
   username?: string;
 }
@@ -84,6 +89,8 @@ export interface Transaction {
   amount: number;
   description: string;
   referenceId?: string;
+  purchaseSource?: 'API' | 'WEB';
+  purchaseSourceLabel?: string;
   status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'EXPIRED';
   createdAt: string;
 }

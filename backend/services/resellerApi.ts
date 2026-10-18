@@ -62,7 +62,7 @@ export class ResellerApiService {
       attempts++;
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), Math.min(config.timeoutMs || 3500, 3500));
+        const timeout = setTimeout(() => controller.abort(), Math.min(config.timeoutMs || 15000, 15000));
 
         const response = await fetch(config.apiUrl, {
           method: 'POST',

@@ -9,6 +9,8 @@ interface KeySuccessModalProps {
     productName: string;
     durationLabel: string;
     expiresAt?: string;
+    purchaseSource?: 'API' | 'WEB';
+    purchaseSourceLabel?: string;
   };
   onClose: () => void;
   onViewKeys: () => void;
@@ -46,7 +48,10 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
             </div>
             <div>
               <h3 className="font-display font-bold text-sm text-white">License Delivered</h3>
-              <p className="text-xs text-emerald-400">Instant Automated Provisioning</p>
+              <p className="text-xs text-emerald-400">
+                {keyData.purchaseSourceLabel ||
+                  (keyData.purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web')}
+              </p>
             </div>
           </div>
 
@@ -67,6 +72,18 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
             <span aria-hidden="true" className="text-slate-600">·</span>
             <span className="text-rose-400">{keyData.durationLabel}</span>
           </div>
+          <div className="pt-2 flex justify-center">
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border ${
+                keyData.purchaseSource === 'API'
+                  ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                  : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+              }`}
+            >
+              {keyData.purchaseSourceLabel ||
+                (keyData.purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web')}
+            </span>
+          </div>
         </div>
 
         <div className="p-4 rounded-xl bg-[#090a0f] border border-rose-500/30 text-center space-y-1.5">
@@ -78,7 +95,10 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
           </div>
           <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Verified & Encrypted</span>
+            <span>
+              {keyData.purchaseSourceLabel ||
+                (keyData.purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web')}
+            </span>
           </div>
         </div>
 
