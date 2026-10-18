@@ -91,11 +91,22 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   useEffect(() => {
     fetchProducts();
 
+    const handleUpdate = () => {
+      fetchProducts(true);
+    };
+
+    window.addEventListener('nexa_products_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
     const interval = setInterval(() => {
       fetchProducts(true);
-    }, 5000);
+    }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('nexa_products_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      clearInterval(interval);
+    };
   }, [role]);
 
   const toggleAccordion = (productId: string) => {
@@ -192,8 +203,10 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     ])
   );
 
-  // Filtering products
+  // Filtering products (ensures all active products remain visible and live)
   const filteredProducts = products.filter(p => {
+    if (p.isActive === false) return false;
+
     const normGameFilter = gameFilter.toUpperCase().replace(/\s+/g, '');
     const pGame = (p.game || '').toUpperCase().replace(/\s+/g, '');
     const pCategory = (p.category || '').toUpperCase().replace(/\s+/g, '');
@@ -201,7 +214,9 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
     const matchGame =
       gameFilter === 'ALL GAMES' ||
+      !normGameFilter ||
       pGame.includes(normGameFilter) ||
+      normGameFilter.includes(pGame) ||
       pCategory.includes(normGameFilter) ||
       pName.includes(normGameFilter);
 
@@ -211,7 +226,9 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
     const matchDevice =
       deviceFilter === 'ALL SYSTEMS' ||
+      !normDeviceFilter ||
       pDevice.includes(normDeviceFilter) ||
+      normDeviceFilter.includes(pDevice) ||
       pBadge.includes(normDeviceFilter) ||
       pName.includes(normDeviceFilter);
 

@@ -52,7 +52,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
     { id: 'buy', label: 'Buy Key', icon: ShoppingBag, color: 'text-amber-400' },
     { id: 'keys', label: 'My Keys', icon: KeyRound, color: 'text-emerald-400' },
     { id: 'deposit', label: 'Deposit', icon: Wallet, color: 'text-cyan-400' },
-    ...(isReseller ? [{ id: 'api', label: 'Developer API', icon: Terminal, color: 'text-violet-400' }] : []),
+    { id: 'api', label: isReseller ? 'Developer API' : 'Reseller API & VIP', icon: Terminal, color: 'text-violet-400' },
     { id: 'history', label: 'Transactions', icon: History, color: 'text-sky-400' },
     { id: 'tickets', label: 'Support Desk', icon: LifeBuoy, color: 'text-pink-400' },
     { id: 'refer', label: 'Refer & Earn', icon: Share2, color: 'text-orange-400' },

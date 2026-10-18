@@ -145,29 +145,61 @@ const DEFAULT_SEED_PRODUCTS = [
   },
 ];
 
+function getDeletedProductIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem('nexa_deleted_product_ids');
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+function markProductDeleted(id: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const set = getDeletedProductIds();
+    set.add(id);
+    localStorage.setItem('nexa_deleted_product_ids', JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+function unmarkProductDeleted(id: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const set = getDeletedProductIds();
+    set.delete(id);
+    localStorage.setItem('nexa_deleted_product_ids', JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 function getCachedProducts(): any[] {
   if (typeof window === 'undefined') return DEFAULT_SEED_PRODUCTS;
+  const deleted = getDeletedProductIds();
   try {
     const raw = localStorage.getItem('nexa_cached_products');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter(p => !deleted.has(p.id));
+      }
     }
   } catch {}
   try {
     localStorage.setItem('nexa_cached_products', JSON.stringify(DEFAULT_SEED_PRODUCTS));
   } catch {}
-  return DEFAULT_SEED_PRODUCTS;
+  return DEFAULT_SEED_PRODUCTS.filter(p => !deleted.has(p.id));
 }
 
 function saveCachedProducts(products: any[]): void {
   if (typeof window === 'undefined') return;
+  const deleted = getDeletedProductIds();
+  const cleanProducts = products.filter(p => !deleted.has(p.id));
   try {
-    localStorage.setItem('nexa_cached_products', JSON.stringify(products));
+    localStorage.setItem('nexa_cached_products', JSON.stringify(cleanProducts));
   } catch (err) {
     // If quota exceeded due to large base64 image, keep URL or trimmed image so metadata always persists
     try {
-      const compact = products.map(p => ({
+      const compact = cleanProducts.map(p => ({
         ...p,
         imageUrl:
           typeof p.imageUrl === 'string' && p.imageUrl.length > 150000
@@ -177,6 +209,40 @@ function saveCachedProducts(products: any[]): void {
       localStorage.setItem('nexa_cached_products', JSON.stringify(compact));
     } catch {}
   }
+  try {
+    window.dispatchEvent(new CustomEvent('nexa_products_updated', { detail: { products: cleanProducts } }));
+  } catch {}
+}
+
+function mergeWithCachedProducts(backendProds: any[]): any[] {
+  const deleted = getDeletedProductIds();
+  const currentCached = getCachedProducts().filter(p => !deleted.has(p.id));
+  const validBackend = (backendProds || []).filter((p: any) => !deleted.has(p.id));
+
+  const map = new Map<string, any>();
+  for (const bp of validBackend) {
+    map.set(bp.id, { ...bp, variants: bp.variants || [] });
+  }
+
+  for (const cp of currentCached) {
+    if (!map.has(cp.id)) {
+      map.set(cp.id, cp);
+    } else {
+      const existing = map.get(cp.id)!;
+      const existingVarMap = new Map<string, any>((existing.variants || []).map((v: any) => [v.id, v]));
+      for (const cv of (cp.variants || [])) {
+        if (!existingVarMap.has(cv.id)) {
+          existingVarMap.set(cv.id, cv);
+        } else {
+          const prevVar = existingVarMap.get(cv.id) || {};
+          existingVarMap.set(cv.id, { ...prevVar, ...cv });
+        }
+      }
+      existing.variants = Array.from(existingVarMap.values());
+    }
+  }
+
+  return Array.from(map.values());
 }
 
 function getCachedKeys(): any[] {
@@ -341,8 +407,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (!fetchFailed && !isHtml && response && response.ok && data) {
     const method = (options.method || 'GET').toUpperCase();
     if (endpoint === '/products' && Array.isArray(data.products)) {
-      saveCachedProducts(data.products);
+      const merged = mergeWithCachedProducts(data.products);
+      saveCachedProducts(merged);
+      data.products = merged;
     } else if (endpoint === '/admin/products' && method === 'POST' && data.product) {
+      unmarkProductDeleted(data.product.id);
       const current = getCachedProducts();
       saveCachedProducts([data.product, ...current.filter(p => p.id !== data.product.id)]);
     } else if (endpoint.startsWith('/admin/products/') && method === 'PATCH' && data.product) {
@@ -351,6 +420,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     } else if (endpoint.startsWith('/admin/products/') && method === 'DELETE') {
       const delId = endpoint.split('/admin/products/')[1]?.split('/')[0];
       if (delId) {
+        markProductDeleted(delId);
         saveCachedProducts(getCachedProducts().filter(p => p.id !== delId));
       }
     } else if (endpoint === '/admin/variants' && method === 'POST' && data.variant) {
@@ -424,6 +494,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     if (endpoint === '/admin/products' && method === 'POST') {
       const products = getCachedProducts();
       const newProdId = `PROD-${Date.now().toString().slice(-6)}-${Math.floor(10 + Math.random() * 89)}`;
+      unmarkProductDeleted(newProdId);
       const cleanPid = bodyObj.externalPid?.trim() || undefined;
       const defaultDurations = Array.isArray(bodyObj.initialDurations) && bodyObj.initialDurations.length > 0
         ? bodyObj.initialDurations
@@ -468,7 +539,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         variants: initialVariants,
       };
 
-      const updated = [newProduct, ...products];
+      const updated = [newProduct, ...products.filter(p => p.id !== newProdId)];
       saveCachedProducts(updated);
       return {
         message: 'Product created successfully with standard durations.',
@@ -553,6 +624,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     // 6. Delete Product: DELETE /admin/products/:id
     if (endpoint.startsWith('/admin/products/') && method === 'DELETE') {
       const prodId = endpoint.replace('/admin/products/', '');
+      markProductDeleted(prodId);
       const updated = getCachedProducts().filter(p => p.id !== prodId);
       saveCachedProducts(updated);
       return { message: 'Product deleted permanently.' } as unknown as T;
@@ -561,8 +633,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     // 7. Create Duration Variant: POST /admin/variants
     if (endpoint === '/admin/variants' && method === 'POST') {
       const products = getCachedProducts();
-      const targetProd = products.find(p => p.id === bodyObj.productId) || products[0];
-      const resolvedProductId = targetProd ? targetProd.id : bodyObj.productId;
+      const resolvedProductId = bodyObj.productId || (products[0] ? products[0].id : `PROD-${Date.now()}`);
+      const targetProd = products.find(p => p.id === resolvedProductId);
       const effectivePid = bodyObj.externalPid?.trim() || targetProd?.externalPid?.trim() || undefined;
       const priceNum = Number(bodyObj.price) || 50;
       const newVariant = {
@@ -579,15 +651,22 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         isAvailable: true,
       };
 
+      let productMatched = false;
       const updated = products.map(p => {
         if (p.id === resolvedProductId) {
+          productMatched = true;
           return {
             ...p,
-            variants: [...(p.variants || []), newVariant],
+            variants: [...(p.variants || []).filter((v: any) => v.id !== newVariant.id), newVariant],
           };
         }
         return p;
       });
+
+      if (!productMatched && targetProd) {
+        targetProd.variants = [...(targetProd.variants || []), newVariant];
+      }
+
       saveCachedProducts(updated);
       return {
         message: 'Duration variant created successfully.',

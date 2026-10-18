@@ -197,6 +197,7 @@ export interface SiteCustomizationConfig {
   currencyCode: string;
   footerText?: string;
   copyrightText?: string;
+  customDomain?: string; // Optional custom hosted domain (e.g. https://kalamffpanel.com)
 
   // Visual Theme & Accents
   accentTheme: 'crimson' | 'cyberpunk' | 'emerald' | 'amber' | 'violet' | 'blood' | 'blue' | 'gold';

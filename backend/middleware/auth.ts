@@ -110,7 +110,18 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
     'kk7953926@gmail.com',
     'kalamkalam1234kd@gmail.com',
     'kalam172010@gmail.com',
+    'kalamakash445@gmail.com',
     'admin@example.com',
+  ];
+
+  const ADMIN_USERNAMES = [
+    'kalam',
+    'kalam_admin',
+    'kalam_akash',
+    'nexa_admin',
+    'admin',
+    'super_admin',
+    'kk7953926',
   ];
 
   const authHeader = req.headers.authorization;
@@ -163,7 +174,7 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
     (headerEmail && u.email.toLowerCase() === headerEmail)
   );
 
-  if (!user && ((decoded.email && ADMIN_EMAILS.includes(decoded.email.toLowerCase())) || (headerEmail && ADMIN_EMAILS.includes(headerEmail)))) {
+  if (!user && ((decoded.email && ADMIN_EMAILS.includes(decoded.email.toLowerCase())) || (headerEmail && ADMIN_EMAILS.includes(headerEmail)) || (decoded.username && ADMIN_USERNAMES.includes(decoded.username.toLowerCase())))) {
     user = db.users.find(u => ADMIN_EMAILS.includes(u.email.toLowerCase())) || db.users.find(u => u.role === 'ADMIN');
   }
 
@@ -172,12 +183,19 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
     return;
   }
 
-  // Ensure verified admin emails always retain ADMIN role
-  if (
+  // Ensure verified admin emails or usernames always retain ADMIN role
+  const isUserAdmin =
     (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) ||
-    (headerEmail && ADMIN_EMAILS.includes(headerEmail))
-  ) {
+    (headerEmail && ADMIN_EMAILS.includes(headerEmail)) ||
+    (user.username && ADMIN_USERNAMES.includes(user.username.toLowerCase())) ||
+    (decoded.username && ADMIN_USERNAMES.includes(decoded.username.toLowerCase())) ||
+    (decoded.email && ADMIN_EMAILS.includes(decoded.email.toLowerCase())) ||
+    decoded.role === 'ADMIN' ||
+    decoded.role === 'SUPER ADMIN';
+
+  if (isUserAdmin && user.role !== 'ADMIN' && user.role !== 'SUPER ADMIN') {
     user.role = 'ADMIN';
+    db.saveSync();
   }
 
   if (user.isBanned) {

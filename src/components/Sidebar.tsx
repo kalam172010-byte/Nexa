@@ -42,7 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
     { id: 'buy', label: 'Buy Key', icon: ShoppingBag, color: 'text-pink-400', activeBg: 'bg-gradient-to-r from-pink-500/20 to-rose-500/5 border-pink-500/35 text-white' },
     { id: 'keys', label: 'My Keys', icon: KeyRound, color: 'text-amber-400', activeBg: 'bg-gradient-to-r from-amber-500/20 to-orange-500/5 border-amber-500/35 text-white' },
     { id: 'deposit', label: 'Deposit', icon: Wallet, color: 'text-emerald-400', activeBg: 'bg-gradient-to-r from-emerald-500/20 to-teal-500/5 border-emerald-500/35 text-white' },
-    ...(isReseller ? [{ id: 'api', label: 'Developer API', icon: Terminal, color: 'text-cyan-400', activeBg: 'bg-gradient-to-r from-cyan-500/20 to-sky-500/5 border-cyan-500/35 text-white' }] : []),
+    { id: 'api', label: isReseller ? 'Developer API' : 'Reseller API & VIP', icon: Terminal, color: 'text-cyan-400', activeBg: 'bg-gradient-to-r from-cyan-500/20 to-sky-500/5 border-cyan-500/35 text-white' },
     { id: 'history', label: 'Transactions', icon: History, color: 'text-sky-400', activeBg: 'bg-gradient-to-r from-sky-500/20 to-blue-500/5 border-sky-500/35 text-white' },
     { id: 'tickets', label: 'Support Desk', icon: LifeBuoy, color: 'text-violet-400', activeBg: 'bg-gradient-to-r from-violet-500/20 to-indigo-500/5 border-violet-500/35 text-white' },
     { id: 'refer', label: 'Refer & Earn', icon: Share2, color: 'text-fuchsia-400', activeBg: 'bg-gradient-to-r from-fuchsia-500/20 to-pink-500/5 border-fuchsia-500/35 text-white' },

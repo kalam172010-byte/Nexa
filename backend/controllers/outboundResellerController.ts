@@ -330,8 +330,40 @@ export class OutboundResellerController {
         db.saveSync();
       }
 
-      const protocol = req.protocol || 'https';
-      const host = req.get('host') || 'localhost:3000';
+      // Auto-detect public protocol and host from reverse proxy, Cloud Run, custom domain, or origin headers
+      let protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+      if (Array.isArray(protocol)) protocol = protocol[0];
+      if (typeof protocol === 'string' && protocol.includes(',')) protocol = protocol.split(',')[0].trim();
+
+      let host = (req.headers['x-forwarded-host'] as string) || req.headers['host'] || req.get('host') || '';
+      if (Array.isArray(host)) host = host[0];
+      if (typeof host === 'string' && host.includes(',')) host = host.split(',')[0].trim();
+
+      // If host contains localhost / 127.0.0.1 or is empty, inspect origin or referer header from the browser
+      const clientOrigin = (req.headers['origin'] as string) || (req.headers['referer'] as string);
+      if ((!host || host.includes('localhost') || host.includes('127.0.0.1')) && clientOrigin) {
+        try {
+          const parsed = new URL(clientOrigin);
+          protocol = parsed.protocol.replace(':', '');
+          host = parsed.host;
+        } catch {}
+      }
+
+      // Check if customDomain is specified in siteConfig or DB
+      const siteConf = db.siteConfig as any;
+      if (siteConf && siteConf.customDomain && typeof siteConf.customDomain === 'string' && siteConf.customDomain.trim()) {
+        try {
+          const rawDom = siteConf.customDomain.trim();
+          const parsedDom = rawDom.startsWith('http') ? new URL(rawDom) : new URL(`https://${rawDom}`);
+          protocol = parsedDom.protocol.replace(':', '');
+          host = parsedDom.host;
+        } catch {}
+      }
+
+      if (!host) {
+        host = 'localhost:3000';
+      }
+
       const baseUrl = `${protocol}://${host}`;
 
       // Build product reference list for resellers reading from db.productVariants!
@@ -358,8 +390,31 @@ export class OutboundResellerController {
 
       res.json({
         apiKey: dbUser?.apiKey || user.id,
+        detectedDomain: baseUrl,
+        host: host,
         apiUrl: `${baseUrl}/api/v1/reseller/buy`,
         phpScriptUrl: `${baseUrl}/api/reseller_v1.php`,
+        rootPhpScriptUrl: `${baseUrl}/reseller_v1.php`,
+        endpoints: [
+          {
+            name: 'Standard REST API (JSON POST)',
+            url: `${baseUrl}/api/v1/reseller/buy`,
+            method: 'POST',
+            contentType: 'application/json',
+          },
+          {
+            name: 'PHP v1 Compatibility Script',
+            url: `${baseUrl}/api/reseller_v1.php`,
+            method: 'POST',
+            contentType: 'application/x-www-form-urlencoded or application/json',
+          },
+          {
+            name: 'Root PHP Script Endpoint',
+            url: `${baseUrl}/reseller_v1.php`,
+            method: 'POST',
+            contentType: 'application/x-www-form-urlencoded or application/json',
+          },
+        ],
         productReferenceTable,
         documentation: {
           method: 'POST',

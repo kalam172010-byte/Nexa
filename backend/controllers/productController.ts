@@ -9,11 +9,11 @@ export class ProductController {
       const isReseller = authReq.user && authReq.user.role === 'RESELLER';
 
       const productsWithVariants = db.products
-        .filter(p => p.isActive)
+        .filter(p => p.isActive !== false)
         .map(product => {
           // Pull independent variants for this product
           const variants = db.productVariants
-            .filter(v => v.productId === product.id && v.isActive)
+            .filter(v => v.productId === product.id && v.isActive !== false)
             .map(v => {
               // Real-time stock count strictly for this duration variant
               const stock = db.digitalKeys.filter(
@@ -26,11 +26,13 @@ export class ProductController {
                 (v.externalDuration && v.externalDuration.trim())
               );
 
+              const effectiveStock = hasApiPid ? 999 : stock > 0 ? stock : (v.stockCount ?? 15);
+
               return {
                 ...v,
-                stockCount: hasApiPid ? 999 : stock,
+                stockCount: effectiveStock,
                 displayPrice: isReseller ? v.resellerPrice : v.price,
-                isAvailable: hasApiPid ? true : stock > 0,
+                isAvailable: true,
               };
             });
 

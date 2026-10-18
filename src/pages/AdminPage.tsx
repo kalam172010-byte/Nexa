@@ -137,6 +137,15 @@ export const AdminPage: React.FC = () => {
   const [editingPidMap, setEditingPidMap] = useState<Record<string, string>>({});
   const [savingPidId, setSavingPidId] = useState<string | null>(null);
   const [userApiSearch, setUserApiSearch] = useState('');
+  const [adminOutboundPid, setAdminOutboundPid] = useState('155');
+  const [adminOutboundDur, setAdminOutboundDur] = useState('1 Hours');
+  const [adminOutboundQty, setAdminOutboundQty] = useState(1);
+  const [adminOutboundFormat, setAdminOutboundFormat] = useState<'rest' | 'php' | 'root'>('rest');
+  const [isAdminTestingOutbound, setIsAdminTestingOutbound] = useState(false);
+  const [adminOutboundResult, setAdminOutboundResult] = useState<any>(null);
+  const [adminCustomDomainInput, setAdminCustomDomainInput] = useState('');
+  const [isSavingCustomDomain, setIsSavingCustomDomain] = useState(false);
+  const [adminSnippetLang, setAdminSnippetLang] = useState<'php' | 'curl' | 'nodejs'>('php');
 
   const { siteConfig: globalSiteConfig, updateSiteConfigLocally } = useSite();
   const [siteForm, setSiteForm] = useState<SiteCustomizationConfig>(globalSiteConfig);
@@ -1434,6 +1443,90 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  const handleTestAdminOutboundBuy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAdminTestingOutbound(true);
+    setAdminOutboundResult(null);
+    try {
+      const activeKey = resellerConfig.masterKey || resellerConfig.apiKey || (authUser as any)?.apiKey || 'nexa_master_admin_token';
+      const adminBrowserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const adminCustomOverride = typeof localStorage !== 'undefined' ? localStorage.getItem('nexa_api_base_url') : null;
+      const effectiveBase = (() => {
+        if (adminCustomOverride && adminCustomOverride.trim() && !adminCustomOverride.includes('localhost') && !adminCustomOverride.includes('127.0.0.1')) {
+          return adminCustomOverride.trim().replace(/\/api\/?$/, '').replace(/\/$/, '');
+        }
+        if (siteForm.customDomain && siteForm.customDomain.trim()) {
+          const cd = siteForm.customDomain.trim();
+          return cd.startsWith('http') ? cd.replace(/\/$/, '') : `https://${cd.replace(/\/$/, '')}`;
+        }
+        return adminBrowserOrigin || 'https://your-domain.com';
+      })();
+
+      const endpointMap = {
+        rest: `${effectiveBase}/api/v1/reseller/buy`,
+        php: `${effectiveBase}/api/reseller_v1.php`,
+        root: `${effectiveBase}/reseller_v1.php`,
+      };
+      const targetEndpoint = endpointMap[adminOutboundFormat];
+
+      const startTime = performance.now();
+      const response = await fetch(targetEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-Key': activeKey,
+        },
+        body: JSON.stringify({
+          api_key: activeKey,
+          action: 'buy',
+          product_id: adminOutboundPid,
+          duration: adminOutboundDur,
+          quantity: adminOutboundQty,
+        }),
+      });
+      const latencyMs = Math.round(performance.now() - startTime);
+      const data = await response.json();
+      setAdminOutboundResult({
+        status: response.status,
+        ok: response.ok && data.status !== false,
+        latencyMs,
+        data,
+      });
+      if (response.ok && data.status !== false) {
+        showToastSuccess('Outbound Key Generated', `Provisioned ${adminOutboundQty}x keys via ${adminOutboundFormat.toUpperCase()} endpoint`);
+      } else {
+        showToastError('Outbound Request Notice', data.message || 'Check PID and Duration');
+      }
+    } catch (err: any) {
+      setAdminOutboundResult({
+        status: 0,
+        ok: false,
+        latencyMs: 0,
+        data: { error: err.message },
+      });
+      showToastError('Outbound Test Network Error', err.message);
+    } finally {
+      setIsAdminTestingOutbound(false);
+    }
+  };
+
+  const handleSaveCustomDomain = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingCustomDomain(true);
+    try {
+      const cleaned = adminCustomDomainInput.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const nextDomain = cleaned ? `https://${cleaned}` : '';
+      await api.updateSiteSettings({ customDomain: nextDomain });
+      setSiteForm(prev => ({ ...prev, customDomain: nextDomain }));
+      updateSiteConfigLocally({ customDomain: nextDomain });
+      showToastSuccess('Custom Domain Saved', nextDomain ? `All outbound endpoints updated to ${nextDomain}` : 'Reset to auto-detect domain.');
+    } catch (err: any) {
+      showToastError('Failed to save domain', err.message);
+    } finally {
+      setIsSavingCustomDomain(false);
+    }
+  };
+
   // Delete Handlers that open the confirmation modal safely (no window.confirm)
   const handleDeleteProduct = (productOrId: Product | string) => {
     const prod = typeof productOrId === 'string' ? products.find(p => p.id === productOrId) : productOrId;
@@ -1475,12 +1568,14 @@ export const AdminPage: React.FC = () => {
   // Confirm Delete Product execution
   const handleConfirmDeleteProduct = async () => {
     if (!productToDelete) return;
+    const targetId = productToDelete.id;
     try {
       setIsDeletingLoading(true);
-      await api.deleteProduct(productToDelete.id);
+      await api.deleteProduct(targetId);
+      setProducts(prev => prev.filter(p => p.id !== targetId));
       showToastSuccess('Product Deleted', `Removed ${productToDelete.name}`);
       setProductToDelete(null);
-      loadAllAdminData();
+      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Delete failed', err.message);
     } finally {
@@ -1491,12 +1586,19 @@ export const AdminPage: React.FC = () => {
   // Confirm Delete Variant execution
   const handleConfirmDeleteVariant = async () => {
     if (!variantToDelete) return;
+    const targetVarId = variantToDelete.id;
     try {
       setIsDeletingLoading(true);
-      await api.deleteVariant(variantToDelete.id);
+      await api.deleteVariant(targetVarId);
+      setProducts(prev =>
+        prev.map(p => ({
+          ...p,
+          variants: (p.variants || []).filter((v: any) => v.id !== targetVarId),
+        }))
+      );
       showToastSuccess('Duration Removed', `Removed ${variantToDelete.durationLabel}`);
       setVariantToDelete(null);
-      loadAllAdminData();
+      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Failed to remove variant', err.message);
     } finally {
@@ -1550,6 +1652,8 @@ export const AdminPage: React.FC = () => {
     try {
       const res = await api.createVariant({
         productId: targetProdId,
+        product: validProd,
+        productName: validProd?.name,
         durationLabel: varDurationLabel.trim(),
         durationHours: Number(varDurationHours) || 24,
         price: Number(varPrice),
@@ -1618,6 +1722,8 @@ export const AdminPage: React.FC = () => {
         const externalPid = batchPidPrefix.trim() ? `${batchPidPrefix.trim()}_${item.pidSuffix}` : undefined;
         const res = await api.createVariant({
           productId: targetProdId,
+          product: validProd,
+          productName: validProd?.name,
           durationLabel: item.label,
           durationHours: item.hours,
           price: item.price,
@@ -3994,6 +4100,266 @@ export const AdminPage: React.FC = () => {
             </div>
           </div>
 
+          {/* AUTO-DETECTED PRODUCTION DOMAIN & OUTBOUND ENDPOINTS CARD */}
+          {(() => {
+            const adminBrowserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+            const adminCustomOverride = typeof localStorage !== 'undefined' ? localStorage.getItem('nexa_api_base_url') : null;
+            const effectiveBase = (() => {
+              if (adminCustomOverride && adminCustomOverride.trim() && !adminCustomOverride.includes('localhost') && !adminCustomOverride.includes('127.0.0.1')) {
+                return adminCustomOverride.trim().replace(/\/api\/?$/, '').replace(/\/$/, '');
+              }
+              if (siteForm.customDomain && siteForm.customDomain.trim()) {
+                const cd = siteForm.customDomain.trim();
+                return cd.startsWith('http') ? cd.replace(/\/$/, '') : `https://${cd.replace(/\/$/, '')}`;
+              }
+              return adminBrowserOrigin || 'https://your-domain.com';
+            })();
+
+            const restEndpoint = `${effectiveBase}/api/v1/reseller/buy`;
+            const phpEndpoint = `${effectiveBase}/api/reseller_v1.php`;
+            const rootEndpoint = `${effectiveBase}/reseller_v1.php`;
+            const activeAdminUrl = adminOutboundFormat === 'rest' ? restEndpoint : adminOutboundFormat === 'php' ? phpEndpoint : rootEndpoint;
+
+            return (
+              <div className="p-6 rounded-3xl bg-gradient-to-br from-[#101322] via-[#0d0f18] to-[#140d18] border border-cyan-500/35 space-y-5 shadow-2xl">
+                {/* Domain Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.08]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/35 flex items-center justify-center shrink-0">
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-[10px] font-mono font-bold uppercase text-emerald-400 tracking-wider">
+                          LIVE PRODUCTION DOMAIN AUTO-DETECTED
+                        </span>
+                      </div>
+                      <h4 className="font-display font-black text-base text-white">
+                        Outbound API Endpoints &amp; Hosted Domain Status
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-auto bg-black/60 px-3.5 py-1.5 rounded-xl border border-white/10 text-xs font-mono">
+                    <span className="text-slate-400 text-[11px]">Domain:</span>
+                    <strong className="text-cyan-300 select-all">{effectiveBase}</strong>
+                  </div>
+                </div>
+
+                {/* Optional Custom Domain Setting Form */}
+                <form onSubmit={handleSaveCustomDomain} className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-300 block">
+                    CUSTOM HOSTED DOMAIN (OPTIONAL OVERRIDE - e.g. https://yourdomain.com)
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={adminCustomDomainInput || siteForm.customDomain || ''}
+                      onChange={e => setAdminCustomDomainInput(e.target.value)}
+                      placeholder="e.g. https://kalamffpanel.com or leave blank for auto-detect"
+                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={isSavingCustomDomain}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                      >
+                        {isSavingCustomDomain ? 'Saving...' : 'Save Custom Domain'}
+                      </button>
+                      {(adminCustomDomainInput || siteForm.customDomain) && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setAdminCustomDomainInput('');
+                            await api.updateSiteSettings({ customDomain: '' });
+                            setSiteForm(prev => ({ ...prev, customDomain: '' }));
+                            updateSiteConfigLocally({ customDomain: '' });
+                            showToastSuccess('Reset to Auto-Detect Domain');
+                          }}
+                          className="px-3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-400 hover:text-white text-xs font-mono transition-colors cursor-pointer shrink-0"
+                        >
+                          Reset Auto-Detect
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    When set, all outbound endpoints below will automatically use this custom domain instead of Cloud Run or localhost.
+                  </p>
+                </form>
+
+                {/* 3 Protocol Format Options */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                    Select Active Endpoint Protocol
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAdminOutboundFormat('rest')}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                        adminOutboundFormat === 'rest'
+                          ? 'bg-cyan-500/15 border-cyan-500/50 text-white shadow-lg shadow-cyan-950/40'
+                          : 'bg-white/[0.02] border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold font-mono">1. JSON REST API</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">RECOMMENDED</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-mono truncate">/api/v1/reseller/buy</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAdminOutboundFormat('php')}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                        adminOutboundFormat === 'php'
+                          ? 'bg-amber-500/15 border-amber-500/50 text-white shadow-lg shadow-amber-950/40'
+                          : 'bg-white/[0.02] border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold font-mono">2. PHP Compatibility</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">POPULAR</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-mono truncate">/api/reseller_v1.php</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAdminOutboundFormat('root')}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                        adminOutboundFormat === 'root'
+                          ? 'bg-rose-500/15 border-rose-500/50 text-white shadow-lg shadow-rose-950/40'
+                          : 'bg-white/[0.02] border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold font-mono">3. Root PHP URL</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">DIRECT</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-mono truncate">/reseller_v1.php</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Endpoint Full URL Field with Copy */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 block">
+                    ACTIVE OUTBOUND ENDPOINT URL (GIVE THIS TO EXTERNAL BOTS / RESELLERS)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={activeAdminUrl}
+                      className="w-full px-4 py-3 bg-[#090a0f] border border-cyan-500/35 rounded-xl text-cyan-300 font-mono text-xs select-all shadow-inner"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(activeAdminUrl);
+                        showToastSuccess('Copied Endpoint URL', activeAdminUrl);
+                      }}
+                      className="px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all border border-cyan-400/40 flex items-center gap-1.5 cursor-pointer shrink-0 shadow-lg shadow-cyan-950/50"
+                    >
+                      <Copy className="w-4 h-4" />
+                      <span>Copy URL</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* LIVE OUTBOUND RESELLER TEST CONSOLE */}
+                <div className="p-5 rounded-2xl bg-black/60 border border-white/10 space-y-4 pt-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      <h5 className="font-display font-black text-xs text-white uppercase tracking-wider">
+                        LIVE OUTBOUND API TESTER (MINT KEYS FROM THIS PANEL)
+                      </h5>
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-400">
+                      Dispatches real HTTP POST to {adminOutboundFormat.toUpperCase()} endpoint
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleTestAdminOutboundBuy} className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Product PID (product_id)
+                      </label>
+                      <input
+                        type="text"
+                        value={adminOutboundPid}
+                        onChange={e => setAdminOutboundPid(e.target.value)}
+                        placeholder="155"
+                        required
+                        className="w-full px-3 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Duration (duration)
+                      </label>
+                      <input
+                        type="text"
+                        value={adminOutboundDur}
+                        onChange={e => setAdminOutboundDur(e.target.value)}
+                        placeholder="1 Hours"
+                        required
+                        className="w-full px-3 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Quantity (1–100)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={adminOutboundQty}
+                        onChange={e => setAdminOutboundQty(parseInt(e.target.value, 10) || 1)}
+                        required
+                        className="w-full px-3 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-end">
+                      <button
+                        type="submit"
+                        disabled={isAdminTestingOutbound}
+                        className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md shadow-amber-950/40"
+                      >
+                        {isAdminTestingOutbound ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        <span>{isAdminTestingOutbound ? 'Testing...' : 'Test Outbound API'}</span>
+                      </button>
+                    </div>
+                  </form>
+
+                  {adminOutboundResult && (
+                    <div className="p-3.5 rounded-xl bg-[#07080d] border border-white/10 space-y-2 animate-in fade-in">
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className={adminOutboundResult.ok ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                          HTTP {adminOutboundResult.status} {adminOutboundResult.ok ? 'SUCCESS' : 'ERROR'} ({adminOutboundResult.latencyMs}ms)
+                        </span>
+                        <span className="text-slate-500 text-[10px]">{new Date().toLocaleTimeString()}</span>
+                      </div>
+                      <pre className="p-3 rounded-lg bg-black/60 font-mono text-[11px] text-emerald-300 overflow-x-auto select-all leading-relaxed border border-white/5">
+                        {JSON.stringify(adminOutboundResult.data, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* VIP Reseller Upgrade Fee Control Card */}
           <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-500/10 via-[#0d0d14] to-black/40 border border-amber-500/30 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
@@ -4242,41 +4608,93 @@ export const AdminPage: React.FC = () => {
           </div>
 
           {/* Reseller API Usage Instructions & Code */}
-          <div className="p-6 rounded-3xl bg-[#0a0a0f] border border-white/10 space-y-4">
-            <div className="flex items-center gap-2">
-              <Code className="w-5 h-5 text-amber-400" />
-              <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
-                HOW EXTERNAL RESELLERS CALL YOUR API
-              </h4>
-            </div>
+          {(() => {
+            const adminBrowserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+            const adminCustomOverride = typeof localStorage !== 'undefined' ? localStorage.getItem('nexa_api_base_url') : null;
+            const effectiveBase = (() => {
+              if (adminCustomOverride && adminCustomOverride.trim() && !adminCustomOverride.includes('localhost') && !adminCustomOverride.includes('127.0.0.1')) {
+                return adminCustomOverride.trim().replace(/\/api\/?$/, '').replace(/\/$/, '');
+              }
+              if (siteForm.customDomain && siteForm.customDomain.trim()) {
+                const cd = siteForm.customDomain.trim();
+                return cd.startsWith('http') ? cd.replace(/\/$/, '') : `https://${cd.replace(/\/$/, '')}`;
+              }
+              return adminBrowserOrigin || 'https://your-domain.com';
+            })();
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-              <div className="p-4 rounded-2xl bg-black/60 border border-white/5 space-y-2">
-                <div className="text-amber-400 font-bold uppercase text-[11px]">Request Specifications</div>
-                <ul className="space-y-1.5 text-slate-300 text-[11px]">
-                  <li>• <strong>Endpoint:</strong> <code className="text-emerald-400 select-all">POST /api/v1/reseller/buy</code></li>
-                  <li>• <strong>Header:</strong> <code className="text-sky-300">Content-Type: application/json</code></li>
-                  <li>• <strong>product_id:</strong> The 2 or 3-digit numeric PID (e.g. 155, 66, 150)</li>
-                  <li>• <strong>duration:</strong> Exact plan duration label (e.g. 1 Hours, 1 DAYS, 1 Day Non-Root)</li>
-                  <li>• <strong>quantity:</strong> Number of keys to buy (1 to 100)</li>
-                  <li>• <strong>api_key:</strong> User's active reseller token</li>
-                </ul>
-              </div>
+            const activeCurl = `curl -X POST "${effectiveBase}/api/v1/reseller/buy" \\\n  -H "Content-Type: application/json" \\\n  -d '{"api_key": "YOUR_RESELLER_API_KEY", "action": "buy", "product_id": "155", "duration": "1 Hours", "quantity": 1}'`;
 
-              <div className="p-4 rounded-2xl bg-black/60 border border-white/5 space-y-2">
-                <div className="text-amber-400 font-bold uppercase text-[11px]">Sample JSON Payload</div>
-                <pre className="text-emerald-300 text-[11px] overflow-x-auto select-all leading-relaxed bg-[#070709] p-3 rounded-xl">
+            const activePhp = `<?php\n$data = [\n  'api_key'    => 'YOUR_RESELLER_API_KEY',\n  'action'     => 'buy',\n  'product_id' => '155',\n  'duration'   => '1 Hours',\n  'quantity'   => 1\n];\n$ch = curl_init('${effectiveBase}/api/v1/reseller/buy');\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\ncurl_setopt($ch, CURLOPT_POST, true);\ncurl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));\ncurl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);\n$res = curl_exec($ch);\ncurl_close($ch);\nprint_r(json_decode($res, true));\n?>`;
+
+            return (
+              <div className="p-6 rounded-3xl bg-[#0a0a0f] border border-white/10 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-white/5">
+                  <div className="flex items-center gap-2">
+                    <Code className="w-5 h-5 text-amber-400" />
+                    <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                      EXTERNAL RESELLER INTEGRATION CODE &amp; DOCUMENTATION
+                    </h4>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(activeCurl);
+                        showToastSuccess('Copied Terminal cURL Command');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Copy cURL</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(activePhp);
+                        showToastSuccess('Copied PHP cURL Snippet');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy PHP</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                  <div className="p-4 rounded-2xl bg-black/60 border border-white/5 space-y-2">
+                    <div className="text-amber-400 font-bold uppercase text-[11px] flex items-center justify-between">
+                      <span>Request Specifications</span>
+                      <span className="text-[10px] text-emerald-400">Zero Localhost · Auto Deployed</span>
+                    </div>
+                    <ul className="space-y-1.5 text-slate-300 text-[11px]">
+                      <li>• <strong>Live Endpoint:</strong> <code className="text-emerald-400 select-all font-bold">{effectiveBase}/api/v1/reseller/buy</code></li>
+                      <li>• <strong>PHP Endpoint:</strong> <code className="text-amber-400 select-all font-bold">{effectiveBase}/api/reseller_v1.php</code></li>
+                      <li>• <strong>Header:</strong> <code className="text-sky-300">Content-Type: application/json</code></li>
+                      <li>• <strong>product_id:</strong> The numeric PID configured in table above (e.g. 155, 66)</li>
+                      <li>• <strong>duration:</strong> Exact plan duration label (e.g. 1 Hours, 1 Day, 7 Days)</li>
+                      <li>• <strong>quantity:</strong> Number of keys to buy (1 to 100)</li>
+                      <li>• <strong>api_key:</strong> Reseller's secret active API token</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-black/60 border border-white/5 space-y-2">
+                    <div className="text-amber-400 font-bold uppercase text-[11px]">Exact JSON Payload</div>
+                    <pre className="text-emerald-300 text-[11px] overflow-x-auto select-all leading-relaxed bg-[#070709] p-3 rounded-xl border border-white/5">
 {`{
-  "api_key": "nexa_live_xxxxxxxxxxxxxxxx",
+  "api_key": "YOUR_RESELLER_API_KEY",
   "action": "buy",
   "product_id": "155",
   "duration": "1 Hours",
   "quantity": 1
 }`}
-                </pre>
+                    </pre>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
       )}
 

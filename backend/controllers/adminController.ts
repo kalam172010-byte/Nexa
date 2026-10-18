@@ -526,14 +526,29 @@ export class AdminController {
         return;
       }
 
-      const product = db.products.find(p => p.id === productId) || db.products[0];
-      if (!product) {
-        res.status(400).json({ error: 'Please create a product first before adding duration variants.' });
-        return;
+      let product: Product | undefined = productId ? db.products.find(p => p.id === productId) : undefined;
+      if (!product && req.body.product && req.body.product.id) {
+        product = req.body.product as Product;
+        db.addProduct(product);
+      } else if (!product && productId) {
+        // Ensure product exists in database so variants are never orphaned
+        product = {
+          id: productId,
+          name: req.body.productName || 'VIP Gaming Panel',
+          game: 'FREEFIRE',
+          category: 'FREEFIRE',
+          description: '',
+          deviceType: 'NONROOT',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        };
+        db.addProduct(product);
+      } else if (!product) {
+        product = db.products[0];
       }
 
-      const resolvedProductId = product.id;
-      const effectivePid = externalPid?.trim() || product.externalPid?.trim() || undefined;
+      const resolvedProductId = productId || (product ? product.id : `PROD-${Date.now()}`);
+      const effectivePid = externalPid?.trim() || product?.externalPid?.trim() || undefined;
 
       const newVariant: ProductVariant = {
         id: `VAR-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,

@@ -183,6 +183,7 @@ export interface SiteCustomizationConfig {
   currencyCode: string;
   footerText?: string;
   copyrightText?: string;
+  customDomain?: string;
 
   // Visual Theme & Accents
   accentTheme: 'crimson' | 'cyberpunk' | 'emerald' | 'amber' | 'violet' | 'blood' | 'blue' | 'gold';
