@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kalam FF Panel - Complete Architecture & Operations Manual (PDF Document)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    :root {
+      --primary: #e11d48;
+      --primary-dark: #be123c;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --bg-light: #f8fafc;
+      --border: #e2e8f0;
+      --code-bg: #0f172a;
+      --code-text: #f1f5f9;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text-main);
+      background-color: #cbd5e1;
+      line-height: 1.6;
+      font-size: 13.5px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Floating Print Button for Browser View */
+    .print-bar {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 1000;
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-print {
+      background: linear-gradient(135deg, #e11d48, #be123c);
+      color: #ffffff;
+      border: none;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(225, 29, 72, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform 0.15s ease;
+    }
+
+    .btn-print:hover {
+      transform: translateY(-2px);
+    }
+
+    .btn-home {
+      background: #0f172a;
+      color: #ffffff;
+      border: none;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 12px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Page Container (Emulates Physical A4 Pages) */
+    .page-container {
+      max-width: 820px;
+      margin: 32px auto;
+      background: #ffffff;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .page {
+      padding: 56px 56px;
+      min-height: 1100px;
+      position: relative;
+    }
+
+    .page-break {
+      page-break-after: always;
+      border-bottom: 2px dashed #cbd5e1;
+    }
+
+    /* Cover Page Styling */
+    .cover {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 1050px;
+      background: linear-gradient(175deg, #ffffff 60%, #fff1f2 100%);
+      padding: 72px 56px;
+    }
+
+    .cover-badge {
+      display: inline-block;
+      background: rgba(225, 29, 72, 0.1);
+      color: var(--primary);
+      border: 1px solid rgba(225, 29, 72, 0.25);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .cover h1 {
+      font-size: 40px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      color: #0f172a;
+      margin-bottom: 16px;
+    }
+
+    .cover h1 span {
+      color: var(--primary);
+    }
+
+    .cover-subtitle {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 540px;
+      line-height: 1.6;
+      margin-bottom: 40px;
+    }
+
+    .meta-box {
+      border-top: 2px solid var(--primary);
+      padding-top: 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      font-size: 12px;
+      background: #f8fafc;
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .meta-box div span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    .meta-box div strong {
+      font-size: 13px;
+      color: #0f172a;
+    }
+
+    /* Headings & Typography */
+    h2 {
+      font-size: 22px;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 2px solid #f1f5f9;
+      padding-bottom: 8px;
+      margin-top: 32px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2 .num {
+      background: var(--primary);
+      color: #ffffff;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 800;
+    }
+
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 20px;
+      margin-bottom: 8px;
+    }
+
+    p, li {
+      color: #334155;
+      margin-bottom: 10px;
+    }
+
+    ul, ol {
+      padding-left: 20px;
+      margin-bottom: 16px;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 12px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f1f5f9;
+      color: #0f172a;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 10.5px;
+      letter-spacing: 0.05em;
+    }
+
+    tr:nth-child(even) td {
+      background-color: #f8fafc;
+    }
+
+    /* Code Blocks */
+    pre {
+      background-color: var(--code-bg);
+      color: var(--code-text);
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      border: 1px solid #1e293b;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      background: #f1f5f9;
+      color: var(--primary);
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    /* Diagram Containers */
+    .diagram {
+      background: #090a0f;
+      color: #38bdf8;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 18px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      margin: 16px 0;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* Callout Card */
+    .callout {
+      background-color: #fff1f2;
+      border-left: 4px solid var(--primary);
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+      font-size: 12.5px;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin-bottom: 4px;
+    }
+
+    /* Footer for each page */
+    .page-footer {
+      position: absolute;
+      bottom: 24px;
+      left: 56px;
+      right: 56px;
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      font-size: 10px;
+      color: #94a3b8;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Print Media Rules */
+    @media print {
+      body {
+        background: #ffffff;
+        font-size: 11.5pt;
+      }
+      .print-bar {
+        display: none !important;
+      }
+      .page-container {
+        max-width: 100%;
+        margin: 0;
+        box-shadow: none;
+        border-radius: 0;
+      }
+      .page {
+        padding: 40px 45px;
+        min-height: auto;
+      }
+      .page-break {
+        page-break-after: always;
+        border-bottom: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Floating Print Control Bar -->
+  <div class="print-bar">
+    <button class="btn-print" onclick="window.print()">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
+      Print / Save as PDF
+    </button>
+    <a href="/#dashboard" class="btn-home">
+      Back to Panel
+    </a>
+  </div>
+
+  <div class="page-container">
+
+    <!-- PAGE 1: COVER PAGE -->
+    <section class="page cover page-break">
+      <div>
+        <div class="cover-badge">System Manual & Architecture Blueprint</div>
+        <h1>KALAM FF PANEL<br><span>DIGITAL RESELLER PLATFORM</span></h1>
+        <p class="cover-subtitle">
+          Comprehensive operational manual, system architecture, database specifications, user and reseller workflows, and master build prompt.
+        </p>
+      </div>
+
+      <div class="diagram">
+┌────────────────────────────────────────────────────────────────────────┐
+│                        KALAM FF PLATFORM CORE                          │
+│   Automated UPI Deposits · Instant Key Allocation · Reseller API Hub   │
+└────────────────────────────────────────────────────────────────────────┘
+ [Client UI: React 19] ──► [Edge Proxy: Cloudflare] ──► [Node.js Engine]
+                                                               │
+                          ┌────────────────────────────────────┴─────┐
+                          ▼                                          ▼
+                 [Firebase Firestore]                      [FamGateway UPI]</div>
+
+      <div class="meta-box">
+        <div>
+          <span>Target Platform</span>
+          <strong>Kalam FF Gaming Panel (v5.0 Enterprise)</strong>
+        </div>
+        <div>
+          <span>Platform Owner</span>
+          <strong>kalam172010@gmail.com</strong>
+        </div>
+        <div>
+          <span>Document Type</span>
+          <strong>Architecture Blueprint & Prompt Model</strong>
+        </div>
+        <div>
+          <span>Output Format</span>
+          <strong>Printable PDF / Technical Manual</strong>
+        </div>
+      </div>
+
+      <div class="page-footer">
+        <span>KALAM FF PANEL — OFFICIAL DOCUMENTATION</span>
+        <span>PAGE 1</span>
+      </div>
+    </section>
+
+    <!-- PAGE 2: TABLE OF CONTENTS & SYSTEM OVERVIEW -->
+    <section class="page page-break">
+      <h2><span class="num">1</span> Table of Contents</h2>
+      <ul>
+        <li><strong>Section 1:</strong> System Overview & Core Capabilities</li>
+        <li><strong>Section 2:</strong> End-to-End Operating Workflow</li>
+        <li><strong>Section 3:</strong> Page Directory & Route Mapping</li>
+        <li><strong>Section 4:</strong> REST API Specifications & Outbound Reseller System</li>
+        <li><strong>Section 5:</strong> Data Models & Persistence Architecture</li>
+        <li><strong>Section 6:</strong> Security & Role-Based Access Control (RBAC)</li>
+        <li><strong>Section 7:</strong> The Master Build Prompt (For Re-creation)</li>
+        <li><strong>Section 8:</strong> Cloudflare Workers & Deployment Operations</li>
+      </ul>
+
+      <h2><span class="num">2</span> System Overview & Core Capabilities</h2>
+      <p>
+        The <strong>Kalam FF Panel</strong> is an enterprise software platform designed for automated digital key generation, inventory stocking, multi-tier duration distribution, and payment collection.
+      </p>
+
+      <div class="callout">
+        <div class="callout-title">Core Capability Pillars</div>
+        The platform eliminates manual operations. When a user deposits funds via UPI or purchases a digital key, the wallet credit and key delivery occur instantly without requiring administrator intervention.
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Module</th>
+            <th>Primary Functionality</th>
+            <th>Underlying Technology</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Authentication</strong></td>
+            <td>Password login, Google OAuth, and 6-digit email OTP</td>
+            <td>Firebase Auth + JWT Tokens</td>
+          </tr>
+          <tr>
+            <td><strong>Digital Inventory</strong></td>
+            <td>Multi-duration keys (1H, 3H, 1D, 7D, 30D) with auto-stocking</td>
+            <td>Firestore + JSON Data Engine</td>
+          </tr>
+          <tr>
+            <td><strong>Automated Payment</strong></td>
+            <td>Dynamic UPI QR codes, instant confirmation</td>
+            <td>FamGateway UPI API Adapter</td>
+          </tr>
+          <tr>
+            <td><strong>Reseller Outbound</strong></td>
+            <td>Third-party bot integration & upstream sync</td>
+            <td>HMAC API Master Keys</td>
+          </tr>
+          <tr>
+            <td><strong>Administration</strong></td>
+            <td>14-tab system control center with custom live branding</td>
+            <td>Role-Based Admin Console</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="page-footer">
+        <span>KALAM FF PANEL — ARCHITECTURE MANUAL</span>
+        <span>PAGE 2</span>
+      </div>
+    </section>
+
+    <!-- PAGE 3: WORKFLOW DIAGRAMS -->
+    <section class="page page-break">
+      <h2><span class="num">3</span> Complete Operating Workflows</h2>
+
+      <h3>A. Automated UPI Deposit Flow</h3>
+      <div class="diagram">
+[User enters ₹ Amount]
+         │
+         ▼
+[Backend calls FamGateway] ──► Generates Dynamic UPI Intent & QR Code
+         │
+         ▼
+[User Scans QR Code in PhonePe / GPay / Paytm]
+         │
+         ▼
+[Gateway Webhook / Status Verification] ──► Verifies Settlement
+         │
+         ▼
+[Instant Wallet Balance Credit] ──► Real-time UI balance update via listener</div>
+
+      <h3>B. Product Purchasing & License Allocation Flow</h3>
+      <div class="diagram">
+[User selects Game & Duration] (e.g. Free Fire V5 Bala Mod - 1 Day)
+         │
+         ▼
+[Balance Verification]
+   ├─ If Balance < Price ──► Prompt for Deposit
+   └─ If Balance >= Price ──► Proceed to Allocation
+         │
+         ▼
+[Wallet Balance Deducted] ──► Atomic Transaction
+         │
+         ▼
+[Key Allocation from Active Stock] ──► Marked Assigned to User ID
+         │
+         ▼
+[Instant Key Modal Displayed] ──► Shows Key, Copy Button & Mod APK Download</div>
+
+      <h3>C. Outbound Reseller API Flow</h3>
+      <div class="diagram">
+[External Telegram Bot / Website]
+         │
+         ▼
+[HTTP POST /api/reseller/buy with x-api-key]
+         │
+         ▼
+[Balance & Parameter Verification: product_id & duration]
+         │
+         ▼
+[Digital Key allocated & JSON response delivered in < 150ms]</div>
+
+      <div class="page-footer">
+        <span>KALAM FF PANEL — WORKFLOW SPECIFICATION</span>
+        <span>PAGE 3</span>
+      </div>
+    </section>
+
+    <!-- PAGE 4: PAGE DIRECTORY & ROUTE MAPPING -->
+    <section class="page page-break">
+      <h2><span class="num">4</span> Page Directory & Route Mapping</h2>
+      <p>The single-page application router supports both URL paths (e.g., <code>/admin</code>) and URL hash anchors (e.g., <code>/#admin</code>):</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Route / Hash</th>
+            <th>Component</th>
+            <th>Access Tier</th>
+            <th>Primary Features</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/#dashboard</code></td>
+            <td><code>DashboardPage.tsx</code></td>
+            <td>All Users</td>
+            <td>Balance summary, promotional marquee, active keys counter, top user leaderboard.</td>
+          </tr>
+          <tr>
+            <td><code>/#buy</code></td>
+            <td><code>BuyKeysPage.tsx</code></td>
+            <td>All Users</td>
+            <td>Product catalog, device filters (Root/Nonroot/iOS), duration selectors, 1-click buy modal.</td>
+          </tr>
+          <tr>
+            <td><code>/#keys</code></td>
+            <td><code>MyKeysPage.tsx</code></td>
+            <td>All Users</td>
+            <td>License vault, copy key to clipboard, direct APK download links, video tutorials.</td>
+          </tr>
+          <tr>
+            <td><code>/#deposit</code></td>
+            <td><code>DepositPage.tsx</code></td>
+            <td>All Users</td>
+            <td>UPI payment gateway QR generator, UTR payment verification, deposit history.</td>
+          </tr>
+          <tr>
+            <td><code>/#history</code></td>
+            <td><code>HistoryPage.tsx</code></td>
+            <td>All Users</td>
+            <td>Financial transaction ledger, order numbers, timestamps, deposit receipts.</td>
+          </tr>
+          <tr>
+            <td><code>/#tickets</code></td>
+            <td><code>TicketsPage.tsx</code></td>
+            <td>All Users</td>
+            <td>Customer support ticket management, response threads, screenshot attachments.</td>
+          </tr>
+          <tr>
+            <td><code>/#refer</code></td>
+            <td><code>ReferPage.tsx</code></td>
+            <td>All Users</td>
+            <td>Affiliate partner system, referral codes, commission percentages, referral payout logs.</td>
+          </tr>
+          <tr>
+            <td><code>/#profile</code></td>
+            <td><code>ProfilePage.tsx</code></td>
+            <td>All Users</td>
+            <td>Account settings, password updates, 2FA toggle, session logs, profile info.</td>
+          </tr>
+          <tr>
+            <td><code>/#api</code></td>
+            <td><code>ResellerApiPage.tsx</code></td>
+            <td>Reseller / Admin</td>
+            <td>Outbound API key generator, code samples (Node.js, Python, PHP, cURL), webhooks.</td>
+          </tr>
+          <tr>
+            <td><code>/#admin</code></td>
+            <td><code>AdminPage.tsx</code></td>
+            <td>Admin Only</td>
+            <td>14-tab administrative center: stats, users, keys, deposits, products, gateway, themes.</td>
+          </tr>
+          <tr>
+            <td><code>/#auth</code></td>
+            <td><code>AuthPage.tsx</code></td>
+            <td>Public</td>
+            <td>Multi-mode sign-in: email/password, registration, Google login, and 6-digit email OTP.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="page-footer">
+        <span>KALAM FF PANEL — ROUTE SPECIFICATIONS</span>
+        <span>PAGE 4</span>
+      </div>
+    </section>
+
+    <!-- PAGE 5: MASTER PROMPT & ARCHITECTURE BLUEPRINT -->
+    <section class="page page-break">
+      <h2><span class="num">5</span> Master System Prompt & Re-creation Blueprint</h2>
+      <p>
+        The following prompt contains the comprehensive architectural specification required to build or extend this entire platform in AI Studio Build:
+      </p>
+
+      <pre><code>Build a complete, production-grade Gaming Digital Key Reseller Platform named "Kalam FF Panel" with the following specifications:
+
+1. ARCHITECTURE & USER INTERFACE:
+- Single-page application using React 19, TypeScript, Vite, Tailwind CSS, and Lucide React.
+- Dark gaming aesthetic (#08090f) with dynamic accent presets (Kalam Crimson, Cyber Neon, Matrix Green, Royal Gold).
+- Responsive layout including Desktop Sidebar, Mobile Top Header, Bottom Navigation Bar, and Mobile Drawer.
+- Global Error Boundary to trap rendering issues and eliminate blank screens.
+
+2. AUTHENTICATION & ACCESS CONTROL:
+- Multi-mode authentication: Username/Password, Google OAuth, and 6-digit passwordless Email OTP.
+- Automatic administrator elevation for master emails: kalam172010@gmail.com, kk7953926@gmail.com.
+- Interactive PIN/Master Password unlock on the admin gate so administrators are never locked out.
+
+3. DIGITAL PRODUCT & VARIANT ENGINE:
+- Support for games (Free Fire, BGMI, Carrom Pool) and system tags (Non-Root, Root, iOS).
+- Multi-duration pricing variants (1 Hour, 3 Hours, 6 Hours, 1 Day, 7 Days, 30 Days).
+- Instant delivery modal with 1-click clipboard copy, APK download URLs, and gameplay tutorial links.
+
+4. AUTOMATED UPI PAYMENT GATEWAY:
+- Integration with FamGateway API (https://famgateway.in/api/create-order) for dynamic UPI QR generation.
+- Real-time status verification with automated wallet balance crediting upon confirmation.
+
+5. OUTBOUND RESELLER API:
+- Outbound endpoints (/api/reseller/buy, /api/reseller_v1.php) with x-api-key authentication.
+- API documentation page with cURL, Python, PHP, and JavaScript code examples.
+
+6. ADMINISTRATIVE CONTROL CENTER:
+- 14-tab admin panel covering Live Revenue Histograms, User Role & Balance Editing,
+  Bulk Key Import/Generation, Product Maintenance Toggles, Payment Gateway Credentials,
+  SMTP/IMAP Dispatch Configuration, and Database Backup/Restore.</code></pre>
+
+      <div class="page-footer">
+        <span>KALAM FF PANEL — MASTER SYSTEM PROMPT</span>
+        <span>PAGE 5</span>
+      </div>
+    </section>
+
+    <!-- PAGE 6: DEPLOYMENT & OPERATION CHECKLIST -->
+    <section class="page">
+      <h2><span class="num">6</span> Deployment & Cloudflare Workers Setup</h2>
+
+      <h3>Wrangler Configuration (<code>wrangler.jsonc</code>)</h3>
+      <pre><code>{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kalamffpanel",
+  "main": "./worker.ts",
+  "compatibility_date": "2026-10-12",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}</code></pre>
+
+      <h3>Deployment Commands</h3>
+      <pre><code># Step 1: Clean build the production assets
+npm run build
+
+# Step 2: Deploy to Cloudflare Workers
+npx wrangler deploy</code></pre>
+
+      <h3>Verification Checklist</h3>
+      <ul>
+        <li>✅ <strong>Live API Health:</strong> Verified via <code>GET /api/health</code> returning HTTP 200 OK.</li>
+        <li>✅ <strong>Master Admin Login:</strong> Verified for <code>kalam172010@gmail.com</code> with password <code>admin123</code>.</li>
+        <li>✅ <strong>Admin Console:</strong> Verified access to all 14 administrative modules.</li>
+        <li>✅ <strong>Instant Purchases:</strong> Tested balance deduction and digital key delivery.</li>
+        <li>✅ <strong>Crash Prevention:</strong> Global React <code>ErrorBoundary</code> prevents blank-screen failures.</li>
+      </ul>
+
+      <div class="callout" style="margin-top: 40px;">
+        <div class="callout-title">Saving This Manual as a PDF</div>
+        To export this manual as a standard PDF file:
+        <ol style="margin-top: 6px; padding-left: 20px;">
+          <li>Click the <strong>"Print / Save as PDF"</strong> button in the top-right corner (or press <code>Ctrl + P</code> / <code>Cmd + P</code>).</li>
+          <li>In the browser's print dialog, set the <strong>Destination</strong> to <strong>"Save as PDF"</strong>.</li>
+          <li>Set Margins to <strong>Default</strong> or <strong>None</strong> and enable <strong>"Background graphics"</strong>.</li>
+          <li>Click <strong>Save</strong>.</li>
+        </ol>
+      </div>
+
+      <div class="page-footer">
+        <span>KALAM FF PANEL — DEPLOYMENT GUIDE</span>
+        <span>PAGE 6</span>
+      </div>
+    </section>
+
+  </div>
+
+</body>
+</html>

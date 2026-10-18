@@ -146,7 +146,18 @@ export const AdminPage: React.FC = () => {
   >('branding');
   const siteLogoFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [stats, setStats] = useState<AdminStats>({
+    totalUsers: 1,
+    activeUsers: 1,
+    totalSales: 0,
+    todaySales: 0,
+    todayRevenue: 0,
+    totalDeposits: 0,
+    pendingDeposits: 0,
+    totalOrders: 0,
+    availableKeys: 0,
+    salesChart: [],
+  });
   const [users, setUsers] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [keys, setKeys] = useState<any[]>([]);
@@ -415,7 +426,22 @@ export const AdminPage: React.FC = () => {
         api.getAdminLogs().catch(() => ({ logs: [] })),
       ]);
 
-      if (statsRes) setStats(statsRes);
+      if (statsRes && typeof statsRes === 'object' && !('error' in statsRes)) {
+        setStats(prev => ({
+          ...prev,
+          ...statsRes,
+          totalUsers: Number(statsRes.totalUsers) || prev.totalUsers || 0,
+          activeUsers: Number(statsRes.activeUsers) || prev.activeUsers || 0,
+          totalSales: Number(statsRes.totalSales) || prev.totalSales || 0,
+          todaySales: Number(statsRes.todaySales) || prev.todaySales || 0,
+          todayRevenue: Number(statsRes.todayRevenue || statsRes.todaySales) || prev.todayRevenue || 0,
+          totalDeposits: Number(statsRes.totalDeposits) || prev.totalDeposits || 0,
+          pendingDeposits: Number(statsRes.pendingDeposits) || prev.pendingDeposits || 0,
+          totalOrders: Number(statsRes.totalOrders) || prev.totalOrders || 0,
+          availableKeys: Number(statsRes.availableKeys) || prev.availableKeys || 0,
+          salesChart: Array.isArray(statsRes.salesChart) ? statsRes.salesChart : prev.salesChart || [],
+        }));
+      }
       if (usersRes?.users) setUsers(usersRes.users);
       if (prodRes?.products) {
         setProducts(prodRes.products);
@@ -2024,49 +2050,49 @@ export const AdminPage: React.FC = () => {
       </div>
 
       {/* TAB CONTENT: 1. DASHBOARD OVERVIEW */}
-      {activeTab === 'dashboard' && stats && (
+      {activeTab === 'dashboard' && (
         <div className="space-y-6">
           {/* 8 Stats Metrics Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Total Users</span>
-              <div className="font-mono text-2xl font-black text-white">{stats.totalUsers}</div>
-              <span className="text-[10px] text-emerald-400">{stats.activeUsers} active</span>
+              <div className="font-mono text-2xl font-black text-white">{stats?.totalUsers ?? 0}</div>
+              <span className="text-[10px] text-emerald-400">{stats?.activeUsers ?? 0} active</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Total Sales</span>
-              <div className="font-mono text-2xl font-black text-rose-400">₹{stats.totalSales.toFixed(0)}</div>
+              <div className="font-mono text-2xl font-black text-rose-400">₹{(Number(stats?.totalSales) || 0).toFixed(0)}</div>
               <span className="text-[10px] text-slate-400">All time orders</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Today Revenue</span>
-              <div className="font-mono text-2xl font-black text-emerald-400">₹{stats.todayRevenue.toFixed(0)}</div>
+              <div className="font-mono text-2xl font-black text-emerald-400">₹{(Number(stats?.todayRevenue || stats?.todaySales) || 0).toFixed(0)}</div>
               <span className="text-[10px] text-emerald-400">Calculated today</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Available Keys</span>
-              <div className="font-mono text-2xl font-black text-sky-400">{stats.availableKeys}</div>
+              <div className="font-mono text-2xl font-black text-sky-400">{stats?.availableKeys ?? 0}</div>
               <span className="text-[10px] text-sky-400">In stock for delivery</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Total Deposits</span>
-              <div className="font-mono text-2xl font-black text-white">₹{stats.totalDeposits.toFixed(0)}</div>
+              <div className="font-mono text-2xl font-black text-white">₹{(Number(stats?.totalDeposits) || 0).toFixed(0)}</div>
               <span className="text-[10px] text-slate-400">UPI credits</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Pending Deposits</span>
-              <div className="font-mono text-2xl font-black text-amber-400">{stats.pendingDeposits}</div>
+              <div className="font-mono text-2xl font-black text-amber-400">{stats?.pendingDeposits ?? 0}</div>
               <span className="text-[10px] text-amber-400">Awaiting UTR confirm</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
               <span className="text-[10px] text-slate-400 uppercase font-mono">Total Orders</span>
-              <div className="font-mono text-2xl font-black text-white">{stats.totalOrders}</div>
+              <div className="font-mono text-2xl font-black text-white">{stats?.totalOrders ?? 0}</div>
               <span className="text-[10px] text-slate-400">Automated fulfilled</span>
             </div>
 
@@ -2098,10 +2124,12 @@ export const AdminPage: React.FC = () => {
 
             {/* SVG Histogram */}
             <div className="h-44 flex items-end justify-between gap-2 pt-6 px-2">
-              {stats.salesChart.map((d, idx) => {
-                const maxVal = Math.max(...stats.salesChart.map(s => Math.max(s.sales, s.deposits)), 100);
-                const salesHeight = Math.max(8, (d.sales / maxVal) * 120);
-                const depositsHeight = Math.max(8, (d.deposits / maxVal) * 120);
+              {(Array.isArray(stats?.salesChart) && stats.salesChart.length > 0 ? stats.salesChart : [
+                { date: 'Recent', sales: 0, deposits: 0 }
+              ]).map((d, idx, arr) => {
+                const maxVal = Math.max(...arr.map(s => Math.max(Number(s.sales) || 0, Number(s.deposits) || 0)), 100);
+                const salesHeight = Math.max(8, ((Number(d.sales) || 0) / maxVal) * 120);
+                const depositsHeight = Math.max(8, ((Number(d.deposits) || 0) / maxVal) * 120);
 
                 return (
                   <div key={idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
@@ -2109,12 +2137,12 @@ export const AdminPage: React.FC = () => {
                       <div
                         style={{ height: `${salesHeight}px` }}
                         className="w-1/2 max-w-[18px] bg-rose-500/80 hover:bg-rose-400 rounded-t transition-all"
-                        title={`Sales: ₹${d.sales}`}
+                        title={`Sales: ₹${d.sales || 0}`}
                       />
                       <div
                         style={{ height: `${depositsHeight}px` }}
                         className="w-1/2 max-w-[18px] bg-emerald-500/80 hover:bg-emerald-400 rounded-t transition-all"
-                        title={`Deposits: ₹${d.deposits}`}
+                        title={`Deposits: ₹${d.deposits || 0}`}
                       />
                     </div>
                     <span className="font-mono text-[10px] text-slate-400">{d.date}</span>

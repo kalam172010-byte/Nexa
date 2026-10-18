@@ -246,6 +246,28 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       return { token: 'mock-token-cloudflare-static', user } as unknown as T;
     }
 
+    // 9. Products Fallback
+    if (endpoint.includes('/products')) {
+      return { products: [] } as unknown as T;
+    }
+
+    // 10. Site Settings Fallback
+    if (endpoint.includes('/site-settings') || endpoint.includes('/admin/settings/site')) {
+      const stored = localStorage.getItem('nexa_site_customization');
+      const config = stored ? JSON.parse(stored) : null;
+      return { config } as unknown as T;
+    }
+
+    // 11. Reseller Settings Fallback
+    if (endpoint.includes('/admin/settings/reseller')) {
+      return { config: {} } as unknown as T;
+    }
+
+    // 12. Tickets Fallback
+    if (endpoint.includes('/tickets')) {
+      return { tickets: [] } as unknown as T;
+    }
+
     // General fallback for other endpoints when fetch fails on static host
     if (fetchFailed || isHtml) {
       return {

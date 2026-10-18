@@ -141,17 +141,23 @@ const MainLayout: React.FC = () => {
     document.title = `${pageName} — ${siteName}`;
   }, [currentPage, siteConfig.siteTitle]);
 
-  // Read URL hash on initial mount and respond to browser Back/Forward buttons
+  // Read URL hash or path on initial mount and respond to browser Back/Forward buttons
   useEffect(() => {
-    const syncFromHash = () => {
+    const syncFromUrl = () => {
       const hash = window.location.hash.replace('#', '').trim();
-      if (hash && PAGE_TITLES[hash]) {
-        setCurrentPage(hash);
+      const path = window.location.pathname.replace(/^\//, '').trim();
+      const pageKey = (hash && PAGE_TITLES[hash]) ? hash : (path && PAGE_TITLES[path]) ? path : null;
+      if (pageKey) {
+        setCurrentPage(pageKey);
       }
     };
-    syncFromHash();
-    window.addEventListener('hashchange', syncFromHash);
-    return () => window.removeEventListener('hashchange', syncFromHash);
+    syncFromUrl();
+    window.addEventListener('hashchange', syncFromUrl);
+    window.addEventListener('popstate', syncFromUrl);
+    return () => {
+      window.removeEventListener('hashchange', syncFromUrl);
+      window.removeEventListener('popstate', syncFromUrl);
+    };
   }, []);
 
   if (isLoading) {

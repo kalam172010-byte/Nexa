@@ -3,7 +3,7 @@ export interface Env {
   BACKEND_API_URL?: string;
 }
 
-const DEFAULT_BACKEND_ORIGIN = 'https://ais-dev-ffr2koj4ukcsljuhbacguf-777758772084.asia-east1.run.app';
+const DEFAULT_BACKEND_ORIGIN = 'https://ais-dev-ehx6fkepg2ntmhvxj3joml-128464619421.asia-east1.run.app';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
