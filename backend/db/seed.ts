@@ -40,24 +40,10 @@ export function seedDatabaseIfEmpty() {
       updatedAt: isoNow,
     };
 
-    const admin1: User = {
-      id: 'USR-001',
-      username: 'nexa_admin',
-      email: 'admin@example.com',
-      passwordHash: hashPassword('admin123'),
-      role: 'ADMIN',
-      balance: 5000.0,
-      referralCode: 'NEXAROOT1',
-      twoFactorEnabled: true,
-      isBanned: false,
-      createdAt: isoNow,
-      updatedAt: isoNow,
-    };
-
     const kalamAdmin: User = {
-      id: 'USR-KALAM-ADMIN',
+      id: 'USR-KALAM-172010',
       username: 'kalam',
-      email: 'kalamkalam1234kd@gmail.com',
+      email: 'kalam172010@gmail.com',
       passwordHash: hashPassword('admin123'),
       role: 'ADMIN',
       balance: 5000.0,
@@ -68,27 +54,25 @@ export function seedDatabaseIfEmpty() {
       updatedAt: isoNow,
     };
 
-    db.users.push(user1, reseller1, admin1, kalamAdmin);
+    db.users.push(user1, reseller1, kalamAdmin);
   }
 
-  // Ensure admin accounts are always present and have ADMIN privileges
+  // Ensure sole primary admin account has ADMIN privileges without overriding custom passwords
   const adminEmails = [
-    { email: 'kalamkalam1234kd@gmail.com', username: 'kalam', id: 'USR-KALAM-ADMIN' },
-    { email: 'kalam172010@gmail.com', username: 'kalam_kalam', id: 'tnqy7LYfgwgzYpoQGqljC4H6bKc2' },
-    { email: 'admin@example.com', username: 'nexa_admin', id: 'USR-001' },
+    { email: 'kalam172010@gmail.com', username: 'kalam', id: 'USR-KALAM-172010' },
   ];
 
   for (const adm of adminEmails) {
     const existing = db.users.find(u => u.email.toLowerCase() === adm.email.toLowerCase());
     if (existing) {
-      if (existing.role !== 'ADMIN') existing.role = 'ADMIN';
-      if (!existing.passwordHash) existing.passwordHash = hashPassword('admin123');
+      existing.role = 'ADMIN';
+      existing.username = adm.username;
     } else {
       db.users.push({
         id: adm.id,
         username: adm.username,
         email: adm.email,
-        passwordHash: hashPassword('admin123'),
+        passwordHash: hashPassword('user123'),
         role: 'ADMIN',
         balance: 5000.0,
         referralCode: `NX${adm.username.toUpperCase().slice(0, 6)}`,

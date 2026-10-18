@@ -27,25 +27,12 @@
       "updatedAt": "2026-10-03T07:21:44.786Z"
     },
     {
-      "id": "USR-001",
-      "username": "nexa_admin",
-      "email": "admin@example.com",
-      "passwordHash": "6d23920a4ac20ac6de3d5fbebf731f01e51268ced86d0186fe1902dfcd077152",
+      "id": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "username": "kalam",
+      "email": "kalam172010@gmail.com",
+      "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
       "role": "ADMIN",
       "balance": 5000,
-      "referralCode": "NEXAROOT1",
-      "twoFactorEnabled": true,
-      "isBanned": false,
-      "createdAt": "2026-10-03T07:21:44.786Z",
-      "updatedAt": "2026-10-17T15:59:59.657Z"
-    },
-    {
-      "id": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
-      "username": "kalam_kalam",
-      "email": "kalam172010@gmail.com",
-      "passwordHash": "6d23920a4ac20ac6de3d5fbebf731f01e51268ced86d0186fe1902dfcd077152",
-      "role": "ADMIN",
-      "balance": 154,
       "referralCode": "NXC8A9FC",
       "twoFactorEnabled": false,
       "isBanned": false,
@@ -79,20 +66,6 @@
       "isBanned": false,
       "createdAt": "2026-10-12T01:11:33.056Z",
       "updatedAt": "2026-10-12T12:12:17.336Z"
-    },
-    {
-      "id": "USR-KALAM-ADMIN",
-      "username": "kalam",
-      "email": "kalamkalam1234kd@gmail.com",
-      "passwordHash": "6d23920a4ac20ac6de3d5fbebf731f01e51268ced86d0186fe1902dfcd077152",
-      "role": "ADMIN",
-      "balance": 11352,
-      "referralCode": "NXA73B8E",
-      "twoFactorEnabled": false,
-      "isBanned": false,
-      "createdAt": "2026-10-12T01:11:37.905Z",
-      "updatedAt": "2026-10-17T16:06:08.933Z",
-      "apiKey": "nexa_live_68b3acdb11737f8cdd646c17770d2e83"
     },
     {
       "id": "USR-1791807997584",
@@ -1242,6 +1215,24 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1792301057488-6eccdc",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T05:24:17.488Z"
+    },
+    {
+      "id": "LOG-1792298730902-97e08a",
+      "userId": "USR-KALAM-ADMIN",
+      "username": "kalam",
+      "action": "USER_LOGIN",
+      "details": "User logged in successfully",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T04:45:30.902Z"
+    },
     {
       "id": "LOG-1792253604704-d3e357",
       "userId": "USR-1792253604314",

@@ -38,109 +38,135 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const stored = localStorage.getItem('nexa_user_data');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('nexa_auth_token'));
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Sync authenticated user with Firestore and backend session
-  const syncUserWithBackend = useCallback(async (firebaseUser: any, customUsername?: string) => {
-    try {
-      const res = await api.firebaseSync({
-        uid: firebaseUser.uid,
-        email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
-        displayName: customUsername || firebaseUser.displayName || undefined,
-      });
-
-      if (res?.token && res?.user) {
-        localStorage.setItem('nexa_auth_token', res.token);
-        setToken(res.token);
-        setUser(res.user);
-
-        // Sync user profile document in Firestore
-        try {
-          await setDoc(
-            doc(db, 'users', res.user.id),
-            {
-              id: res.user.id,
-              username: res.user.username,
-              email: res.user.email,
-              role: res.user.role,
-              balance: res.user.balance,
-              referralCode: res.user.referralCode,
-              twoFactorEnabled: res.user.twoFactorEnabled || false,
-              isBanned: res.user.isBanned || false,
-              updatedAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
-        } catch (firestoreErr) {
-          console.warn('Firestore user profile sync non-critical warning:', firestoreErr);
-        }
-      }
-    } catch (err: any) {
-      console.warn('Backend sync API failed, using client-side Firestore auth state fallback:', err);
-      try {
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        let clientUser: User;
-        if (userDocSnap.exists()) {
-          clientUser = userDocSnap.data() as User;
-        } else {
-          const username =
-            customUsername ||
-            firebaseUser.displayName ||
-            firebaseUser.email?.split('@')[0] ||
-            `user_${firebaseUser.uid.slice(0, 6)}`;
-
-          clientUser = {
-            id: firebaseUser.uid,
-            username,
-            email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
-            role: 'USER',
-            balance: 100,
-            referralCode: `REF_${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
-            twoFactorEnabled: false,
-            isBanned: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          await setDoc(userDocRef, clientUser, { merge: true });
-        }
-
-        const fallbackToken = `fb_token_${firebaseUser.uid}`;
-        localStorage.setItem('nexa_auth_token', fallbackToken);
-        setToken(fallbackToken);
-        setUser(clientUser);
-      } catch (fallbackErr) {
-        console.error('Client auth fallback failed:', fallbackErr);
-        throw err;
-      }
-    }
+  const saveUserSession = useCallback((userData: User, userToken: string) => {
+    console.log('[AuthContext] Saving user session locally and setting state:', userData.username);
+    localStorage.setItem('nexa_auth_token', userToken);
+    localStorage.setItem('nexa_user_data', JSON.stringify(userData));
+    setToken(userToken);
+    setUser(userData);
   }, []);
+
+  const clearUserSession = useCallback(() => {
+    console.log('[AuthContext] Clearing user session from state and localStorage');
+    localStorage.removeItem('nexa_auth_token');
+    localStorage.removeItem('nexa_user_data');
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  // Sync authenticated user with Firestore and backend session
+  const syncUserWithBackend = useCallback(
+    async (firebaseUser: any, customUsername?: string) => {
+      try {
+        const res = await api.firebaseSync({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
+          displayName: customUsername || firebaseUser.displayName || undefined,
+        });
+
+        if (res?.token && res?.user) {
+          saveUserSession(res.user, res.token);
+
+          // Sync user profile document in Firestore
+          try {
+            await setDoc(
+              doc(db, 'users', res.user.id),
+              {
+                id: res.user.id,
+                username: res.user.username,
+                email: res.user.email,
+                role: res.user.role,
+                balance: res.user.balance,
+                referralCode: res.user.referralCode,
+                twoFactorEnabled: res.user.twoFactorEnabled || false,
+                isBanned: res.user.isBanned || false,
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            );
+          } catch (firestoreErr) {
+            console.warn('Firestore user profile sync non-critical warning:', firestoreErr);
+          }
+        }
+      } catch (err: any) {
+        console.warn('Backend sync API failed, using client-side Firestore auth state fallback:', err);
+        try {
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
+
+          let clientUser: User;
+          if (userDocSnap.exists()) {
+            clientUser = userDocSnap.data() as User;
+          } else {
+            const username =
+              customUsername ||
+              firebaseUser.displayName ||
+              firebaseUser.email?.split('@')[0] ||
+              `user_${firebaseUser.uid.slice(0, 6)}`;
+
+            clientUser = {
+              id: firebaseUser.uid,
+              username,
+              email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
+              role: 'USER',
+              balance: 100,
+              referralCode: `REF_${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
+              twoFactorEnabled: false,
+              isBanned: false,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            await setDoc(userDocRef, clientUser, { merge: true });
+          }
+
+          const fallbackToken = `fb_token_${firebaseUser.uid}`;
+          saveUserSession(clientUser, fallbackToken);
+        } catch (fallbackErr) {
+          console.error('Client auth fallback failed:', fallbackErr);
+          throw err;
+        }
+      }
+    },
+    [saveUserSession]
+  );
 
   const refreshUser = useCallback(async () => {
     try {
       if (!localStorage.getItem('nexa_auth_token')) {
-        setUser(null);
+        clearUserSession();
         return;
       }
       const data = await api.getMe();
       if (data && data.user) {
-        setUser(data.user);
+        saveUserSession(data.user, localStorage.getItem('nexa_auth_token') || 'token');
       }
     } catch (err) {
-      console.warn('Failed to refresh user auth state:', err);
-      localStorage.removeItem('nexa_auth_token');
-      setToken(null);
-      setUser(null);
+      console.warn('Failed to refresh user auth state from API:', err);
+      // Keep cached session if present on static hosts
+      if (!localStorage.getItem('nexa_user_data')) {
+        clearUserSession();
+      }
     }
-  }, []);
+  }, [saveUserSession, clearUserSession]);
 
   // Listen to Firebase auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log('[AuthContext] onAuthStateChanged listener triggered. Firebase User:', firebaseUser ? `${firebaseUser.uid} (${firebaseUser.email || 'no-email'})` : 'null');
+    const unsubscribe = onAuthStateChanged(auth, async firebaseUser => {
+      console.log(
+        '[AuthContext] onAuthStateChanged listener triggered. Firebase User:',
+        firebaseUser ? `${firebaseUser.uid} (${firebaseUser.email || 'no-email'})` : 'null'
+      );
       if (firebaseUser) {
         try {
           console.log('[AuthContext] Syncing user session for Firebase UID:', firebaseUser.uid);
@@ -149,62 +175,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (err) {
           console.error('[AuthContext] Error during Firebase auth state synchronization:', err);
           const storedToken = localStorage.getItem('nexa_auth_token');
-          console.log('[AuthContext] Fallback token check from localStorage:', storedToken ? 'Token present' : 'No token');
-          if (storedToken) {
+          const storedUserData = localStorage.getItem('nexa_user_data');
+          if (storedToken && storedUserData) {
             try {
-              const data = await api.getMe();
-              if (data?.user) {
-                console.log('[AuthContext] Recovered user session from token:', data.user.id);
-                setUser(data.user);
-                setToken(storedToken);
-              } else {
-                console.warn('[AuthContext] Token validation failed. Clearing session.');
-                setUser(null);
-                setToken(null);
-                localStorage.removeItem('nexa_auth_token');
-              }
+              const parsed = JSON.parse(storedUserData);
+              console.log('[AuthContext] Restored cached user profile from localStorage:', parsed.username);
+              setUser(parsed);
+              setToken(storedToken);
             } catch {
-              console.warn('[AuthContext] Failed to validate token with backend. Clearing session.');
-              setUser(null);
-              setToken(null);
-              localStorage.removeItem('nexa_auth_token');
+              clearUserSession();
             }
-          } else {
-            setUser(null);
-            setToken(null);
           }
         }
       } else {
-        // If no Firebase user, check if we have a valid backend session token (e.g., Demo or password login)
+        // If no Firebase user, check if we have a valid cached session (e.g., username/password or static host)
         const storedToken = localStorage.getItem('nexa_auth_token');
-        console.log('[AuthContext] No Firebase user present. Local token check:', storedToken ? 'Token present' : 'No token');
+        const storedUserData = localStorage.getItem('nexa_user_data');
+        console.log(
+          '[AuthContext] No Firebase user present. Local session check:',
+          storedToken ? 'Token present' : 'No token'
+        );
         if (storedToken) {
           try {
             const data = await api.getMe();
             if (data?.user) {
-              console.log('[AuthContext] Restored user session from token:', data.user.id);
-              setUser(data.user);
+              console.log('[AuthContext] Restored user session from API:', data.user.id);
+              saveUserSession(data.user, storedToken);
+            } else if (storedUserData) {
+              console.log('[AuthContext] API returned empty, restoring cached user profile:', storedUserData);
+              const parsed = JSON.parse(storedUserData);
+              setUser(parsed);
               setToken(storedToken);
-            } else {
-              setUser(null);
-              setToken(null);
-              localStorage.removeItem('nexa_auth_token');
             }
           } catch {
-            setUser(null);
-            setToken(null);
-            localStorage.removeItem('nexa_auth_token');
+            if (storedUserData) {
+              try {
+                console.log('[AuthContext] API check failed on static host, using cached user profile...');
+                const parsed = JSON.parse(storedUserData);
+                setUser(parsed);
+                setToken(storedToken);
+              } catch {
+                clearUserSession();
+              }
+            } else {
+              clearUserSession();
+            }
           }
-        } else {
-          setUser(null);
-          setToken(null);
         }
       }
       setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [syncUserWithBackend]);
+  }, [syncUserWithBackend, saveUserSession, clearUserSession]);
 
   // Real-time balance and user state background polling (Every 6 seconds + on focus)
   useEffect(() => {
@@ -293,9 +316,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await api.login({ usernameOrEmail: usernameOrEmail.trim(), password });
-      localStorage.setItem('nexa_auth_token', res.token);
-      setToken(res.token);
-      setUser(res.user);
+      saveUserSession(res.user, res.token);
     } catch (err: any) {
       console.warn('[AuthContext] Backend login API failed or unreachable, trying Firebase Auth fallback:', err);
       try {
@@ -342,9 +363,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         password,
         referralCode: referralCode?.trim() || undefined,
       });
-      localStorage.setItem('nexa_auth_token', res.token);
-      setToken(res.token);
-      setUser(res.user);
+      saveUserSession(res.user, res.token);
     } catch (err: any) {
       console.warn('[AuthContext] Backend register API failed or unreachable, trying Firebase Auth fallback:', err);
       try {
@@ -458,9 +477,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await api.verifyOtp(email.trim(), code.trim());
       if (res?.token && res?.user) {
-        localStorage.setItem('nexa_auth_token', res.token);
-        setToken(res.token);
-        setUser(res.user);
+        saveUserSession(res.user, res.token);
       } else {
         throw new Error('Invalid verification response from server.');
       }
@@ -477,9 +494,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.warn('Firebase signout warning:', e);
     }
-    localStorage.removeItem('nexa_auth_token');
-    setToken(null);
-    setUser(null);
+    clearUserSession();
   };
 
   const updateBalanceLocally = (newBalance: number) => {
