@@ -674,6 +674,46 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       );
     }
 
+    const action = String(
+      bodyData.action || url.searchParams.get('action') || 'buy'
+    ).toLowerCase().trim();
+
+    if (action === 'get_balance' || action === 'balance' || action === 'check_balance' || action === 'status') {
+      return jsonResponse({
+        status: true,
+        success: true,
+        status_code: 200,
+        balance: user.balance,
+        wallet_balance: user.balance,
+        user: user.username,
+        role: user.role,
+        currency: 'INR',
+        message: 'Account verified successfully.',
+      });
+    }
+
+    if (action === 'get_products' || action === 'products' || action === 'services') {
+      const isResellerOrAdmin = user.role === 'RESELLER' || user.role === 'ADMIN' || user.role === 'SUPER ADMIN';
+      return jsonResponse({
+        status: true,
+        success: true,
+        status_code: 200,
+        products: edgeDb.products.map(p => ({
+          id: p.id,
+          name: p.name,
+          game: p.game,
+          externalPid: p.externalPid,
+          variants: p.variants.map(v => ({
+            variantId: v.id,
+            durationLabel: v.durationLabel,
+            externalPid: v.externalPid,
+            price: isResellerOrAdmin ? v.resellerPrice : v.price,
+          })),
+        })),
+        currency: 'INR',
+      });
+    }
+
     const quantity = Math.min(
       100,
       Math.max(1, parseInt(String(bodyData.quantity || url.searchParams.get('quantity') || '1'), 10) || 1)
@@ -819,15 +859,18 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       // Sync digital key into Firestore
       try {
         const kObj = deliveredKeyObjects[i];
-        const kUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/digitalKeys?documentId=${encodeURIComponent(kObj.id)}&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+        const kUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/digitalKeys/${encodeURIComponent(kObj.id)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
         fetch(kUrl, {
-          method: 'POST',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             fields: {
               id: { stringValue: kObj.id },
               productId: { stringValue: kObj.productId },
               variantId: { stringValue: kObj.variantId },
+              productName: { stringValue: product.name },
+              gameName: { stringValue: product.game || 'Free Fire' },
+              durationLabel: { stringValue: variant.durationLabel },
               keyCode: { stringValue: kObj.keyCode },
               isUsed: { booleanValue: Boolean(kObj.isUsed) },
               status: { stringValue: kObj.status },

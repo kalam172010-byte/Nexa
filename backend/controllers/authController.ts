@@ -5,6 +5,7 @@ import { User } from '../models/types';
 import { hashPassword } from '../db/seed';
 import { generateToken, verifyToken, AuthenticatedRequest } from '../middleware/auth';
 import { emailService } from '../services/emailService';
+import { FirestoreSyncService } from '../services/firestoreSync';
 
 export class AuthController {
   public static async register(req: Request, res: Response): Promise<void> {
@@ -307,9 +308,14 @@ export class AuthController {
             ? 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
             : `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
         }
+        (user as any).firebaseUid = uid;
         user.updatedAt = new Date().toISOString();
         db.logActivity(user.id, user.username, 'FIREBASE_AUTH_LOGIN', `Logged in via Firebase: ${normalizedEmail}`);
         db.saveSync();
+        FirestoreSyncService.syncUserApiKey(user.id, user.apiKey).catch(() => {});
+        if (uid !== user.id) {
+          FirestoreSyncService.syncUserApiKey(uid, user.apiKey).catch(() => {});
+        }
       }
 
       const token = generateToken(user);

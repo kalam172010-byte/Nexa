@@ -97,7 +97,7 @@ service cloud.firestore {
       allow create: if isValidId(transactionId) &&
         incoming().userId is string &&
         incoming().amount is number &&
-        incoming().type in ['CREDIT', 'DEBIT'];
+        incoming().type in ['CREDIT', 'DEBIT', 'PURCHASE', 'DEPOSIT', 'REFERRAL_BONUS', 'ADMIN_ADJUST', 'REFUND'];
       allow update, delete: if isAdmin();
     }
 

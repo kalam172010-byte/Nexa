@@ -19,12 +19,24 @@ export class OutboundResellerController {
    */
   public static async handleResellerBuy(req: Request, res: Response): Promise<void> {
     try {
-      const apiKey = req.body.api_key || req.query.api_key || req.headers['x-api-key'] || req.headers['x-master-key'];
-      const action = req.body.action || req.query.action || 'buy';
-      const productId = req.body.product_id || req.body.productId || req.query.product_id;
-      const duration = req.body.duration || req.body.durationLabel || req.query.duration;
+      const authHeader = req.headers.authorization;
+      const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+      const apiKey =
+        req.body.api_key ||
+        req.body.apiKey ||
+        req.query.api_key ||
+        req.query.apiKey ||
+        req.headers['x-api-key'] ||
+        req.headers['x-master-key'] ||
+        req.headers['api-key'] ||
+        req.headers['apikey'] ||
+        bearerToken;
+
+      const rawAction = String(req.body.action || req.query.action || 'buy').toLowerCase().trim();
+      const productId = req.body.product_id || req.body.productId || req.body.pid || req.query.product_id || req.query.pid;
+      const duration = req.body.duration || req.body.durationLabel || req.query.duration || req.query.durationLabel;
       const quantityRaw = req.body.quantity || req.query.quantity || 1;
-      const quantity = Math.max(1, Math.min(100, parseInt(quantityRaw, 10) || 1));
+      const quantity = Math.max(1, Math.min(100, parseInt(String(quantityRaw), 10) || 1));
       const androidId = req.body.android_id || req.body.androidId || req.query.android_id;
 
       // When accessed directly in a browser via GET without parameters, return 200 OK status overview
@@ -55,8 +67,8 @@ export class OutboundResellerController {
           supported_methods: ['POST', 'GET'],
           required_parameters: {
             api_key: 'Your Reseller Secret API Token (or pass via X-Api-Key header)',
-            action: 'buy',
-            product_id: 'Numeric Product PID (e.g. 155, 65)',
+            action: 'buy (or get_balance / get_products)',
+            product_id: 'Numeric Product PID (e.g. 155, 66, 150)',
             duration: 'Duration label (e.g. 1 Day, 7 Days, 60 Days)',
             quantity: 'Number of keys to generate (1 to 100)',
           },
@@ -70,15 +82,6 @@ export class OutboundResellerController {
           status: false,
           status_code: 401,
           message: 'API Key is required. Please provide api_key in payload, query, or x-api-key header.',
-        });
-        return;
-      }
-
-      if (!productId || !duration) {
-        res.status(400).json({
-          status: false,
-          status_code: 400,
-          message: 'Product ID (product_id: 2 or 3 digit number) and Duration (duration: e.g. 1 Hours, 1 Day) are required.',
         });
         return;
       }
@@ -150,12 +153,55 @@ export class OutboundResellerController {
         return;
       }
 
-      if (user.role !== 'RESELLER' && user.role !== 'ADMIN' && user.role !== 'SUPER ADMIN') {
-        res.status(403).json({
+      // External panels balance verification handshake: action=get_balance or action=balance
+      if (rawAction === 'get_balance' || rawAction === 'balance' || rawAction === 'check_balance' || rawAction === 'status') {
+        const bal = WalletService.getBalance(user.id);
+        res.json({
+          status: true,
+          status_code: 200,
+          balance: bal,
+          wallet_balance: bal,
+          user: user.username,
+          username: user.username,
+          role: user.role,
+          currency: 'INR',
+          message: 'Account verified successfully.',
+        });
+        return;
+      }
+
+      // External panels service list handshake: action=get_products or action=products or action=services
+      if (rawAction === 'get_products' || rawAction === 'products' || rawAction === 'services') {
+        const isResellerOrAdmin = user.role === 'RESELLER' || user.role === 'ADMIN' || user.role === 'SUPER ADMIN';
+        const productsList = db.products.map(p => {
+          const variants = db.productVariants.filter(v => v.productId === p.id && v.isActive);
+          return {
+            id: p.id,
+            name: p.name,
+            game: p.game,
+            externalPid: p.externalPid || '155',
+            variants: variants.map(v => ({
+              variantId: v.id,
+              durationLabel: v.durationLabel,
+              externalPid: v.externalPid || p.externalPid || '155',
+              price: isResellerOrAdmin ? v.resellerPrice : v.price,
+            })),
+          };
+        });
+        res.json({
+          status: true,
+          status_code: 200,
+          products: productsList,
+          currency: 'INR',
+        });
+        return;
+      }
+
+      if (!productId || !duration) {
+        res.status(400).json({
           status: false,
-          status_code: 403,
-          error: 'Reseller API access is restricted to verified Resellers. Please upgrade your account to Reseller status.',
-          message: 'Reseller API access is restricted to verified Resellers. Please upgrade your account to Reseller status.',
+          status_code: 400,
+          message: 'Product ID (product_id: 2 or 3 digit number) and Duration (duration: e.g. 1 Hours, 1 Day) are required.',
         });
         return;
       }
@@ -290,6 +336,9 @@ export class OutboundResellerController {
                 id: `KEY-EXT-${Date.now()}-${i}-${crypto.randomBytes(2).toString('hex')}`,
                 productId: matchedProduct.id,
                 variantId: matchedVariant.id,
+                productName: matchedProduct.name,
+                gameName: matchedProduct.game || 'FREEFIRE',
+                durationLabel: matchedVariant.durationLabel,
                 keyCode: upstream.keyCode,
                 isUsed: false,
                 status: 'ACTIVE',
@@ -321,11 +370,17 @@ export class OutboundResellerController {
             keyObj.expiresAt = expiryDate.toISOString();
             keyObj.purchaseSource = 'API';
             keyObj.purchaseSourceLabel = 'Buy from API';
+            keyObj.productName = matchedProduct.name;
+            keyObj.gameName = matchedProduct.game || 'FREEFIRE';
+            keyObj.durationLabel = matchedVariant.durationLabel;
           } else {
             keyObj = {
               id: `KEY-EXT-${Date.now()}-${i}-${crypto.randomBytes(2).toString('hex')}`,
               productId: matchedProduct.id,
               variantId: matchedVariant.id,
+              productName: matchedProduct.name,
+              gameName: matchedProduct.game || 'FREEFIRE',
+              durationLabel: matchedVariant.durationLabel,
               keyCode: `KALAM-API-${cleanPid}-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
               isUsed: false,
               status: 'ACTIVE',

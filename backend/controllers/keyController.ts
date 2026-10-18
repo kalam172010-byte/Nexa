@@ -24,8 +24,13 @@ export class KeyController {
       });
       db.save();
 
+      const userAltIds = new Set<string>([user.id]);
+      if ((user as any).firebaseUid) {
+        userAltIds.add((user as any).firebaseUid);
+      }
+
       let userKeys = db.digitalKeys
-        .filter(k => k.assignedUserId === user.id)
+        .filter(k => k.assignedUserId && userAltIds.has(k.assignedUserId))
         .map(key => {
           const product = db.products.find(p => p.id === key.productId);
           const variant = db.productVariants.find(v => v.id === key.variantId);
@@ -33,16 +38,18 @@ export class KeyController {
           const isApi =
             key.purchaseSource === 'API' ||
             order?.purchaseSource === 'API' ||
-            String(key.assignedOrderId || '').startsWith('API-ORD-');
+            String(key.assignedOrderId || '').startsWith('API-ORD-') ||
+            String(key.id).includes('EXT') ||
+            String(key.id).includes('API');
           return {
             id: key.id,
             keyCode: key.keyCode,
             status: key.status,
             assignedAt: key.assignedAt,
             expiresAt: key.expiresAt,
-            productName: product ? product.name : 'Digital Product',
-            gameName: product ? product.game : 'Mobile Game',
-            durationLabel: variant ? variant.durationLabel : 'Standard Key',
+            productName: key.productName || (product ? product.name : 'Digital Product'),
+            gameName: key.gameName || (product ? product.game : 'Mobile Game'),
+            durationLabel: key.durationLabel || (variant ? variant.durationLabel : 'Standard Key'),
             purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
             purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
           };

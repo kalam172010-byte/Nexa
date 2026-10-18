@@ -152,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 email: res.user.email,
                 role: checkIsAdmin(res.user.email, res.user.username) ? 'ADMIN' : res.user.role,
                 balance: res.user.balance,
+                apiKey: res.user.apiKey,
                 referralCode: res.user.referralCode,
                 twoFactorEnabled: res.user.twoFactorEnabled || false,
                 isBanned: res.user.isBanned || false,

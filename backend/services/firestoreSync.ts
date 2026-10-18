@@ -118,39 +118,56 @@ export class FirestoreSyncService {
    */
   public static async syncUserBalance(userId: string, newBalance: number): Promise<void> {
     try {
-      const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(userId)}?updateMask.fieldPaths=balance&updateMask.fieldPaths=updatedAt&key=${API_KEY}`;
-      await fetch(patchUrl, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fields: {
-            balance: { doubleValue: Number(newBalance) },
-            updatedAt: { stringValue: new Date().toISOString() },
-          },
-        }),
-      });
+      const user = db.users.find(u => u.id === userId);
+      const userIdsToSync = new Set<string>([userId]);
+      if (user && (user as any).firebaseUid) {
+        userIdsToSync.add((user as any).firebaseUid);
+      }
+
+      for (const id of userIdsToSync) {
+        const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?updateMask.fieldPaths=balance&updateMask.fieldPaths=updatedAt&key=${API_KEY}`;
+        await fetch(patchUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              balance: { doubleValue: Number(newBalance) },
+              updatedAt: { stringValue: new Date().toISOString() },
+            },
+          }),
+        }).catch(() => {});
+      }
     } catch (err) {
       console.warn('[FirestoreSync] Failed to sync balance to Firestore:', err);
     }
   }
 
   /**
-   * Sync newly purchased digital key directly into Firestore digitalKeys collection
+   * Sync newly purchased digital key directly into Firestore digitalKeys collection with full details
    */
   public static async syncDigitalKey(key: DigitalKey): Promise<void> {
     try {
-      const docUrl = `${FIRESTORE_BASE}/digitalKeys?documentId=${encodeURIComponent(key.id)}&key=${API_KEY}`;
-      await fetch(docUrl, {
-        method: 'POST',
+      const product = db.products.find(p => p.id === key.productId);
+      const variant = db.productVariants.find(v => v.id === key.variantId);
+      const productName = key.productName || product?.name || 'Gaming Digital Key';
+      const gameName = key.gameName || product?.game || 'FREEFIRE';
+      const durationLabel = key.durationLabel || variant?.durationLabel || '1 Day';
+
+      const patchUrl = `${FIRESTORE_BASE}/digitalKeys/${encodeURIComponent(key.id)}?key=${API_KEY}`;
+      await fetch(patchUrl, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
             id: { stringValue: key.id },
             productId: { stringValue: key.productId },
-            variantId: { stringValue: key.variantId },
+            variantId: { stringValue: key.variantId || '' },
+            productName: { stringValue: productName },
+            gameName: { stringValue: gameName },
+            durationLabel: { stringValue: durationLabel },
             keyCode: { stringValue: key.keyCode },
             isUsed: { booleanValue: Boolean(key.isUsed) },
-            status: { stringValue: key.status },
+            status: { stringValue: key.status || 'ACTIVE' },
             assignedUserId: { stringValue: key.assignedUserId || '' },
             assignedOrderId: { stringValue: key.assignedOrderId || '' },
             assignedAt: { stringValue: key.assignedAt || new Date().toISOString() },
@@ -171,9 +188,9 @@ export class FirestoreSyncService {
    */
   public static async syncOrder(order: Order): Promise<void> {
     try {
-      const docUrl = `${FIRESTORE_BASE}/orders?documentId=${encodeURIComponent(order.id)}&key=${API_KEY}`;
-      await fetch(docUrl, {
-        method: 'POST',
+      const patchUrl = `${FIRESTORE_BASE}/orders/${encodeURIComponent(order.id)}?key=${API_KEY}`;
+      await fetch(patchUrl, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
@@ -199,19 +216,21 @@ export class FirestoreSyncService {
   }
 
   /**
-   * Sync debit Transaction into Firestore transactions collection
+   * Sync debit/credit Transaction into Firestore transactions collection
    */
   public static async syncTransaction(tx: Transaction): Promise<void> {
     try {
-      const docUrl = `${FIRESTORE_BASE}/transactions?documentId=${encodeURIComponent(tx.id)}&key=${API_KEY}`;
-      await fetch(docUrl, {
-        method: 'POST',
+      // Map PURCHASE -> DEBIT and DEPOSIT -> CREDIT for full compatibility with rules
+      const ruleCompatibleType = tx.type === 'PURCHASE' ? 'DEBIT' : (tx.type === 'DEPOSIT' ? 'CREDIT' : tx.type);
+      const patchUrl = `${FIRESTORE_BASE}/transactions/${encodeURIComponent(tx.id)}?key=${API_KEY}`;
+      await fetch(patchUrl, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
             id: { stringValue: tx.id },
             userId: { stringValue: tx.userId },
-            type: { stringValue: tx.type },
+            type: { stringValue: ruleCompatibleType },
             amount: { doubleValue: Number(tx.amount) },
             description: { stringValue: tx.description },
             referenceId: { stringValue: tx.referenceId || '' },

@@ -46,6 +46,7 @@ export class KeyService {
   ): DigitalKey {
     const now = new Date();
     const expiryDate = new Date(now.getTime() + durationHours * 3600 * 1000);
+    const product = db.products.find(p => p.id === key.productId);
 
     key.isUsed = false;
     key.assignedUserId = userId;
@@ -54,7 +55,11 @@ export class KeyService {
     key.expiresAt = expiryDate.toISOString();
     key.status = 'ACTIVE';
     key.purchaseSource = purchaseSource;
-    key.purchaseSourceLabel = purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web';
+    key.purchaseSourceLabel = purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website';
+    key.productName = key.productName || product?.name || 'Gaming Digital Key';
+    key.gameName = key.gameName || product?.game || 'FREEFIRE';
+    const variantObj = db.productVariants.find(v => v.id === key.variantId);
+    key.durationLabel = key.durationLabel || variantObj?.durationLabel || '1 Day';
 
     this.syncVariantStock(key.variantId);
     db.save();
@@ -131,6 +136,9 @@ export class KeyService {
       id: `KEY-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
       productId: product.id,
       variantId: variant.id,
+      productName: product.name,
+      gameName: (product as any).game || 'FREEFIRE',
+      durationLabel: variant.durationLabel,
       keyCode,
       isUsed: false,
       assignedUserId: userId,
@@ -139,7 +147,7 @@ export class KeyService {
       expiresAt: expiryDate.toISOString(),
       status: 'ACTIVE',
       purchaseSource,
-      purchaseSourceLabel: purchaseSource === 'API' ? 'This Key Buyed by API' : 'This Key Buyed by Web',
+      purchaseSourceLabel: purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website',
       createdAt: now.toISOString(),
     };
 

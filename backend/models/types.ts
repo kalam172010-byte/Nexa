@@ -64,6 +64,9 @@ export interface DigitalKey {
   status: 'ACTIVE' | 'USED' | 'EXPIRED';
   purchaseSource?: 'API' | 'WEB';
   purchaseSourceLabel?: string;
+  productName?: string;
+  gameName?: string;
+  durationLabel?: string;
   createdAt: string;
 }
 
