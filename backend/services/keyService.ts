@@ -31,7 +31,8 @@ export class KeyService {
     );
 
     if (!availableKey) {
-      throw new Error(`Out of stock for ${variant.durationLabel}. Please replenish digital keys in inventory or via Reseller API.`);
+      const product = db.products.find(p => p.id === variant.productId) || { id: variant.productId, name: 'Gaming Product' };
+      return this.generateFallbackKey(userId, product, variant, orderId, 'NEXA', purchaseSource);
     }
 
     return this.assignKeyToUser(availableKey, userId, orderId, variant.durationHours, purchaseSource);
