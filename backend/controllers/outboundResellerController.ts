@@ -4,7 +4,8 @@ import { db } from '../db/database';
 import { WalletService } from '../services/walletService';
 import { ResellerApiService } from '../services/resellerApi';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { DigitalKey, Order } from '../models/types';
+import { DigitalKey, Order, Transaction, User } from '../models/types';
+import { FirestoreSyncService } from '../services/firestoreSync';
 
 export class OutboundResellerController {
   /**
@@ -87,7 +88,27 @@ export class OutboundResellerController {
       const headerUserId = (req.headers['x-user-id'] as string | undefined)?.trim();
       const headerEmail = (req.headers['x-user-email'] as string | undefined)?.toLowerCase().trim();
 
+      // Check local DB first
       let user = db.users.find(u => u.apiKey && u.apiKey.trim() === cleanApiKey);
+
+      // If not in local DB, search Firestore in real-time
+      if (!user) {
+        const firestoreUser = await FirestoreSyncService.findUserByApiKey(cleanApiKey);
+        if (firestoreUser) {
+          const localMatch = db.users.find(u => u.id === firestoreUser.id);
+          if (localMatch) {
+            localMatch.apiKey = cleanApiKey;
+            localMatch.balance = firestoreUser.balance;
+            user = localMatch;
+          } else {
+            db.users.push(firestoreUser);
+            user = firestoreUser;
+          }
+          db.saveSync();
+        }
+      }
+
+      // Check header hint if still not matched
       if (!user && (headerUserId || headerEmail)) {
         user = db.users.find(
           u =>
@@ -97,40 +118,24 @@ export class OutboundResellerController {
         if (user && cleanApiKey.startsWith('nexa_live_')) {
           user.apiKey = cleanApiKey;
           db.saveSync();
+          FirestoreSyncService.syncUserApiKey(user.id, cleanApiKey).catch(() => {});
         }
       }
-      if (!user) {
-        if (
-          cleanApiKey === 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7' ||
-          cleanApiKey === db.resellerConfig.apiKey ||
-          cleanApiKey === db.resellerConfig.masterKey ||
-          cleanApiKey === 'nexa_master_admin_token'
-        ) {
-          user =
-            db.users.find(u => u.email.toLowerCase() === 'kalam172010@gmail.com') ||
-            db.users.find(u => u.role === 'ADMIN' || u.role === 'SUPER ADMIN' || u.role === 'RESELLER') ||
-            db.users[0];
-          if (user && !user.apiKey) {
-            user.apiKey = cleanApiKey;
-            db.saveSync();
-          }
-        } else {
-          res.status(401).json({
-            status: false,
-            status_code: 401,
-            error: 'Invalid API Key or unauthorized reseller credentials. Please copy your active API Token from the Reseller API page.',
-            message: 'Invalid API Key or unauthorized reseller credentials. Please copy your active API Token from the Reseller API page.',
-          });
-          return;
-        }
+
+      // Master admin key fallback if explicitly provided
+      if (!user && (cleanApiKey === 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7' || cleanApiKey === 'nexa_master_admin_token')) {
+        user =
+          db.users.find(u => u.email.toLowerCase() === 'kalam172010@gmail.com' || u.email.toLowerCase() === 'kalamkalam1234kd@gmail.com') ||
+          db.users.find(u => u.role === 'ADMIN' || u.role === 'SUPER ADMIN') ||
+          db.users[0];
       }
 
       if (!user) {
         res.status(401).json({
           status: false,
           status_code: 401,
-          error: 'API account not found.',
-          message: 'API account not found.',
+          error: 'Invalid API Key. No account found matching this API Key. Please copy your unique API Token from your Reseller API page.',
+          message: 'Invalid API Key. No account found matching this API Key. Please copy your unique API Token from your Reseller API page.',
         });
         return;
       }
@@ -255,8 +260,15 @@ export class OutboundResellerController {
         orderId
       );
 
+      const remainingBalance = WalletService.getBalance(user.id);
+      // Immediately sync balance to Firestore so website UI reflects deduction in real-time
+      FirestoreSyncService.syncUserBalance(user.id, remainingBalance).catch(e => {
+        console.warn('[OutboundReseller] Firestore balance sync warning:', e);
+      });
+
       // 7. Issue Keys (quantity times) - Try Live Upstream Reseller API first if configured, then Local Pool, then Auto-Mint
       const deliveredKeys: string[] = [];
+      const deliveredKeyObjects: DigitalKey[] = [];
       const effectiveExternalPid = matchedVariant.externalPid?.trim() || matchedProduct.externalPid?.trim();
       const effectiveExternalDuration = matchedVariant.externalDuration?.trim() || matchedVariant.durationLabel.trim();
       const now = new Date();
@@ -329,6 +341,12 @@ export class OutboundResellerController {
           }
         }
         deliveredKeys.push(keyObj.keyCode);
+        deliveredKeyObjects.push(keyObj);
+
+        // Immediately push key to Firestore so website shows it in real-time
+        FirestoreSyncService.syncDigitalKey(keyObj).catch(e => {
+          console.warn('[OutboundReseller] Firestore key sync warning:', e);
+        });
       }
 
       // Record order tagged with purchaseSource: 'API'
@@ -340,7 +358,7 @@ export class OutboundResellerController {
         productName: matchedProduct.name,
         durationLabel: matchedVariant.durationLabel,
         pricePaid: totalPrice,
-        deliveredKeyId: orderId,
+        deliveredKeyId: deliveredKeyObjects[0]?.id || orderId,
         deliveredKeyCode: deliveredKeys.join(', '),
         status: 'COMPLETED',
         purchaseSource: 'API',
@@ -350,7 +368,20 @@ export class OutboundResellerController {
       db.orders.unshift(newOrder);
       db.saveSync();
 
-      const remainingBalance = WalletService.getBalance(user.id);
+      // Sync Order to Firestore in real-time
+      FirestoreSyncService.syncOrder(newOrder).catch(e => {
+        console.warn('[OutboundReseller] Firestore order sync warning:', e);
+      });
+
+      // Sync Transaction to Firestore in real-time
+      const latestTx = db.transactions.find(t => t.referenceId === orderId);
+      if (latestTx) {
+        latestTx.purchaseSource = 'API';
+        latestTx.purchaseSourceLabel = 'Buy from API';
+        FirestoreSyncService.syncTransaction(latestTx).catch(e => {
+          console.warn('[OutboundReseller] Firestore tx sync warning:', e);
+        });
+      }
 
       db.logActivity(
         user.id,
@@ -397,14 +428,37 @@ export class OutboundResellerController {
         return;
       }
 
-      let dbUser = db.users.find(u => u.id === user.id);
+      let dbUser: User | undefined = db.users.find(u => u.id === user.id);
       const clientHintKey = (req.headers['x-user-api-key'] as string | undefined)?.trim();
-      if (dbUser && !dbUser.apiKey) {
+      if (!dbUser) {
+        dbUser = {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          passwordHash: '',
+          role: user.role,
+          balance: user.balance,
+          apiKey: clientHintKey && clientHintKey.startsWith('nexa_live_')
+            ? clientHintKey
+            : `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
+          referralCode: `NX${user.id.slice(0, 4).toUpperCase()}`,
+          twoFactorEnabled: false,
+          isBanned: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        db.users.push(dbUser);
+        db.saveSync();
+      } else if (!dbUser.apiKey) {
         dbUser.apiKey =
           clientHintKey && clientHintKey.startsWith('nexa_live_')
             ? clientHintKey
             : `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
         db.saveSync();
+      }
+      // Ensure Firestore user document has the current apiKey
+      if (dbUser && dbUser.apiKey) {
+        FirestoreSyncService.syncUserApiKey(dbUser.id, dbUser.apiKey).catch(() => {});
       }
 
       // Ensure every product has a 2 or 3-digit numeric PID
@@ -552,6 +606,9 @@ export class OutboundResellerController {
 
       dbUser.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
       db.saveSync();
+
+      // Sync regenerated API key to Firestore
+      FirestoreSyncService.syncUserApiKey(dbUser.id, dbUser.apiKey).catch(() => {});
 
       db.logActivity(dbUser.id, dbUser.username, 'RESELLER_API_KEY_REGENERATE', 'User regenerated their Outbound Reseller API Key.');
 

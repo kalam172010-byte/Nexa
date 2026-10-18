@@ -6,6 +6,7 @@ import { WalletService } from '../services/walletService';
 import { KeyService } from '../services/keyService';
 import { ResellerApiService } from '../services/resellerApi';
 import { Order, DigitalKey } from '../models/types';
+import { FirestoreSyncService } from '../services/firestoreSync';
 
 export class OrderController {
   public static async createOrder(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -171,8 +172,20 @@ export class OrderController {
           createdAt: new Date().toISOString(),
         };
         db.orders.unshift(order);
+        FirestoreSyncService.syncDigitalKey(k).catch(() => {});
+        FirestoreSyncService.syncOrder(order).catch(() => {});
       }
       db.saveSync();
+
+      const newBalance = WalletService.getBalance(user.id);
+      FirestoreSyncService.syncUserBalance(user.id, newBalance).catch(() => {});
+
+      const latestTx = db.transactions.find(t => t.referenceId === orderId);
+      if (latestTx) {
+        latestTx.purchaseSource = 'WEB';
+        latestTx.purchaseSourceLabel = 'Buy from Website';
+        FirestoreSyncService.syncTransaction(latestTx).catch(() => {});
+      }
 
       // 8. Process referral commission if applicable
       WalletService.processReferralReward(user.id, authoritativePrice);

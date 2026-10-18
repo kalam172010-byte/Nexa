@@ -23,21 +23,20 @@ import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { useSite } from '../context/SiteContext.js';
 
-function getInitialApiKey(): string {
-  if (typeof window === 'undefined') return 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase.js';
+
+function getInitialApiKey(userId?: string): string {
+  if (typeof window === 'undefined' || !userId) return '';
   try {
-    const existing = localStorage.getItem('nexa_user_outbound_api_key');
-    if (existing && existing.trim()) return existing.trim();
-    const initial = 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7';
-    localStorage.setItem('nexa_user_outbound_api_key', initial);
-    return initial;
-  } catch {
-    return 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7';
-  }
+    const key = localStorage.getItem(`nexa_user_api_key_${userId}`);
+    if (key && key.trim()) return key.trim();
+  } catch {}
+  return '';
 }
 
 export const ResellerApiPage: React.FC = () => {
-  const { role, balance, refreshUser, updateBalanceLocally } = useAuth();
+  const { user, role, balance, refreshUser, updateBalanceLocally } = useAuth();
   const { siteConfig } = useSite();
   const { success: showToastSuccess, error: showToastError } = useToast();
 
@@ -48,8 +47,9 @@ export const ResellerApiPage: React.FC = () => {
 
   const [creds, setCreds] = useState<any>(() => {
     const origin = getEffectiveOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
+    const userKey = user?.apiKey || getInitialApiKey(user?.id) || '';
     return {
-      apiKey: getInitialApiKey(),
+      apiKey: userKey,
       apiUrl: `${origin}/api/v1/reseller/buy`,
       phpScriptUrl: `${origin}/api/reseller_v1.php`,
       rootPhpUrl: `${origin}/reseller_v1.php`,
@@ -130,7 +130,18 @@ export const ResellerApiPage: React.FC = () => {
       }
 
       if (data) {
-        const finalKey = data.apiKey || getInitialApiKey();
+        let finalKey = data.apiKey || user?.apiKey || getInitialApiKey(user?.id);
+        if (!finalKey && user?.id) {
+          finalKey = `nexa_live_${user.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+          try {
+            setDoc(doc(db, 'users', user.id), { apiKey: finalKey }, { merge: true }).catch(() => {});
+          } catch {}
+        }
+        if (user?.id && finalKey) {
+          try {
+            localStorage.setItem(`nexa_user_api_key_${user.id}`, finalKey);
+          } catch {}
+        }
         setCreds((prev: any) => ({
           ...prev,
           ...data,
@@ -155,26 +166,34 @@ export const ResellerApiPage: React.FC = () => {
 
   useEffect(() => {
     fetchCreds();
-  }, [isReseller]);
+  }, [isReseller, user?.id]);
 
   const handleRegenerateKey = async () => {
     try {
       const res = await api.regenerateResellerApiKey();
       const newKey =
         res?.apiKey ||
-        `nexa_live_${Math.random().toString(16).slice(2, 14)}${Math.random().toString(16).slice(2, 14)}`;
-      try {
-        localStorage.setItem('nexa_user_outbound_api_key', newKey);
-      } catch {}
+        `nexa_live_${(user?.id || 'usr').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+      if (user?.id) {
+        try {
+          localStorage.setItem(`nexa_user_api_key_${user.id}`, newKey);
+          await setDoc(doc(db, 'users', user.id), { apiKey: newKey }, { merge: true });
+        } catch {}
+      }
       setCreds((prev: any) => ({ ...prev, apiKey: newKey }));
-      showToastSuccess('API Key Regenerated', res?.message || 'New secret token generated.');
+      refreshUser();
+      showToastSuccess('API Key Regenerated', res?.message || 'New secret token generated for your account.');
     } catch {
-      const fallbackKey = `nexa_live_${Math.random().toString(16).slice(2, 14)}${Math.random().toString(16).slice(2, 14)}`;
-      try {
-        localStorage.setItem('nexa_user_outbound_api_key', fallbackKey);
-      } catch {}
+      const fallbackKey = `nexa_live_${(user?.id || 'usr').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+      if (user?.id) {
+        try {
+          localStorage.setItem(`nexa_user_api_key_${user.id}`, fallbackKey);
+          await setDoc(doc(db, 'users', user.id), { apiKey: fallbackKey }, { merge: true });
+        } catch {}
+      }
       setCreds((prev: any) => ({ ...prev, apiKey: fallbackKey }));
-      showToastSuccess('API Key Regenerated', 'New secret token generated.');
+      refreshUser();
+      showToastSuccess('API Key Regenerated', 'New secret token generated for your account.');
     }
   };
 

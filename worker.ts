@@ -604,6 +604,48 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       }
     }
 
+    if (!user && apiKey) {
+      try {
+        const fsQueryUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users?pageSize=100&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+        const fsRes = await fetch(fsQueryUrl);
+        if (fsRes.ok) {
+          const fsData: any = await fsRes.json();
+          const docs = fsData.documents || [];
+          for (const d of docs) {
+            const f = d.fields || {};
+            const docApiKey = f.apiKey?.stringValue || '';
+            if (docApiKey && docApiKey.trim() === apiKey.trim()) {
+              const uId = f.id?.stringValue || d.name?.split('/').pop() || `USR-${Date.now()}`;
+              const uBal = typeof f.balance?.doubleValue === 'number'
+                ? f.balance.doubleValue
+                : typeof f.balance?.integerValue === 'string'
+                ? parseInt(f.balance.integerValue, 10)
+                : Number(f.balance?.doubleValue || 0);
+              const uRole = (f.role?.stringValue || 'USER') as any;
+              const uName = f.username?.stringValue || f.displayName?.stringValue || 'user';
+              const uEmail = f.email?.stringValue || '';
+              const newUser: EdgeUser = {
+                id: uId,
+                username: uName,
+                email: uEmail,
+                role: uRole,
+                balance: uBal,
+                apiKey: docApiKey,
+                referralCode: f.referralCode?.stringValue || `NX${uId.slice(0, 4)}`,
+                twoFactorEnabled: Boolean(f.twoFactorEnabled?.booleanValue),
+                isBanned: Boolean(f.isBanned?.booleanValue),
+                createdAt: f.createdAt?.stringValue || new Date().toISOString(),
+                updatedAt: f.updatedAt?.stringValue || new Date().toISOString(),
+              };
+              edgeDb.users.push(newUser);
+              user = newUser;
+              break;
+            }
+          }
+        }
+      } catch {}
+    }
+
     if (!user) {
       return jsonResponse(
         {
@@ -773,7 +815,82 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
         createdAt: new Date().toISOString(),
       };
       edgeDb.orders.unshift(newOrder);
+
+      // Sync digital key into Firestore
+      try {
+        const kObj = deliveredKeyObjects[i];
+        const kUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/digitalKeys?documentId=${encodeURIComponent(kObj.id)}&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+        fetch(kUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              id: { stringValue: kObj.id },
+              productId: { stringValue: kObj.productId },
+              variantId: { stringValue: kObj.variantId },
+              keyCode: { stringValue: kObj.keyCode },
+              isUsed: { booleanValue: Boolean(kObj.isUsed) },
+              status: { stringValue: kObj.status },
+              assignedUserId: { stringValue: user.id },
+              assignedOrderId: { stringValue: subOrderId },
+              assignedAt: { stringValue: kObj.assignedAt || new Date().toISOString() },
+              expiresAt: { stringValue: kObj.expiresAt || '' },
+              purchaseSource: { stringValue: 'API' },
+              purchaseSourceLabel: { stringValue: 'Buy from API' },
+              createdAt: { stringValue: kObj.createdAt || new Date().toISOString() },
+            },
+          }),
+        }).catch(() => {});
+      } catch {}
     }
+
+    // Sync order into Firestore
+    try {
+      const ordUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/orders?documentId=${encodeURIComponent(batchOrderId)}&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      fetch(ordUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            id: { stringValue: batchOrderId },
+            userId: { stringValue: user.id },
+            productId: { stringValue: product.id },
+            variantId: { stringValue: variant.id },
+            productName: { stringValue: product.name },
+            durationLabel: { stringValue: variant.durationLabel },
+            pricePaid: { doubleValue: Number(totalPrice) },
+            deliveredKeyId: { stringValue: deliveredKeyObjects[0]?.id || batchOrderId },
+            deliveredKeyCode: { stringValue: generatedKeyCodes.join(', ') },
+            status: { stringValue: 'COMPLETED' },
+            purchaseSource: { stringValue: 'API' },
+            purchaseSourceLabel: { stringValue: 'Buy from API' },
+            createdAt: { stringValue: new Date().toISOString() },
+          },
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    // Sync transaction into Firestore
+    try {
+      const txUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/transactions?documentId=${encodeURIComponent(tx.id)}&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      fetch(txUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            id: { stringValue: tx.id },
+            userId: { stringValue: user.id },
+            type: { stringValue: tx.type },
+            amount: { doubleValue: Number(tx.amount) },
+            description: { stringValue: tx.description },
+            referenceId: { stringValue: tx.referenceId || '' },
+            purchaseSource: { stringValue: 'API' },
+            purchaseSourceLabel: { stringValue: 'Buy from API' },
+            createdAt: { stringValue: tx.createdAt },
+          },
+        }),
+      }).catch(() => {});
+    } catch {}
 
     return jsonResponse({
       status: true,

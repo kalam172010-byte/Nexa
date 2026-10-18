@@ -60,6 +60,9 @@ export class AuthController {
         passwordHash: hashPassword(password),
         role: isAdminEmail ? 'ADMIN' : 'USER',
         balance: isAdminEmail ? 5000.0 : 0.0,
+        apiKey: isAdminEmail
+          ? 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
+          : `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
         referralCode: newReferralCode,
         referredBy,
         twoFactorEnabled: false,

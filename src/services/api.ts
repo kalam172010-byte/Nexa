@@ -1181,15 +1181,20 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
 
     if (endpoint.includes('/reseller/api-credentials')) {
-      let userApiKey = '';
-      try {
-        userApiKey = localStorage.getItem('nexa_user_outbound_api_key') || '';
-        if (!userApiKey) {
-          userApiKey = 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7';
-          localStorage.setItem('nexa_user_outbound_api_key', userApiKey);
-        }
-      } catch {
-        userApiKey = 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7';
+      let userApiKey = storedUser?.apiKey || '';
+      if (!userApiKey) {
+        try {
+          userApiKey = localStorage.getItem(`nexa_user_api_key_${storedUser?.id || 'default'}`) || '';
+        } catch {}
+      }
+      if (!userApiKey && storedUser) {
+        userApiKey = `nexa_live_${(storedUser.id || 'usr').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+        storedUser.apiKey = userApiKey;
+        localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+        localStorage.setItem(`nexa_user_api_key_${storedUser.id}`, userApiKey);
+      }
+      if (!userApiKey) {
+        userApiKey = `nexa_live_${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
       }
       const origin = getEffectiveOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
       const products = getCachedProducts();

@@ -10,6 +10,7 @@
         "email": { "type": "string", "format": "email", "maxLength": 256 },
         "role": { "type": "string", "enum": ["USER", "RESELLER", "ADMIN"] },
         "balance": { "type": "number" },
+        "apiKey": { "type": "string", "maxLength": 128 },
         "referralCode": { "type": "string", "maxLength": 32 },
         "twoFactorEnabled": { "type": "boolean" },
         "isBanned": { "type": "boolean" },
@@ -65,6 +66,8 @@
         "price": { "type": "number" },
         "status": { "type": "string", "enum": ["COMPLETED", "PENDING", "FAILED"] },
         "keyCode": { "type": "string", "maxLength": 256 },
+        "purchaseSource": { "type": "string", "maxLength": 32 },
+        "purchaseSourceLabel": { "type": "string", "maxLength": 64 },
         "createdAt": { "type": "string" }
       },
       "required": ["id", "userId", "productId", "variantId", "price", "status"]
@@ -84,6 +87,8 @@
         "assignedAt": { "type": "string" },
         "expiresAt": { "type": "string" },
         "status": { "type": "string", "enum": ["ACTIVE", "USED", "EXPIRED"] },
+        "purchaseSource": { "type": "string", "maxLength": 32 },
+        "purchaseSourceLabel": { "type": "string", "maxLength": 64 },
         "createdAt": { "type": "string" }
       },
       "required": ["id", "productId", "variantId", "keyCode", "status"]

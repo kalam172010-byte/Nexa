@@ -6,6 +6,7 @@ export interface User {
   email: string;
   role: UserRole;
   balance: number;
+  apiKey?: string;
   referralCode: string;
   referredBy?: string;
   twoFactorEnabled: boolean;
@@ -55,14 +56,19 @@ export interface DigitalKey {
   id: string;
   keyCode: string;
   status: 'ACTIVE' | 'USED' | 'EXPIRED';
+  productId?: string;
+  variantId?: string;
+  assignedUserId?: string;
+  assignedOrderId?: string;
   assignedAt?: string;
   expiresAt?: string;
   productName: string;
   gameName: string;
   durationLabel: string;
+  isUsed?: boolean;
   purchaseSource?: 'API' | 'WEB';
   purchaseSourceLabel?: string;
-  assignedOrderId?: string;
+  createdAt?: string;
 }
 
 export interface Order {

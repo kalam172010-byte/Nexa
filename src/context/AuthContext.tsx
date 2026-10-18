@@ -308,17 +308,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         snap => {
           if (snap.exists()) {
             const data = snap.data();
-            if (typeof data.balance === 'number') {
+            if (typeof data.balance === 'number' || data.apiKey) {
               setUser(prev => {
                 if (!prev) return prev;
-                if (prev.balance !== data.balance || prev.role !== data.role || prev.isBanned !== data.isBanned) {
+                const newBalance = typeof data.balance === 'number' ? Number(data.balance) : prev.balance;
+                if (
+                  prev.balance !== newBalance ||
+                  prev.role !== data.role ||
+                  prev.isBanned !== data.isBanned ||
+                  (data.apiKey && prev.apiKey !== data.apiKey)
+                ) {
                   const updated = {
                     ...prev,
-                    balance: Number(data.balance),
+                    balance: newBalance,
                     role: data.role || prev.role,
                     isBanned: Boolean(data.isBanned),
+                    apiKey: data.apiKey || prev.apiKey,
                   };
                   localStorage.setItem('nexa_user_data', JSON.stringify(updated));
+                  if (data.apiKey) {
+                    localStorage.setItem(`nexa_user_api_key_${prev.id}`, data.apiKey);
+                  }
                   return updated;
                 }
                 return prev;

@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { AuthController } from '../controllers/authController';
 import { ProductController } from '../controllers/productController';
@@ -137,8 +139,6 @@ router.get('/admin/logs', ...adminGuard, AdminController.getActivityLogs as any)
 
 // --- Direct PDF Documentation Download Route ---
 router.get('/download-pdf', (req, res) => {
-  const fs = require('fs');
-  const path = require('path');
   const pdfPath = path.resolve(process.cwd(), 'public/Kalam_FF_Panel_Documentation.pdf');
   if (fs.existsSync(pdfPath)) {
     res.setHeader('Content-Type', 'application/pdf');

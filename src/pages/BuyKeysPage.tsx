@@ -23,6 +23,8 @@ import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { KeySuccessModal } from '../components/KeySuccessModal.js';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase.js';
 
 interface BuyKeysPageProps {
   onNavigateDeposit: () => void;
@@ -35,7 +37,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   onNavigateKeys,
   onNavigateAdmin,
 }) => {
-  const { role, balance, updateBalanceLocally } = useAuth();
+  const { user, role, balance, updateBalanceLocally } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -113,14 +115,81 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
     const interval = setInterval(() => {
       fetchProducts(true);
-    }, 3000);
+    }, 2500);
+
+    let unsubscribeSnapshot: (() => void) | null = null;
+    if (user?.id) {
+      try {
+        const q = query(
+          collection(db, 'digitalKeys'),
+          where('assignedUserId', '==', user.id)
+        );
+        unsubscribeSnapshot = onSnapshot(
+          q,
+          snapshot => {
+            const fsKeys: DigitalKey[] = [];
+            snapshot.forEach(docSnap => {
+              const data = docSnap.data() as any;
+              const isApi =
+                data.purchaseSource === 'API' ||
+                String(data.assignedOrderId || '').startsWith('API-ORD-') ||
+                String(docSnap.id).includes('EXT') ||
+                String(docSnap.id).includes('API');
+              fsKeys.push({
+                id: docSnap.id,
+                keyCode: data.keyCode || '',
+                productId: data.productId || '',
+                variantId: data.variantId || '',
+                productName: data.productName || 'Gaming Panel',
+                gameName: data.gameName || 'Free Fire',
+                durationLabel: data.durationLabel || '1 Day',
+                assignedUserId: data.assignedUserId,
+                assignedOrderId: data.assignedOrderId,
+                assignedAt: data.assignedAt || data.createdAt,
+                expiresAt: data.expiresAt,
+                status: data.status || 'ACTIVE',
+                isUsed: Boolean(data.isUsed),
+                purchaseSource: isApi ? 'API' : 'WEB',
+                purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+                createdAt: data.createdAt,
+              });
+            });
+
+            if (fsKeys.length > 0) {
+              setPurchasedKeys(prev => {
+                const map = new Map<string, DigitalKey>();
+                for (const k of fsKeys) {
+                  map.set(k.id, k);
+                }
+                for (const k of prev) {
+                  if (!map.has(k.id)) {
+                    map.set(k.id, k);
+                  }
+                }
+                return Array.from(map.values()).sort((a, b) => {
+                  const timeA = new Date(a.assignedAt || a.createdAt || 0).getTime();
+                  const timeB = new Date(b.assignedAt || b.createdAt || 0).getTime();
+                  return timeB - timeA;
+                });
+              });
+            }
+          },
+          err => {
+            console.warn('[BuyKeysPage] Firestore keys snapshot notice:', err);
+          }
+        );
+      } catch (err) {
+        console.warn('[BuyKeysPage] Failed to attach keys snapshot:', err);
+      }
+    }
 
     return () => {
       window.removeEventListener('nexa_products_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
       clearInterval(interval);
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
     };
-  }, [role]);
+  }, [role, user?.id]);
 
   const toggleAccordion = (productId: string) => {
     setExpandedMap(prev => ({

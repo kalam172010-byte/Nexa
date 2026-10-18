@@ -13,11 +13,16 @@ import { api } from '../services/api.js';
 import { DigitalKey } from '../types/index.js';
 import { useToast } from '../context/ToastContext.js';
 
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase.js';
+import { useAuth } from '../context/AuthContext.js';
+
 interface MyKeysPageProps {
   onNavigateBuy: () => void;
 }
 
 export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
+  const { user } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
   const [keys, setKeys] = useState<DigitalKey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,23 +32,116 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [viewingKey, setViewingKey] = useState<DigitalKey | null>(null);
 
-  const fetchKeys = async () => {
+  const fetchKeys = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const res = await api.getKeys(statusFilter, search);
       if (res?.keys) {
-        setKeys(res.keys);
+        setKeys(prev => {
+          // Merge preserving any live keys from Firestore
+          const map = new Map<string, DigitalKey>();
+          for (const k of res.keys) {
+            map.set(k.id, k);
+          }
+          for (const k of prev) {
+            if (!map.has(k.id)) {
+              map.set(k.id, k);
+            }
+          }
+          return Array.from(map.values()).sort((a, b) => {
+            const timeA = new Date(a.assignedAt || a.createdAt || 0).getTime();
+            const timeB = new Date(b.assignedAt || b.createdAt || 0).getTime();
+            return timeB - timeA;
+          });
+        });
       }
     } catch (err: any) {
-      showToastError('Failed to fetch keys', err.message);
+      if (!silent) {
+        showToastError('Failed to fetch keys', err.message);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchKeys();
   }, [statusFilter, search]);
+
+  // Real-time Firestore onSnapshot listener for instant key delivery
+  useEffect(() => {
+    if (!user?.id) return;
+
+    try {
+      const q = query(
+        collection(db, 'digitalKeys'),
+        where('assignedUserId', '==', user.id)
+      );
+
+      const unsubscribe = onSnapshot(
+        q,
+        snapshot => {
+          const fsKeys: DigitalKey[] = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data() as any;
+            const isApi = data.purchaseSource === 'API' || String(data.assignedOrderId || '').startsWith('API-ORD-') || String(docSnap.id).includes('EXT') || String(docSnap.id).includes('API');
+            fsKeys.push({
+              id: docSnap.id,
+              keyCode: data.keyCode || '',
+              productId: data.productId || '',
+              variantId: data.variantId || '',
+              productName: data.productName || 'Gaming Panel',
+              gameName: data.gameName || 'Free Fire',
+              durationLabel: data.durationLabel || '1 Day',
+              assignedUserId: data.assignedUserId,
+              assignedOrderId: data.assignedOrderId,
+              assignedAt: data.assignedAt || data.createdAt,
+              expiresAt: data.expiresAt,
+              status: data.status || 'ACTIVE',
+              isUsed: Boolean(data.isUsed),
+              purchaseSource: isApi ? 'API' : 'WEB',
+              purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+              createdAt: data.createdAt,
+            });
+          });
+
+          if (fsKeys.length > 0) {
+            setKeys(prev => {
+              const map = new Map<string, DigitalKey>();
+              for (const k of fsKeys) {
+                map.set(k.id, k);
+              }
+              for (const k of prev) {
+                if (!map.has(k.id)) {
+                  map.set(k.id, k);
+                }
+              }
+              return Array.from(map.values()).sort((a, b) => {
+                const timeA = new Date(a.assignedAt || a.createdAt || 0).getTime();
+                const timeB = new Date(b.assignedAt || b.createdAt || 0).getTime();
+                return timeB - timeA;
+              });
+            });
+          }
+        },
+        err => {
+          console.warn('[MyKeysPage] Firestore keys snapshot notice:', err);
+        }
+      );
+
+      // Periodic live polling every 2.5s to ensure backend sync
+      const pollTimer = setInterval(() => {
+        fetchKeys(true);
+      }, 2500);
+
+      return () => {
+        unsubscribe();
+        clearInterval(pollTimer);
+      };
+    } catch (err) {
+      console.warn('[MyKeysPage] Listener attach error:', err);
+    }
+  }, [user?.id, statusFilter, search]);
 
   const handleCopy = (keyCode: string, id: string) => {
     navigator.clipboard.writeText(keyCode);
