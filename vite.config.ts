@@ -4,30 +4,10 @@ import fs from 'fs';
 import path from 'path';
 import {defineConfig} from 'vite';
 
-function removeRedirectsPlugin() {
-  const clean = () => {
-    const targets = [
-      path.resolve(import.meta.dirname, 'public/_redirects'),
-      path.resolve(import.meta.dirname, 'dist/_redirects'),
-      path.resolve(import.meta.dirname, '_redirects'),
-    ];
-    for (const file of targets) {
-      try {
-        if (fs.existsSync(file)) {
-          fs.unlinkSync(file);
-        }
-      } catch {
-        // ignore
-      }
-    }
-  };
+function spaFallbackPlugin() {
   return {
-    name: 'remove-redirects',
-    buildStart() {
-      clean();
-    },
+    name: 'spa-fallback',
     closeBundle() {
-      clean();
       try {
         const indexPath = path.resolve(import.meta.dirname, 'dist/index.html');
         const fallback200 = path.resolve(import.meta.dirname, 'dist/200.html');
@@ -43,7 +23,7 @@ function removeRedirectsPlugin() {
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), removeRedirectsPlugin()],
+    plugins: [react(), tailwindcss(), spaFallbackPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "rm -f public/_redirects dist/_redirects && vite build && rm -f dist/_redirects",
+    "build": "vite build",
     "deploy": "npm run build && npx wrangler deploy",
     "start": "tsx server.ts",
     "preview": "vite preview",
