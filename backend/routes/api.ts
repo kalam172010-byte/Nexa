@@ -135,8 +135,18 @@ router.post('/admin/settings/email/test', ...adminGuard, AdminController.testEma
 
 router.get('/admin/logs', ...adminGuard, AdminController.getActivityLogs as any);
 
-// --- Database Backup & Migration Routes ---
-router.get('/admin/database/export', ...adminGuard, AdminController.exportDatabase as any);
-router.post('/admin/database/import', ...adminGuard, AdminController.importDatabase as any);
+// --- Direct PDF Documentation Download Route ---
+router.get('/download-pdf', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const pdfPath = path.resolve(process.cwd(), 'public/Kalam_FF_Panel_Documentation.pdf');
+  if (fs.existsSync(pdfPath)) {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="Kalam_FF_Panel_Documentation.pdf"');
+    res.sendFile(pdfPath);
+  } else {
+    res.status(404).json({ error: 'Documentation PDF not found' });
+  }
+});
 
 export default router;

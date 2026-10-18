@@ -443,13 +443,17 @@ export const AdminPage: React.FC = () => {
         }));
       }
       if (usersRes?.users) setUsers(usersRes.users);
-      if (prodRes?.products) {
+      if (prodRes?.products && Array.isArray(prodRes.products)) {
         setProducts(prodRes.products);
-        if (prodRes.products.length > 0 && !selectedProdForVar) {
-          setSelectedProdForVar(prodRes.products[0].id);
-          setBulkImportProdId(prodRes.products[0].id);
-          if (prodRes.products[0].variants?.[0]) {
-            setBulkImportVarId(prodRes.products[0].variants[0].id);
+        if (prodRes.products.length > 0) {
+          const validSelectedProd = prodRes.products.find((p: any) => p.id === selectedProdForVar) || prodRes.products[0];
+          setSelectedProdForVar(validSelectedProd.id);
+
+          const validBulkProd = prodRes.products.find((p: any) => p.id === bulkImportProdId) || prodRes.products[0];
+          setBulkImportProdId(validBulkProd.id);
+          if (validBulkProd.variants?.length > 0) {
+            const validBulkVar = validBulkProd.variants.find((v: any) => v.id === bulkImportVarId) || validBulkProd.variants[0];
+            setBulkImportVarId(validBulkVar.id);
           }
         }
       }
@@ -598,11 +602,17 @@ export const AdminPage: React.FC = () => {
       appendImapLog('VALIDATION', 'info', `Sender Identity verified: ${cleanSender}`);
     }
 
-    // 2. System IDs (SMTP User & IMAP User)
+    // 2. System IDs (SMTP User & IMAP User) - Auto-sync with Sender Email if blank or still on previous default
     const rawSmtpUser = String(config.smtpUser || '').trim();
-    const finalSmtpUser = rawSmtpUser || cleanSender;
+    const finalSmtpUser =
+      !rawSmtpUser || (rawSmtpUser.toLowerCase() === 'kalamkalam1234kd@gmail.com' && cleanSender !== 'kalamkalam1234kd@gmail.com')
+        ? cleanSender
+        : rawSmtpUser;
     const rawImapUser = String(config.imapUser || '').trim();
-    const finalImapUser = rawImapUser || cleanSender;
+    const finalImapUser =
+      !rawImapUser || (rawImapUser.toLowerCase() === 'kalamkalam1234kd@gmail.com' && cleanSender !== 'kalamkalam1234kd@gmail.com')
+        ? cleanSender
+        : rawImapUser;
 
     appendImapLog('SERIALIZE', 'info', 'Step 2/5: Serializing System IDs & Host Endpoints', {
       senderEmail: cleanSender,
@@ -1288,13 +1298,35 @@ export const AdminPage: React.FC = () => {
         maintenanceNotice: newProdMaintenanceNotice.trim() || undefined,
       });
 
-      if (res?.product) {
-        setProducts(prev => [res.product, ...prev.filter(p => p.id !== res.product.id)]);
-        setSelectedProdForVar(res.product.id);
-        setBulkImportProdId(res.product.id);
+      const createdProduct = res?.product;
+      if (createdProduct) {
+        setProducts(prev => [createdProduct, ...prev.filter(p => p.id !== createdProduct.id)]);
+        setSelectedProdForVar(createdProduct.id);
+        setBulkImportProdId(createdProduct.id);
+        if (createdProduct.variants?.[0]) {
+          setBulkImportVarId(createdProduct.variants[0].id);
+        }
+
+        // Sync created product & initial variants to Firebase Firestore in background
+        try {
+          const { variants: prodVariants, ...prodDoc } = createdProduct;
+          const cleanProdDoc = JSON.parse(JSON.stringify(prodDoc));
+          setDoc(doc(db, 'products', createdProduct.id), cleanProdDoc, { merge: true }).catch(() => {});
+          if (Array.isArray(prodVariants)) {
+            for (const v of prodVariants) {
+              const cleanVar = JSON.parse(JSON.stringify(v));
+              setDoc(doc(db, 'productVariants', v.id), cleanVar, { merge: true }).catch(() => {});
+            }
+          }
+        } catch {}
       }
 
-      showToastSuccess('Product Created Successfully!');
+      showToastSuccess(
+        'Product Created Successfully!',
+        createdProduct
+          ? `"${createdProduct.name}" added with ${createdProduct.variants?.length || 4} durations.`
+          : 'Product added to live catalog.'
+      );
       setIsCreatingProduct(false);
       setNewProdName('');
       setNewProdGame('');
@@ -1306,7 +1338,7 @@ export const AdminPage: React.FC = () => {
       setNewProdExternalPid('');
       setNewProdIsUnderMaintenance(false);
       setNewProdMaintenanceNotice('');
-      loadAllAdminData();
+      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Creation failed', err.message);
     }
@@ -1505,9 +1537,14 @@ export const AdminPage: React.FC = () => {
   // Create Single Duration Variant
   const handleCreateVariant = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetProdId = selectedProdForVar || (products.length > 0 ? products[0].id : '');
+    const validProd = products.find(p => p.id === selectedProdForVar) || products[0];
+    const targetProdId = validProd ? validProd.id : '';
     if (!targetProdId) {
       showToastError('Validation Error', 'Please select or create a product first.');
+      return;
+    }
+    if (!varDurationLabel.trim()) {
+      showToastError('Validation Error', 'Please enter a duration label (e.g. 1 Day, 7 Days).');
       return;
     }
     try {
@@ -1521,24 +1558,40 @@ export const AdminPage: React.FC = () => {
         externalDuration: varExternalDuration.trim() || undefined,
       });
 
-      if (res?.variant) {
-        setProducts(prev => prev.map(p => {
-          if (p.id === targetProdId) {
-            const existing = p.variants || [];
-            return {
-              ...p,
-              variants: [...existing.filter((v: any) => v.id !== res.variant.id), res.variant],
-            };
-          }
-          return p;
-        }));
+      const createdVariant = res?.variant;
+      if (createdVariant) {
+        const finalProdId = createdVariant.productId || targetProdId;
+        setProducts(prev =>
+          prev.map(p => {
+            if (p.id === finalProdId) {
+              const existing = p.variants || [];
+              return {
+                ...p,
+                variants: [...existing.filter((v: any) => v.id !== createdVariant.id), createdVariant],
+              };
+            }
+            return p;
+          })
+        );
+
+        if (variantProductFilter !== 'ALL' && variantProductFilter !== finalProdId) {
+          setVariantProductFilter('ALL');
+        }
+
+        try {
+          const cleanVar = JSON.parse(JSON.stringify(createdVariant));
+          setDoc(doc(db, 'productVariants', createdVariant.id), cleanVar, { merge: true }).catch(() => {});
+        } catch {}
       }
 
-      showToastSuccess('Duration Variant Added with Reseller PID');
+      showToastSuccess(
+        'Duration Variant Added!',
+        `"${varDurationLabel.trim()}" (₹${varPrice}) added to ${validProd?.name || 'Product'}.`
+      );
       setIsCreatingVariant(false);
       setVarExternalPid('');
       setVarExternalDuration('');
-      loadAllAdminData();
+      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Variant creation failed', err.message);
     }
@@ -1546,7 +1599,8 @@ export const AdminPage: React.FC = () => {
 
   // Batch Multi-Duration Creation
   const handleBatchCreateVariants = async () => {
-    const targetProdId = selectedProdForVar || (products.length > 0 ? products[0].id : '');
+    const validProd = products.find(p => p.id === selectedProdForVar) || products[0];
+    const targetProdId = validProd ? validProd.id : '';
     if (!targetProdId) {
       showToastError('Validation Error', 'Please select or create a product first.');
       return;
@@ -1558,10 +1612,11 @@ export const AdminPage: React.FC = () => {
     }
     setIsBatchCreating(true);
     try {
+      const createdList: any[] = [];
       for (const item of selectedItems) {
         const resellerPrice = Math.max(1, Math.round(item.price * (1 - batchDiscountPct / 100)));
         const externalPid = batchPidPrefix.trim() ? `${batchPidPrefix.trim()}_${item.pidSuffix}` : undefined;
-        await api.createVariant({
+        const res = await api.createVariant({
           productId: targetProdId,
           durationLabel: item.label,
           durationHours: item.hours,
@@ -1570,10 +1625,39 @@ export const AdminPage: React.FC = () => {
           externalPid,
           externalDuration: item.label,
         });
+        if (res?.variant) {
+          createdList.push(res.variant);
+          try {
+            const cleanVar = JSON.parse(JSON.stringify(res.variant));
+            setDoc(doc(db, 'productVariants', res.variant.id), cleanVar, { merge: true }).catch(() => {});
+          } catch {}
+        }
       }
-      showToastSuccess(`Batch Created ${selectedItems.length} Duration Variants!`);
+
+      if (createdList.length > 0) {
+        setProducts(prev =>
+          prev.map(p => {
+            if (p.id === targetProdId) {
+              return {
+                ...p,
+                variants: [...(p.variants || []), ...createdList],
+              };
+            }
+            return p;
+          })
+        );
+      }
+
+      if (variantProductFilter !== 'ALL' && variantProductFilter !== targetProdId) {
+        setVariantProductFilter('ALL');
+      }
+
+      showToastSuccess(
+        `Batch Created ${selectedItems.length} Duration Variants!`,
+        `Added to ${validProd?.name || 'Product'}.`
+      );
       setIsCreatingVariant(false);
-      loadAllAdminData();
+      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Batch Creation Error', err.message);
     } finally {
@@ -1595,7 +1679,7 @@ export const AdminPage: React.FC = () => {
     e.preventDefault();
     if (!editingVariant) return;
     try {
-      await api.updateVariant(editingVariant.id, {
+      const res = await api.updateVariant(editingVariant.id, {
         durationLabel: editVarDurationLabel,
         durationHours: editVarDurationHours,
         price: editVarPrice,
@@ -1603,9 +1687,17 @@ export const AdminPage: React.FC = () => {
         externalPid: editVarExternalPid.trim() || undefined,
         externalDuration: editVarExternalDuration.trim() || undefined,
       });
+      if (res?.variant) {
+        setProducts(prev =>
+          prev.map(p => ({
+            ...p,
+            variants: (p.variants || []).map(v => (v.id === res.variant.id ? { ...v, ...res.variant } : v)),
+          }))
+        );
+      }
       showToastSuccess('Duration and Reseller PID updated successfully');
       setEditingVariant(null);
-      loadAllAdminData();
+      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Update failed', err.message);
     }
@@ -1614,20 +1706,22 @@ export const AdminPage: React.FC = () => {
   // Bulk import keys
   const handleBulkImport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bulkImportProdId || !bulkImportVarId || !bulkRawKeys.trim()) {
+    const targetProd = products.find(p => p.id === bulkImportProdId) || products[0];
+    const targetVar = targetProd?.variants?.find(v => v.id === bulkImportVarId) || targetProd?.variants?.[0];
+    if (!targetProd || !targetVar || !bulkRawKeys.trim()) {
       showToastError('Validation Error', 'Please select product, duration, and enter keys.');
       return;
     }
     try {
       const res = await api.bulkImportAdminKeys({
-        productId: bulkImportProdId,
-        variantId: bulkImportVarId,
+        productId: targetProd.id,
+        variantId: targetVar.id,
         rawKeys: bulkRawKeys,
       });
-      showToastSuccess(res.message);
+      showToastSuccess(res.message || 'Keys imported into inventory!');
       setIsBulkImporting(false);
       setBulkRawKeys('');
-      loadAllAdminData();
+      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Import failed', err.message);
     }
@@ -1636,15 +1730,21 @@ export const AdminPage: React.FC = () => {
   // Generate keys
   const handleGenerateKeys = async (e: React.FormEvent) => {
     e.preventDefault();
+    const targetProd = products.find(p => p.id === bulkImportProdId) || products[0];
+    const targetVar = targetProd?.variants?.find(v => v.id === bulkImportVarId) || targetProd?.variants?.[0];
+    if (!targetProd || !targetVar) {
+      showToastError('Validation Error', 'Please create a product and duration first.');
+      return;
+    }
     try {
       await api.generateAdminKeys({
-        productId: bulkImportProdId,
-        variantId: bulkImportVarId,
+        productId: targetProd.id,
+        variantId: targetVar.id,
         count: genCount,
       });
-      showToastSuccess(`Generated ${genCount} digital keys!`);
+      showToastSuccess(`Generated ${genCount} digital keys for ${targetProd.name} (${targetVar.durationLabel})!`);
       setIsGeneratingKeys(false);
-      loadAllAdminData();
+      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Generation failed', err.message);
     }
@@ -3559,30 +3659,60 @@ export const AdminPage: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1 border-t border-white/5">
-                        <span>{p.variants?.length || 0} Durations Configured</span>
-                        <span className="text-emerald-400 font-bold">
-                          {p.variants?.length ? `From ₹${Math.min(...p.variants.map(v => v.price))}` : 'No Price'}
-                        </span>
+                      <div className="space-y-1.5 pt-1 border-t border-white/5">
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                          <span>{p.variants?.length || 0} Durations Configured</span>
+                          <span className="text-emerald-400 font-bold">
+                            {p.variants?.length ? `From ₹${Math.min(...p.variants.map(v => v.price))}` : 'No Price'}
+                          </span>
+                        </div>
+                        {p.variants && p.variants.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {p.variants.map(v => (
+                              <span
+                                key={v.id}
+                                onClick={() => handleOpenEditVariant(v)}
+                                className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-pointer hover:bg-emerald-500/20 transition-colors"
+                                title="Click to edit this duration"
+                              >
+                                {v.durationLabel}: ₹{v.price}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   {/* Card Actions Footer */}
-                  <div className="p-3 bg-white/[0.02] border-t border-white/5 flex items-center justify-between gap-2">
+                  <div className="p-3 bg-white/[0.02] border-t border-white/5 flex items-center justify-between gap-1.5">
                     <button
                       type="button"
                       onClick={() => handleOpenEditProduct(p)}
-                      className="flex-1 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-slate-200 border border-white/10 flex items-center justify-center gap-1.5 transition-colors"
+                      className="flex-1 py-1.5 px-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-slate-200 border border-white/10 flex items-center justify-center gap-1 transition-colors cursor-pointer"
                     >
                       <Edit2 className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Edit &amp; Photo</span>
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProdForVar(p.id);
+                        setVarEntryMode('single');
+                        setIsCreatingVariant(true);
+                      }}
+                      className="py-1.5 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                      title="Add duration option to this product"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Duration</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleToggleProductMaintenance(p)}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                      className={`px-2 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
                         p.isUnderMaintenance
                           ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
                           : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-amber-300 hover:border-amber-500/30'
@@ -3590,13 +3720,13 @@ export const AdminPage: React.FC = () => {
                       title={p.isUnderMaintenance ? 'Maintenance active (purchases blocked). Click to turn off' : 'Click to put product under maintenance'}
                     >
                       <AlertTriangle className={`w-3.5 h-3.5 ${p.isUnderMaintenance ? 'text-amber-400' : 'text-slate-400'}`} />
-                      <span>{p.isUnderMaintenance ? 'Maint. ON' : 'Maint. OFF'}</span>
+                      <span>{p.isUnderMaintenance ? 'ON' : 'OFF'}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleDeleteProduct(p.id)}
-                      className="p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                      className="p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                       title="Delete product"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -5368,7 +5498,7 @@ export const AdminPage: React.FC = () => {
                   ];<br />
                   <span className="text-purple-400">$headers</span> = [<br />
                   &nbsp;&nbsp;<span className="text-emerald-300">'Content-Type: application/x-www-form-urlencoded'</span>,<br />
-                  &nbsp;&nbsp;<span className="text-emerald-300">'x-master-key: {resellerConfig.masterKey ? `${resellerConfig.masterKey.slice(0, 6)}...` : 'a7f3e8b2c9d1f4a6b8c2d5e9f1a3b6c8'}'</span><br />
+                  &nbsp;&nbsp;<span className="text-emerald-300">'x-master-key: {resellerConfig.masterKey || 'a7f3e8b2c9d1f4a6b8c2d5e9f1a3b6c8'}'</span><br />
                   ];
                 </div>
               </div>
@@ -5884,59 +6014,68 @@ export const AdminPage: React.FC = () => {
           </div>
 
           <form onSubmit={handleSaveEmailSettings} className="space-y-6">
-            {/* 1. SENDER IDENTITY CONFIGURATION ("My Email") */}
-            <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-white/5">
+            {/* 1. SENDER IDENTITY & PASSWORD CONFIGURATION ("ANY EMAIL - 1-CLICK SETUP") */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#121320] via-[#0d0d14] to-[#140d18] border border-rose-500/30 space-y-5 shadow-xl">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/10">
                 <div className="flex items-center gap-2">
                   <AtSign className="w-4 h-4 text-rose-400" />
                   <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
-                    1. SENDER IDENTITY ("MY EMAIL")
+                    1. SENDER EMAIL &amp; PASSWORD (ANY EMAIL - INSTANT SETUP)
                   </h4>
                 </div>
                 {(() => {
                   const detected = detectEmailProvider(emailConfig.senderEmail || '');
                   return detected ? (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-rose-400" />
-                      <span>{detected.badge}</span>
+                    <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 font-bold">
+                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      <span>Auto-Detected: {detected.badge} ({detected.smtpHost}:{detected.smtpPort})</span>
                     </span>
                   ) : null;
                 })()}
               </div>
 
-              <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-slate-900 to-black border border-emerald-500/20 text-xs text-slate-300 flex items-start gap-2.5">
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900/90 to-rose-950/30 border border-emerald-500/30 text-xs text-slate-200 flex items-start gap-3">
                 <Zap className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <p className="text-white font-bold">
-                    🌐 Universal Email Support: Works with ANY email provider!
+                    🌐 Universal Any-Email Dispatch: Enter ANY Email &amp; Password!
                   </p>
-                  <p className="text-[11px] text-slate-400">
-                    You can enter ANY email address (Gmail, Outlook, Yahoo, Zoho, cPanel Webmail, or custom company domain). OTP codes will be delivered directly from the email you configure below.
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Just type <strong>any email address</strong> (Gmail, Outlook, Yahoo, Zoho, iCloud, or custom domain) and its <strong>Password / App Password</strong> below. SMTP &amp; IMAP usernames and mail servers automatically sync as you type!
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Field 1: Sender Email */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      MY SENDER EMAIL (DISPATCH ADDRESS) *
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                      SENDER EMAIL (ANY EMAIL ADDRESS) *
                     </label>
                     {authUser?.email && authUser.email.toLowerCase() !== (emailConfig.senderEmail || '').toLowerCase() && (
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          const det = detectEmailProvider(authUser.email);
                           setEmailConfig((prev: any) => ({
                             ...prev,
                             senderEmail: authUser.email,
                             smtpUser: authUser.email,
                             imapUser: authUser.email,
-                          }))
-                        }
+                            ...(det ? {
+                              smtpHost: det.smtpHost,
+                              smtpPort: det.smtpPort,
+                              secure: det.secure,
+                              imapHost: det.imapHost,
+                              imapPort: det.imapPort,
+                              imapSecure: det.imapSecure,
+                            } : {}),
+                          }));
+                        }}
                         className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold transition-colors cursor-pointer"
-                        title="Click to auto-fill with your currently logged-in admin email"
                       >
-                        ⚡ Match Logged-in Email ({authUser.email})
+                        ⚡ Use {authUser.email}
                       </button>
                     )}
                   </div>
@@ -5945,73 +6084,83 @@ export const AdminPage: React.FC = () => {
                     value={emailConfig.senderEmail || ''}
                     onChange={e => {
                       const nextEmail = e.target.value;
+                      const det = detectEmailProvider(nextEmail);
                       setEmailConfig((prev: any) => ({
                         ...prev,
                         senderEmail: nextEmail,
+                        smtpUser: nextEmail.trim(),
+                        imapUser: nextEmail.trim(),
+                        ...(det ? {
+                          smtpHost: det.smtpHost,
+                          smtpPort: det.smtpPort,
+                          secure: det.secure,
+                          imapHost: det.imapHost,
+                          imapPort: det.imapPort,
+                          imapSecure: det.imapSecure,
+                        } : {}),
                       }));
                     }}
-                    placeholder="e.g. kalamkalam1234kd@gmail.com or admin@yourdomain.com"
+                    placeholder="Enter any email (e.g. yourname@gmail.com)"
                     required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-rose-500/30 text-white font-mono text-xs focus:border-rose-400 focus:outline-none transition-colors"
                   />
-
-                  {/* Smart Auto-Config Action Row */}
-                  {emailConfig.senderEmail && (
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      {(() => {
-                        const detected = detectEmailProvider(emailConfig.senderEmail);
-                        if (!detected) return null;
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEmailConfig((prev: any) => ({
-                                ...prev,
-                                smtpHost: detected.smtpHost,
-                                smtpPort: detected.smtpPort,
-                                secure: detected.secure,
-                                imapHost: detected.imapHost,
-                                imapPort: detected.imapPort,
-                                imapSecure: detected.imapSecure,
-                                smtpUser: prev.senderEmail,
-                                imapUser: prev.senderEmail,
-                              }));
-                              showToastSuccess(`Auto-Configured for ${detected.name}`);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                          >
-                            <Sparkles className="w-3 h-3" />
-                            <span>Auto-Configure Hosts for {detected.name}</span>
-                          </button>
-                        );
-                      })()}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const curr = emailConfig.senderEmail || '';
-                          setEmailConfig((prev: any) => ({
-                            ...prev,
-                            smtpUser: curr,
-                            imapUser: curr,
-                          }));
-                          showToastSuccess('Synced!', `Set SMTP User & IMAP User to "${curr}"`);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <RefreshCw className="w-3 h-3" />
-                        <span>🔗 Sync to SMTP &amp; IMAP Username</span>
-                      </button>
-                    </div>
-                  )}
-
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    This is your personal or company email address from which OTP codes will be sent.
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    All user login OTPs &amp; reset emails will be sent from this address.
                   </p>
                 </div>
 
+                {/* Field 2: Email Password / App Password */}
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                      EMAIL PASSWORD / APP PASSWORD *
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {emailConfig.smtpPass && (
+                        <button
+                          type="button"
+                          onClick={() => setEmailConfig((prev: any) => ({ ...prev, smtpPass: '', imapPass: '' }))}
+                          className="text-[10px] text-slate-400 hover:text-white font-mono cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowSmtpPass(!showSmtpPass)}
+                        className="text-[10px] text-rose-400 hover:text-rose-300 font-bold transition-colors cursor-pointer"
+                      >
+                        {showSmtpPass ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showSmtpPass ? 'text' : 'password'}
+                      value={emailConfig.smtpPass || ''}
+                      onChange={e => {
+                        const nextPass = e.target.value;
+                        setEmailConfig((prev: any) => ({
+                          ...prev,
+                          smtpPass: nextPass,
+                          imapPass: nextPass,
+                          hasSmtpPass: Boolean(nextPass),
+                          hasImapPass: Boolean(nextPass),
+                        }));
+                      }}
+                      placeholder="Enter Email Password or 16-char App Password"
+                      className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-black/50 border border-emerald-500/30 text-white font-mono text-xs focus:border-emerald-400 focus:outline-none transition-colors"
+                    />
+                    <Lock className="w-4 h-4 text-emerald-400/70 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    For Gmail use 16-char App Password; for Webmail/cPanel use normal password.
+                  </p>
+                </div>
+
+                {/* Field 3: Sender Display Name */}
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 block mb-1.5">
                     SENDER DISPLAY NAME *
                   </label>
                   <input
@@ -6022,26 +6171,58 @@ export const AdminPage: React.FC = () => {
                     }
                     placeholder="e.g. KALAM FF PANEL"
                     required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-bold focus:border-rose-500 focus:outline-none transition-colors"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-cyan-500/30 text-white text-xs font-bold focus:border-cyan-400 focus:outline-none transition-colors"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Display name shown in user's email inbox header.
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Brand name shown in the recipient's email inbox.
                   </p>
+                </div>
+              </div>
+
+              {/* Instant 1-Click Save & Test Bar */}
+              <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-[11px] text-slate-300 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    Auto-Synced Login: <strong className="text-white font-mono">{emailConfig.smtpUser || emailConfig.senderEmail || 'Not set'}</strong>
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="submit"
+                    disabled={isSavingEmail}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingEmail ? 'Saving...' : 'Save Sender Email & Password'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isTestingEmail || isSavingEmail}
+                    onClick={async () => {
+                      await handleSaveEmailSettings();
+                      await handleTestEmailConnection('smtp');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isTestingEmail ? 'Testing...' : 'Save & Send Test OTP Now'}</span>
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* 2. OUTGOING SERVER (SMTP METHOD FOR SENDING OTPS) */}
+            {/* 2. OUTGOING SERVER (SMTP METHOD FOR SENDING OTPS - FULLY EDITABLE) */}
             <div className="p-5 sm:p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-white/5">
                 <div className="flex items-center gap-2">
                   <Send className="w-4 h-4 text-rose-400" />
                   <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
-                    2. OUTGOING MAIL SERVER (SMTP SETUP)
+                    2. OUTGOING MAIL SERVER (SMTP DETAILS - FULLY EDITABLE)
                   </h4>
                 </div>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Used to deliver OTP messages to user email
+                <span className="text-[10px] text-emerald-400 font-mono">
+                  Auto-filled from your Sender Email (can also be edited manually)
                 </span>
               </div>
 
@@ -6122,18 +6303,15 @@ export const AdminPage: React.FC = () => {
                     onChange={e =>
                       setEmailConfig((prev: any) => ({ ...prev, smtpUser: e.target.value }))
                     }
-                    placeholder={emailConfig.senderEmail || 'kalamkalam1234kd@gmail.com'}
+                    placeholder={emailConfig.senderEmail || 'yourname@gmail.com'}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Leave blank to automatically use "My Sender Email".
-                  </p>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      EMAIL PASSWORD / APP PASSWORD *
+                      SMTP PASSWORD / APP PASSWORD
                     </label>
                     <button
                       type="button"
@@ -6148,23 +6326,12 @@ export const AdminPage: React.FC = () => {
                       type={showSmtpPass ? 'text' : 'password'}
                       value={emailConfig.smtpPass || ''}
                       onChange={e =>
-                        setEmailConfig((prev: any) => ({ ...prev, smtpPass: e.target.value }))
+                        setEmailConfig((prev: any) => ({ ...prev, smtpPass: e.target.value, imapPass: e.target.value }))
                       }
-                      placeholder={
-                        emailConfig.hasSmtpPass ? '•••••••• (Stored Securely)' : 'Enter Email Password or 16-char App Key'
-                      }
+                      placeholder="Enter Email Password or 16-char App Key"
                       className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                     />
                     <Lock className="w-4 h-4 text-slate-500 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                  <div className="p-2.5 mt-2 rounded-xl bg-white/[0.02] border border-white/10 text-[11px] text-slate-300 space-y-1">
-                    <div>
-                      💡 <strong>Gmail:</strong> Requires 16-character <strong>App Password</strong> from{' '}
-                      <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-rose-400 underline">myaccount.google.com/apppasswords</a>.
-                    </div>
-                    <div>
-                      💡 <strong>cPanel / Custom Domain / Webmail:</strong> Enter your standard email account password directly.
-                    </div>
                   </div>
                 </div>
               </div>
@@ -8555,9 +8722,41 @@ export const AdminPage: React.FC = () => {
       {isGeneratingKeys && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div onClick={() => setIsGeneratingKeys(false)} className="fixed inset-0 bg-black/85 backdrop-blur-md" />
-          <div className="relative w-full max-w-sm bg-[#0d0d14] border border-white/10 rounded-2xl p-5 shadow-2xl z-10 space-y-4 text-xs">
-            <h3 className="font-display font-bold text-sm text-white uppercase">GENERATE KEYS</h3>
+          <div className="relative w-full max-w-md bg-[#0d0d14] border border-white/10 rounded-2xl p-5 shadow-2xl z-10 space-y-4 text-xs">
+            <h3 className="font-display font-bold text-sm text-white uppercase">AUTO-GENERATE DIGITAL KEYS</h3>
             <form onSubmit={handleGenerateKeys} className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">SELECT PRODUCT</label>
+                <select
+                  value={bulkImportProdId}
+                  onChange={e => {
+                    setBulkImportProdId(e.target.value);
+                    const prod = products.find(p => p.id === e.target.value);
+                    if (prod?.variants?.[0]) setBulkImportVarId(prod.variants[0].id);
+                  }}
+                  className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-white"
+                >
+                  {products.map(p => (
+                    <option key={p.id} value={p.id} className="bg-[#0d0d14]">
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">SELECT DURATION</label>
+                <select
+                  value={bulkImportVarId}
+                  onChange={e => setBulkImportVarId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-white font-mono"
+                >
+                  {(products.find(p => p.id === bulkImportProdId) || products[0])?.variants?.map(v => (
+                    <option key={v.id} value={v.id} className="bg-[#0d0d14]">
+                      {v.durationLabel} (₹{v.price})
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 block mb-1">HOW MANY KEYS?</label>
                 <input
@@ -8581,7 +8780,7 @@ export const AdminPage: React.FC = () => {
                   type="submit"
                   className="w-2/3 py-2 rounded-xl bg-rose-600 text-white font-bold uppercase"
                 >
-                  Generate
+                  Generate Keys
                 </button>
               </div>
             </form>

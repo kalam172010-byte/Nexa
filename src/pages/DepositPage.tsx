@@ -65,6 +65,13 @@ export const DepositPage: React.FC<DepositPageProps> = ({ onOpenSupport }) => {
       }
     } catch (err: any) {
       console.warn('API deposit call encountered an issue, generating direct UPI payment QR:', err);
+      let storedGw: any = {};
+      try {
+        const rawGw = localStorage.getItem('nexa_admin_gateway_config');
+        if (rawGw) storedGw = JSON.parse(rawGw);
+      } catch {}
+      const customVpa = (storedGw.upiVpa || storedGw.upiId || '8056317218@fam').trim();
+      const customMerchant = (storedGw.upiMerchantName || storedGw.merchantName || 'FamPay').trim();
       const fallbackDeposit: Deposit = {
         id: `DEP-${Date.now()}`,
         userId: 'self',
@@ -74,11 +81,11 @@ export const DepositPage: React.FC<DepositPageProps> = ({ onOpenSupport }) => {
         method: selectedMethod,
         transactionId: `TXN-${Date.now()}`,
         gatewayOrderId: `FGW-${Date.now()}`,
-        upiVpa: '8056317218@fam',
-        merchantName: 'FamPay',
-        upiIntent: `upi://pay?pa=8056317218@fam&pn=FamPay&am=${num.toFixed(2)}&cu=INR&tn=Order-${Date.now()}`,
+        upiVpa: customVpa,
+        merchantName: customMerchant,
+        upiIntent: `upi://pay?pa=${encodeURIComponent(customVpa)}&pn=${encodeURIComponent(customMerchant)}&am=${num.toFixed(2)}&cu=INR&tn=Order-${Date.now()}`,
         status: 'PENDING',
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + (Number(storedGw.paymentExpiryMinutes) || 10) * 60 * 1000).toISOString(),
         createdAt: new Date().toISOString(),
       };
       setActiveDeposit(fallbackDeposit);

@@ -279,6 +279,7 @@ export class AdminController {
         externalPid,
         isUnderMaintenance,
         maintenanceNotice,
+        initialDurations,
       } = req.body;
 
       if (!name) {
@@ -289,7 +290,7 @@ export class AdminController {
       const finalGame = (game || category || 'FREEFIRE').trim();
 
       const newProduct: Product = {
-        id: `PROD-${Date.now().toString().slice(-6)}`,
+        id: `PROD-${Date.now().toString().slice(-6)}-${Math.floor(10 + Math.random() * 89)}`,
         name: name.trim(),
         game: finalGame,
         description: description?.trim() || '',
@@ -311,28 +312,43 @@ export class AdminController {
 
       const initialVariants: ProductVariant[] = [];
       const cleanPid = newProduct.externalPid || undefined;
-      const defaultDurations = [
-        { label: '1 Day', hours: 24, price: 50, resellerPrice: 38, extDur: '1 DAYS' },
-        { label: '3 Days', hours: 72, price: 120, resellerPrice: 90, extDur: '3 DAYS' },
-        { label: '7 Days', hours: 168, price: 250, resellerPrice: 190, extDur: '7 DAYS' },
-        { label: '30 Days', hours: 720, price: 600, resellerPrice: 450, extDur: '30 DAYS' },
-      ];
+      const defaultDurations = Array.isArray(initialDurations) && initialDurations.length > 0
+        ? initialDurations
+        : [
+            { label: '1 Day', hours: 24, price: 50, resellerPrice: 38, extDur: '1 DAYS' },
+            { label: '3 Days', hours: 72, price: 120, resellerPrice: 90, extDur: '3 DAYS' },
+            { label: '7 Days', hours: 168, price: 250, resellerPrice: 190, extDur: '7 DAYS' },
+            { label: '30 Days', hours: 720, price: 600, resellerPrice: 450, extDur: '30 DAYS' },
+          ];
 
       for (let idx = 0; idx < defaultDurations.length; idx++) {
         const d = defaultDurations[idx];
+        const labelStr = String(d.label || d.durationLabel || '1 Day').trim();
+        const hoursNum = Number(d.hours || d.durationHours) || 24;
+        const priceNum = Number(d.price) || 50;
+        const resellerPriceNum = Number(d.resellerPrice) || Math.round(priceNum * 0.75);
+        const varPid = d.externalPid?.trim() || cleanPid;
+        const extDur = String(d.extDur || d.externalDuration || labelStr).trim();
+
         const variant: ProductVariant = {
-          id: `VAR-${Date.now().toString().slice(-5)}-${idx}`,
+          id: `VAR-${Date.now().toString().slice(-5)}-${idx}-${Math.floor(10 + Math.random() * 89)}`,
           productId: newProduct.id,
-          durationLabel: d.label,
-          durationHours: d.hours,
-          price: d.price,
-          resellerPrice: d.resellerPrice,
-          stockCount: cleanPid ? 999 : 0,
-          externalPid: cleanPid,
-          externalDuration: d.extDur,
+          durationLabel: labelStr,
+          durationHours: hoursNum,
+          price: priceNum,
+          resellerPrice: resellerPriceNum,
+          stockCount: varPid ? 999 : 15,
+          externalPid: varPid,
+          externalDuration: extDur,
           isActive: true,
         };
         db.productVariants.push(variant);
+
+        if (!varPid) {
+          KeyService.generateKeys(newProduct.id, variant.id, 15, 'KALAM');
+          variant.stockCount = 15;
+        }
+
         initialVariants.push(variant);
       }
 
@@ -392,7 +408,8 @@ export class AdminController {
       if (maintenanceNotice !== undefined) product.maintenanceNotice = maintenanceNotice.trim() || undefined;
 
       db.saveSync();
-      res.json({ message: 'Product updated successfully.', product });
+      const variants = db.productVariants.filter(v => v.productId === product.id && v.isActive);
+      res.json({ message: 'Product updated successfully.', product: { ...product, variants } });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update product.' });
     }
@@ -409,7 +426,8 @@ export class AdminController {
       }
       product.externalPid = String(externalPid || '').trim();
       db.saveSync();
-      res.json({ message: 'Product PID updated successfully.', product });
+      const variants = db.productVariants.filter(v => v.productId === product.id && v.isActive);
+      res.json({ message: 'Product PID updated successfully.', product: { ...product, variants } });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update product PID.' });
     }
@@ -433,7 +451,11 @@ export class AdminController {
         }
       }
       db.saveSync();
-      res.json({ message: 'Numeric 2/3-digit PIDs successfully assigned to all products.', products: db.products });
+      const productsWithVariants = db.products.map(p => ({
+        ...p,
+        variants: db.productVariants.filter(v => v.productId === p.id && v.isActive),
+      }));
+      res.json({ message: 'Numeric 2/3-digit PIDs successfully assigned to all products.', products: productsWithVariants });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to auto-assign PIDs.' });
     }
@@ -459,10 +481,11 @@ export class AdminController {
         product.maintenanceNotice = maintenanceNotice.trim() || undefined;
       }
 
-      db.save();
+      db.saveSync();
+      const variants = db.productVariants.filter(v => v.productId === product.id && v.isActive);
       res.json({
         message: `Product ${product.name} is now ${product.isUnderMaintenance ? 'Under Maintenance' : 'Active'}.`,
-        product,
+        product: { ...product, variants },
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to toggle product maintenance.' });
@@ -498,28 +521,38 @@ export class AdminController {
   public static async createVariant(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { productId, durationLabel, durationHours, price, resellerPrice, externalPid, externalDuration } = req.body;
-      if (!productId || !durationLabel || price === undefined) {
-        res.status(400).json({ error: 'Product ID, duration label, and price are required.' });
+      if (!durationLabel || price === undefined) {
+        res.status(400).json({ error: 'Duration label and price are required.' });
         return;
       }
 
-      const product = db.products.find(p => p.id === productId);
-      const effectivePid = externalPid?.trim() || product?.externalPid?.trim() || undefined;
+      const product = db.products.find(p => p.id === productId) || db.products[0];
+      if (!product) {
+        res.status(400).json({ error: 'Please create a product first before adding duration variants.' });
+        return;
+      }
+
+      const resolvedProductId = product.id;
+      const effectivePid = externalPid?.trim() || product.externalPid?.trim() || undefined;
 
       const newVariant: ProductVariant = {
         id: `VAR-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
-        productId,
+        productId: resolvedProductId,
         durationLabel: durationLabel.trim(),
         durationHours: Number(durationHours) || 24,
         price: Number(price),
         resellerPrice: Number(resellerPrice) || Math.round(Number(price) * 0.75),
-        stockCount: effectivePid ? 999 : 0,
+        stockCount: effectivePid ? 999 : 15,
         externalPid: effectivePid,
         externalDuration: externalDuration?.trim() || durationLabel.trim(),
         isActive: true,
       };
 
       db.productVariants.push(newVariant);
+      if (!effectivePid) {
+        KeyService.generateKeys(resolvedProductId, newVariant.id, 15, 'KALAM');
+        newVariant.stockCount = 15;
+      }
       db.saveSync();
 
       res.status(201).json({ message: 'Duration variant created successfully.', variant: newVariant });
@@ -562,7 +595,7 @@ export class AdminController {
         return;
       }
       db.productVariants.splice(index, 1);
-      db.save();
+      db.saveSync();
       res.json({ message: 'Duration variant removed successfully.' });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to remove variant.' });
@@ -814,13 +847,8 @@ export class AdminController {
   // Reseller API Settings
   public static async getResellerSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const config = db.resellerConfig;
-      const safeConfig = {
-        ...config,
-        apiKey: config.apiKey ? `${config.apiKey.slice(0, 6)}...${config.apiKey.slice(-4)}` : '',
-        masterKey: config.masterKey ? `${config.masterKey.slice(0, 6)}...${config.masterKey.slice(-4)}` : '',
-      };
-      res.json({ config: safeConfig });
+      const config = { ...db.resellerConfig };
+      res.json({ config });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to fetch reseller settings.' });
     }
@@ -829,17 +857,17 @@ export class AdminController {
   public static async updateResellerSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { apiUrl, apiKey, masterKey, timeoutMs, retryAttempts, autoSyncStock, isLiveApiEnabled, defaultAndroidId } = req.body;
-      if (apiUrl) db.resellerConfig.apiUrl = apiUrl.trim();
-      if (apiKey && !apiKey.includes('...')) db.resellerConfig.apiKey = apiKey.trim();
-      if (masterKey && !masterKey.includes('...')) db.resellerConfig.masterKey = masterKey.trim();
-      if (timeoutMs) db.resellerConfig.timeoutMs = Number(timeoutMs);
-      if (retryAttempts) db.resellerConfig.retryAttempts = Number(retryAttempts);
+      if (apiUrl !== undefined) db.resellerConfig.apiUrl = String(apiUrl).trim();
+      if (apiKey !== undefined && !String(apiKey).includes('...')) db.resellerConfig.apiKey = String(apiKey).trim();
+      if (masterKey !== undefined && !String(masterKey).includes('...')) db.resellerConfig.masterKey = String(masterKey).trim();
+      if (timeoutMs !== undefined) db.resellerConfig.timeoutMs = Number(timeoutMs) || 20000;
+      if (retryAttempts !== undefined) db.resellerConfig.retryAttempts = Number(retryAttempts) || 2;
       if (typeof autoSyncStock === 'boolean') db.resellerConfig.autoSyncStock = autoSyncStock;
       if (typeof isLiveApiEnabled === 'boolean') db.resellerConfig.isLiveApiEnabled = isLiveApiEnabled;
-      if (defaultAndroidId) db.resellerConfig.defaultAndroidId = defaultAndroidId.trim();
+      if (defaultAndroidId !== undefined) db.resellerConfig.defaultAndroidId = String(defaultAndroidId).trim();
 
-      db.save();
-      res.json({ message: 'Reseller API settings saved successfully.' });
+      db.saveSync();
+      res.json({ message: 'Reseller API settings saved successfully.', config: db.resellerConfig });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update reseller settings.' });
     }
@@ -847,7 +875,8 @@ export class AdminController {
 
   public static async testResellerConnection(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const test = await ResellerApiService.testConnection();
+      const configOverride = req.body?.configOverride;
+      const test = await ResellerApiService.testConnection(configOverride);
       res.json(test);
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Test failed.' });
@@ -859,6 +888,7 @@ export class AdminController {
       const pid = req.body.productId || req.body.product_id;
       const dur = req.body.duration || req.body.durationLabel;
       const androidId = req.body.androidId || req.body.android_id;
+      const configOverride = req.body.configOverride;
 
       if (!pid || !dur) {
         res.status(400).json({ error: 'Product PID and Duration are required for test generation.' });
@@ -869,6 +899,7 @@ export class AdminController {
         productId: pid,
         duration: dur,
         androidId,
+        configOverride,
       });
 
       res.json(result);
@@ -959,15 +990,15 @@ export class AdminController {
   public static async getEmailSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const config = { ...db.emailConfig };
-      // Mask passwords for security
-      const safeConfig = {
-        ...config,
-        smtpPass: config.smtpPass ? (config.smtpPass.length > 4 ? `••••••••${config.smtpPass.slice(-4)}` : '••••••••') : '',
-        imapPass: config.imapPass ? (config.imapPass.length > 4 ? `••••••••${config.imapPass.slice(-4)}` : '••••••••') : '',
-        hasSmtpPass: Boolean(config.smtpPass && config.smtpPass.length > 0),
-        hasImapPass: Boolean(config.imapPass && config.imapPass.length > 0),
-      };
-      res.json({ config: safeConfig });
+      res.json({
+        config: {
+          ...config,
+          smtpPass: config.smtpPass || '',
+          imapPass: config.imapPass || '',
+          hasSmtpPass: Boolean(config.smtpPass && config.smtpPass.length > 0),
+          hasImapPass: Boolean(config.imapPass && config.imapPass.length > 0),
+        },
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to fetch email settings.' });
     }
@@ -982,27 +1013,66 @@ export class AdminController {
         ...body,
       };
 
-      // Clean and normalize sender email
-      if (body.senderEmail) {
+      // Clean and normalize sender email, and always keep smtpUser / imapUser synchronized unless explicitly given a different custom login
+      if (body.senderEmail !== undefined) {
         updatedData.senderEmail = String(body.senderEmail).trim();
-        // If smtpUser / imapUser were left empty or not provided, sync them to senderEmail
-        if (!body.smtpUser || !String(body.smtpUser).trim()) {
+        const prevSender = (current.senderEmail || 'kalamkalam1234kd@gmail.com').trim().toLowerCase();
+        const rawSmtpUser = String(body.smtpUser || '').trim();
+        const rawImapUser = String(body.imapUser || '').trim();
+
+        if (!rawSmtpUser || rawSmtpUser.toLowerCase() === prevSender || rawSmtpUser.toLowerCase() === 'kalamkalam1234kd@gmail.com') {
           updatedData.smtpUser = updatedData.senderEmail;
         }
-        if (!body.imapUser || !String(body.imapUser).trim()) {
+        if (!rawImapUser || rawImapUser.toLowerCase() === prevSender || rawImapUser.toLowerCase() === 'kalamkalam1234kd@gmail.com') {
           updatedData.imapUser = updatedData.senderEmail;
+        }
+
+        // Auto-sync SMTP/IMAP hosts if senderEmail domain changed and host was still on previous provider default
+        const domain = updatedData.senderEmail.includes('@') ? updatedData.senderEmail.split('@')[1].toLowerCase() : '';
+        if (domain) {
+          if (domain === 'gmail.com' || domain === 'googlemail.com') {
+            if (!body.smtpHost || body.smtpHost.includes('yourdomain')) {
+              updatedData.smtpHost = 'smtp.gmail.com';
+              updatedData.imapHost = 'imap.gmail.com';
+            }
+          } else if (body.smtpHost === 'smtp.gmail.com') {
+            if (domain === 'outlook.com' || domain === 'hotmail.com' || domain === 'live.com') {
+              updatedData.smtpHost = 'smtp-mail.outlook.com';
+              updatedData.smtpPort = 587;
+              updatedData.secure = false;
+              updatedData.imapHost = 'outlook.office365.com';
+            } else if (domain === 'yahoo.com' || domain === 'ymail.com') {
+              updatedData.smtpHost = 'smtp.mail.yahoo.com';
+              updatedData.smtpPort = 465;
+              updatedData.secure = true;
+              updatedData.imapHost = 'imap.mail.yahoo.com';
+            } else if (domain.includes('zoho')) {
+              updatedData.smtpHost = 'smtp.zoho.com';
+              updatedData.smtpPort = 465;
+              updatedData.secure = true;
+              updatedData.imapHost = 'imap.zoho.com';
+            } else if (domain === 'icloud.com' || domain === 'me.com') {
+              updatedData.smtpHost = 'smtp.mail.me.com';
+              updatedData.smtpPort = 587;
+              updatedData.secure = false;
+              updatedData.imapHost = 'imap.mail.me.com';
+            } else {
+              updatedData.smtpHost = `mail.${domain}`;
+              updatedData.imapHost = `mail.${domain}`;
+            }
+          }
         }
       }
 
-      // Only update password if user passed a new unmasked password
-      if (!body.smtpPass || body.smtpPass.includes('••••')) {
+      // Update password if user passed a new unmasked password
+      if (body.smtpPass === undefined || String(body.smtpPass).includes('••••')) {
         delete updatedData.smtpPass;
       } else {
         const raw = String(body.smtpPass).trim();
         updatedData.smtpPass = raw.replace(/^["']+|["']+$/g, '').trim();
       }
 
-      if (!body.imapPass || body.imapPass.includes('••••')) {
+      if (body.imapPass === undefined || String(body.imapPass).includes('••••')) {
         delete updatedData.imapPass;
       } else {
         const raw = String(body.imapPass).trim();
@@ -1044,8 +1114,8 @@ export class AdminController {
         message: 'Email & IMAP/SMTP settings saved successfully.',
         config: {
           ...saved,
-          smtpPass: saved.smtpPass ? '••••••••' : '',
-          imapPass: saved.imapPass ? '••••••••' : '',
+          smtpPass: saved.smtpPass || '',
+          imapPass: saved.imapPass || '',
           hasSmtpPass: Boolean(saved.smtpPass),
           hasImapPass: Boolean(saved.imapPass),
         },

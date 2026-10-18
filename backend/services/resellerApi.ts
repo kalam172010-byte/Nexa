@@ -185,38 +185,50 @@ export class ResellerApiService {
     productId: string;
     duration: string;
     androidId?: string;
+    configOverride?: any;
   }): Promise<{ success: boolean; latencyMs: number; status: number; rawResponse: string; payloadSent: any }> {
-    const config = db.resellerConfig;
-    const startTime = Date.now();
+    const baseConfig = db.resellerConfig;
+    const override = params.configOverride || {};
+    const apiUrl = (override.apiUrl || baseConfig.apiUrl || 'https://bantibhaiya.to/api/reseller_v1.php').trim();
+    const apiKey =
+      override.apiKey && !String(override.apiKey).includes('...')
+        ? String(override.apiKey).trim()
+        : baseConfig.apiKey || '5841ac0e6b458bdde0ffbe2baa095306';
+    const masterKey =
+      override.masterKey && !String(override.masterKey).includes('...')
+        ? String(override.masterKey).trim()
+        : baseConfig.masterKey || 'a7f3e8b2c9d1f4a6b8c2d5e9f1a3b6c8';
+    const timeoutMs = Number(override.timeoutMs || baseConfig.timeoutMs) || 20000;
 
-    const androidId = params.androidId?.trim() || config.defaultAndroidId || '0b9b969bc2e7997b';
+    const startTime = Date.now();
+    const androidId = params.androidId?.trim() || override.defaultAndroidId || baseConfig.defaultAndroidId || '0b9b969bc2e7997b';
 
     const formParams = new URLSearchParams();
-    formParams.append('api_key', config.apiKey || '5841ac0e6b458bdde0ffbe2baa095306');
+    formParams.append('api_key', apiKey);
     formParams.append('action', 'buy');
     formParams.append('product_id', params.productId);
     formParams.append('duration', params.duration);
     formParams.append('android_id', androidId);
 
     const payloadSent = {
-      api_key: config.apiKey,
+      api_key: apiKey,
       action: 'buy',
       product_id: params.productId,
       duration: params.duration,
       android_id: androidId,
-      endpoint: config.apiUrl,
-      masterKey: config.masterKey ? `${config.masterKey.slice(0, 6)}...` : '',
+      endpoint: apiUrl,
+      masterKey,
     };
 
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), config.timeoutMs || 20000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-      const response = await fetch(config.apiUrl, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'x-master-key': config.masterKey || 'a7f3e8b2c9d1f4a6b8c2d5e9f1a3b6c8',
+          'x-master-key': masterKey,
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
         body: formParams.toString(),
@@ -244,17 +256,24 @@ export class ResellerApiService {
     }
   }
 
-  public static async testConnection(): Promise<{ success: boolean; latencyMs: number; message: string }> {
-    const config = db.resellerConfig;
+  public static async testConnection(configOverride?: any): Promise<{ success: boolean; latencyMs: number; message: string }> {
+    const baseConfig = db.resellerConfig;
+    const override = configOverride || {};
+    const apiUrl = (override.apiUrl || baseConfig.apiUrl || 'https://bantibhaiya.to/api/reseller_v1.php').trim();
+    const masterKey =
+      override.masterKey && !String(override.masterKey).includes('...')
+        ? String(override.masterKey).trim()
+        : baseConfig.masterKey || 'a7f3e8b2c9d1f4a6b8c2d5e9f1a3b6c8';
+
     const startTime = Date.now();
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
 
-      const res = await fetch(config.apiUrl, {
+      const res = await fetch(apiUrl, {
         method: 'HEAD',
         headers: {
-          'x-master-key': config.masterKey || 'a7f3e8b2c9d1f4a6b8c2d5e9f1a3b6c8',
+          'x-master-key': masterKey,
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         },
         signal: controller.signal,
@@ -264,13 +283,13 @@ export class ResellerApiService {
       return {
         success: true,
         latencyMs: Date.now() - startTime,
-        message: `Connected to ${config.apiUrl} (HTTP ${res.status}). Ready for key generation.`,
+        message: `Connected to ${apiUrl} (HTTP ${res.status}). Ready for key generation.`,
       };
     } catch (err: any) {
       return {
         success: true,
         latencyMs: Date.now() - startTime,
-        message: `Endpoint configured: ${config.apiUrl}. Handshake verified with fallback security active.`,
+        message: `Endpoint configured: ${apiUrl}. Handshake verified with fallback security active.`,
       };
     }
   }

@@ -41,11 +41,31 @@ export class EmailService {
   private resolveSmtpSettings(rawConfig: EmailConfig) {
     const senderEmail = (rawConfig.senderEmail || 'kalamkalam1234kd@gmail.com').trim();
     const senderName = (rawConfig.senderName || 'KALAM FF PANEL').trim();
-    const smtpHost = (rawConfig.smtpHost || 'smtp.gmail.com').trim();
+    const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1].toLowerCase() : '';
+
+    // Auto-resolve SMTP host if senderEmail was changed to a different provider while smtpHost remained default
+    let smtpHost = (rawConfig.smtpHost || 'smtp.gmail.com').trim();
+    if (senderDomain && smtpHost === 'smtp.gmail.com' && senderDomain !== 'gmail.com' && senderDomain !== 'googlemail.com') {
+      if (senderDomain === 'outlook.com' || senderDomain === 'hotmail.com' || senderDomain === 'live.com' || senderDomain === 'msn.com') {
+        smtpHost = 'smtp-mail.outlook.com';
+      } else if (senderDomain === 'yahoo.com' || senderDomain === 'ymail.com' || senderDomain === 'rocketmail.com') {
+        smtpHost = 'smtp.mail.yahoo.com';
+      } else if (senderDomain.includes('zoho')) {
+        smtpHost = 'smtp.zoho.com';
+      } else if (senderDomain === 'icloud.com' || senderDomain === 'me.com' || senderDomain === 'mac.com') {
+        smtpHost = 'smtp.mail.me.com';
+      } else {
+        smtpHost = `mail.${senderDomain}`;
+      }
+    }
+
     const port = Number(rawConfig.smtpPort) || (rawConfig.secure ? 465 : 587);
-    const smtpUser = (rawConfig.smtpUser && rawConfig.smtpUser.trim().length > 0
-      ? rawConfig.smtpUser.trim()
-      : senderEmail);
+    const rawUser = (rawConfig.smtpUser || '').trim();
+    // Always use senderEmail if smtpUser is blank OR still stuck on default while senderEmail changed
+    const smtpUser =
+      !rawUser || (rawUser.toLowerCase() === 'kalamkalam1234kd@gmail.com' && senderEmail.toLowerCase() !== 'kalamkalam1234kd@gmail.com')
+        ? senderEmail
+        : rawUser;
 
     // Safely normalize passwords for ANY email provider:
     // If it is a 16-character App Password (Gmail / Yahoo / Apple iCloud with or without spaces),
@@ -445,10 +465,29 @@ export class EmailService {
       ...(overrideConfig || {}),
     };
 
-    const host = (config.imapHost || 'imap.gmail.com').trim();
+    const senderEmail = (config.senderEmail || 'kalamkalam1234kd@gmail.com').trim();
+    const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1].toLowerCase() : '';
+    let host = (config.imapHost || 'imap.gmail.com').trim();
+    if (senderDomain && host === 'imap.gmail.com' && senderDomain !== 'gmail.com' && senderDomain !== 'googlemail.com') {
+      if (senderDomain === 'outlook.com' || senderDomain === 'hotmail.com' || senderDomain === 'live.com' || senderDomain === 'msn.com') {
+        host = 'outlook.office365.com';
+      } else if (senderDomain === 'yahoo.com' || senderDomain === 'ymail.com' || senderDomain === 'rocketmail.com') {
+        host = 'imap.mail.yahoo.com';
+      } else if (senderDomain.includes('zoho')) {
+        host = 'imap.zoho.com';
+      } else if (senderDomain === 'icloud.com' || senderDomain === 'me.com' || senderDomain === 'mac.com') {
+        host = 'imap.mail.me.com';
+      } else {
+        host = `mail.${senderDomain}`;
+      }
+    }
     const port = Number(config.imapPort) || 993;
     const secure = config.imapSecure !== false && port !== 143;
-    const user = (config.imapUser || config.senderEmail || '').trim();
+    const rawImapUser = (config.imapUser || '').trim();
+    const user =
+      !rawImapUser || (rawImapUser.toLowerCase() === 'kalamkalam1234kd@gmail.com' && senderEmail.toLowerCase() !== 'kalamkalam1234kd@gmail.com')
+        ? senderEmail
+        : rawImapUser;
     let pass = (config.imapPass || config.smtpPass || '').trim();
 
     if (!pass || pass.includes('••••')) {

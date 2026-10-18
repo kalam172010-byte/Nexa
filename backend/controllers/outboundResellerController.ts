@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { db } from '../db/database';
 import { WalletService } from '../services/walletService';
+import { ResellerApiService } from '../services/resellerApi';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { DigitalKey, Order } from '../models/types';
 
@@ -174,35 +175,67 @@ export class OutboundResellerController {
         orderId
       );
 
-      // 7. Issue Keys (quantity times)
+      // 7. Issue Keys (quantity times) - Try Live Upstream Reseller API first if configured, then Local Pool, then Auto-Mint
       const deliveredKeys: string[] = [];
-      for (let i = 0; i < quantity; i++) {
-        const unassignedKeyIndex = db.digitalKeys.findIndex(
-          k => k.productId === matchedProduct.id && (!k.isUsed || k.status === 'ACTIVE') && !k.assignedUserId
-        );
+      const effectiveExternalPid = matchedVariant.externalPid?.trim() || matchedProduct.externalPid?.trim();
+      const effectiveExternalDuration = matchedVariant.externalDuration?.trim() || matchedVariant.durationLabel.trim();
 
-        let keyObj: DigitalKey;
-        if (unassignedKeyIndex !== -1) {
-          keyObj = db.digitalKeys[unassignedKeyIndex];
-          keyObj.isUsed = true;
-          keyObj.status = 'USED';
-          keyObj.assignedUserId = user.id;
-          keyObj.assignedOrderId = orderId;
-          keyObj.assignedAt = new Date().toISOString();
-        } else {
-          keyObj = {
-            id: `KEY-${Date.now()}-${i}-${crypto.randomBytes(2).toString('hex')}`,
-            productId: matchedProduct.id,
-            variantId: matchedVariant.id,
-            keyCode: `NEXA-EXT-${crypto.randomBytes(4).toString('hex').toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
-            isUsed: true,
-            status: 'USED',
-            assignedUserId: user.id,
-            assignedOrderId: orderId,
-            assignedAt: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-          };
-          db.digitalKeys.push(keyObj);
+      for (let i = 0; i < quantity; i++) {
+        let keyObj: DigitalKey | null = null;
+
+        if (effectiveExternalPid && db.resellerConfig.isLiveApiEnabled !== false) {
+          try {
+            const upstream = await ResellerApiService.fetchKeyFromProvider({
+              externalPid: effectiveExternalPid,
+              durationLabel: effectiveExternalDuration,
+              androidId,
+              orderId: `${orderId}-${i + 1}`,
+            });
+            if (upstream.success && upstream.keyCode) {
+              keyObj = {
+                id: `KEY-EXT-${Date.now()}-${i}-${crypto.randomBytes(2).toString('hex')}`,
+                productId: matchedProduct.id,
+                variantId: matchedVariant.id,
+                keyCode: upstream.keyCode,
+                isUsed: true,
+                status: 'USED',
+                assignedUserId: user.id,
+                assignedOrderId: orderId,
+                assignedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+              };
+              db.digitalKeys.push(keyObj);
+            }
+          } catch {}
+        }
+
+        if (!keyObj) {
+          const unassignedKeyIndex = db.digitalKeys.findIndex(
+            k => k.productId === matchedProduct.id && (!k.isUsed || k.status === 'ACTIVE') && !k.assignedUserId
+          );
+
+          if (unassignedKeyIndex !== -1) {
+            keyObj = db.digitalKeys[unassignedKeyIndex];
+            keyObj.isUsed = true;
+            keyObj.status = 'USED';
+            keyObj.assignedUserId = user.id;
+            keyObj.assignedOrderId = orderId;
+            keyObj.assignedAt = new Date().toISOString();
+          } else {
+            keyObj = {
+              id: `KEY-${Date.now()}-${i}-${crypto.randomBytes(2).toString('hex')}`,
+              productId: matchedProduct.id,
+              variantId: matchedVariant.id,
+              keyCode: `NEXA-EXT-${crypto.randomBytes(4).toString('hex').toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+              isUsed: true,
+              status: 'USED',
+              assignedUserId: user.id,
+              assignedOrderId: orderId,
+              assignedAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+            };
+            db.digitalKeys.push(keyObj);
+          }
         }
         deliveredKeys.push(keyObj.keyCode);
       }

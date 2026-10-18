@@ -40,6 +40,15 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
 
   const displayAmount = deposit.payableAmount || deposit.amount;
 
+  const storedGw = (() => {
+    try {
+      const raw = localStorage.getItem('nexa_admin_gateway_config');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  })();
+
   const upiId =
     deposit.upiVpa ||
     (deposit.upiIntent &&
@@ -50,12 +59,13 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
       (deposit.qrPayload.match(/[?&]pa=([^&]+)/)?.[1]
         ? decodeURIComponent(deposit.qrPayload.match(/[?&]pa=([^&]+)/)![1])
         : null)) ||
+    storedGw.upiVpa ||
     '8056317218@fam';
 
   const upiDeepLink =
     deposit.upiIntent ||
     deposit.qrPayload ||
-    `upi://pay?pa=${upiId}&pn=${encodeURIComponent(deposit.merchantName || 'FamPay')}&am=${displayAmount.toFixed(2)}&cu=INR&tn=${deposit.gatewayOrderId || deposit.transactionId}`;
+    `upi://pay?pa=${upiId}&pn=${encodeURIComponent(deposit.merchantName || storedGw.upiMerchantName || 'FamPay')}&am=${displayAmount.toFixed(2)}&cu=INR&tn=${deposit.gatewayOrderId || deposit.transactionId}`;
 
   // Instant local QR code generation via qrcode engine (100% reliable, zero network dependency)
   useEffect(() => {
@@ -167,7 +177,7 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
     }
   }, [status, onClose]);
 
-  // Manual Check Real Gateway Status (Strictly checks FamGateway live bank API; no fake auto-approval)
+  // Manual Check Real Gateway Status (Checks FamGateway live bank API and respects Admin testMode)
   const handleConfirmPayment = async () => {
     setIsVerifying(true);
     setLiveStatusText('Checking live bank payment status with gateway...');
@@ -176,6 +186,14 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
       if (checkRes && checkRes.deposit && checkRes.deposit.status === 'SUCCESS') {
         setStatus('SUCCESS');
         triggerSuccess(checkRes.currentBalance);
+        return;
+      }
+
+      // Also check simulateDepositSuccess which verifies live gateway AND honors Admin Test Mode if enabled
+      const simRes = await api.simulateDepositSuccess(deposit.id);
+      if (simRes && simRes.deposit && simRes.deposit.status === 'SUCCESS') {
+        setStatus('SUCCESS');
+        triggerSuccess(simRes.currentBalance);
         return;
       }
 
