@@ -1,27 +1,57 @@
-const DEV_SERVER_URL = typeof window !== 'undefined' ? window.location.origin : 'https://ais-dev-ehx6fkepg2ntmhvxj3joml-128464619421.asia-east1.run.app';
+export function getEffectiveOrigin(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  const currentOrigin = window.location.origin;
+  const isLocalBrowser =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1';
+
+  // 1. Check custom override from localStorage (ignore localhost if running on a deployed domain)
+  try {
+    const localStoredUrl = localStorage.getItem('nexa_api_base_url');
+    if (localStoredUrl && localStoredUrl.trim()) {
+      const trimmed = localStoredUrl.trim().replace(/\/api\/?$/, '').replace(/\/$/, '');
+      const isStoredLocal = trimmed.includes('localhost') || trimmed.includes('127.0.0.1');
+      if (!isStoredLocal || isLocalBrowser) {
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+          return trimmed;
+        }
+      } else {
+        // Automatically clear stale localhost override on deployed hosts
+        localStorage.removeItem('nexa_api_base_url');
+      }
+    }
+  } catch {}
+
+  // 2. Check Vite env var (ignore localhost if running on a deployed domain)
+  const customApiUrl = import.meta.env.VITE_API_BASE_URL;
+  if (customApiUrl && typeof customApiUrl === 'string' && customApiUrl.trim()) {
+    const trimmedEnv = customApiUrl.trim().replace(/\/api\/?$/, '').replace(/\/$/, '');
+    const isEnvLocal = trimmedEnv.includes('localhost') || trimmedEnv.includes('127.0.0.1');
+    if (!isEnvLocal || isLocalBrowser) {
+      if (trimmedEnv.startsWith('http://') || trimmedEnv.startsWith('https://')) {
+        return trimmedEnv;
+      }
+    }
+  }
+
+  // 3. Dynamically use current browser origin (window.location.origin)
+  return currentOrigin;
+}
 
 export function getEffectiveApiUrl(): string {
   if (typeof window === 'undefined') return '/api';
-
-  // 1. Check custom override from localStorage (configurable by admin in settings)
-  const localStoredUrl = localStorage.getItem('nexa_api_base_url');
-  if (localStoredUrl && localStoredUrl.trim()) {
-    const trimmed = localStoredUrl.trim();
-    return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
-  }
-
-  // 2. Check Vite env var
-  const customApiUrl = import.meta.env.VITE_API_BASE_URL;
-  if (customApiUrl) return customApiUrl.endsWith('/') ? customApiUrl.slice(0, -1) : customApiUrl;
-
-  // 3. Default to relative /api on current origin (works on Express server, Vite dev server, and proxy hosts)
-  return '/api';
+  const origin = getEffectiveOrigin();
+  return origin ? `${origin}/api` : `${window.location.origin}/api`;
 }
 
 export function setCustomApiUrl(url: string | null): void {
   if (typeof window === 'undefined') return;
   if (url && url.trim()) {
-    localStorage.setItem('nexa_api_base_url', url.trim());
+    const cleaned = url.trim().replace(/\/api\/?$/, '').replace(/\/$/, '');
+    localStorage.setItem('nexa_api_base_url', cleaned);
   } else {
     localStorage.removeItem('nexa_api_base_url');
   }
@@ -471,6 +501,30 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       try {
         localStorage.setItem('nexa_site_customization', JSON.stringify(data.config));
       } catch {}
+    } else if (endpoint.includes('/reseller/api-credentials')) {
+      const origin = getEffectiveOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
+      try {
+        const storedKey = localStorage.getItem('nexa_user_outbound_api_key');
+        if (endpoint.includes('/regenerate') && data.apiKey) {
+          localStorage.setItem('nexa_user_outbound_api_key', data.apiKey);
+        } else if (storedKey) {
+          data.apiKey = storedKey;
+        } else if (data.apiKey) {
+          localStorage.setItem('nexa_user_outbound_api_key', data.apiKey);
+        }
+      } catch {}
+      if (origin) {
+        data.apiUrl = `${origin}/api/v1/reseller/buy`;
+        data.phpScriptUrl = `${origin}/api/reseller_v1.php`;
+        data.rootPhpUrl = `${origin}/reseller_v1.php`;
+        data.detectedDomain = origin;
+        data.endpoints = {
+          restBuy: `${origin}/api/v1/reseller/buy`,
+          phpCompat: `${origin}/api/reseller_v1.php`,
+          rootPhpCompat: `${origin}/reseller_v1.php`,
+          shortBuy: `${origin}/api/reseller/buy`,
+        };
+      }
     }
 
     return data as T;
@@ -1020,20 +1074,32 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     // Outbound Reseller API Credentials & Regeneration Fallback
     if (endpoint.includes('/reseller/api-credentials/regenerate') && method === 'POST') {
       const newKey = `nexa_live_${Math.random().toString(16).slice(2, 14)}${Math.random().toString(16).slice(2, 14)}`;
-      localStorage.setItem('nexa_user_outbound_api_key', newKey);
+      try {
+        localStorage.setItem('nexa_user_outbound_api_key', newKey);
+      } catch {}
+      const origin = getEffectiveOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
       return {
         message: 'Reseller API Key successfully regenerated.',
         apiKey: newKey,
+        apiUrl: `${origin}/api/v1/reseller/buy`,
+        phpScriptUrl: `${origin}/api/reseller_v1.php`,
+        rootPhpUrl: `${origin}/reseller_v1.php`,
+        detectedDomain: origin,
       } as unknown as T;
     }
 
     if (endpoint.includes('/reseller/api-credentials')) {
-      let userApiKey = localStorage.getItem('nexa_user_outbound_api_key');
-      if (!userApiKey) {
+      let userApiKey = '';
+      try {
+        userApiKey = localStorage.getItem('nexa_user_outbound_api_key') || '';
+        if (!userApiKey) {
+          userApiKey = 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7';
+          localStorage.setItem('nexa_user_outbound_api_key', userApiKey);
+        }
+      } catch {
         userApiKey = 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7';
-        localStorage.setItem('nexa_user_outbound_api_key', userApiKey);
       }
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kalam-panel.web.app';
+      const origin = getEffectiveOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
       const products = getCachedProducts();
       const productReferenceTable = products.map((p: any, idx: number) => ({
         id: p.id,
@@ -1056,6 +1122,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         apiKey: userApiKey,
         apiUrl: `${origin}/api/v1/reseller/buy`,
         phpScriptUrl: `${origin}/api/reseller_v1.php`,
+        rootPhpUrl: `${origin}/reseller_v1.php`,
+        detectedDomain: origin,
+        endpoints: {
+          restBuy: `${origin}/api/v1/reseller/buy`,
+          phpCompat: `${origin}/api/reseller_v1.php`,
+          rootPhpCompat: `${origin}/reseller_v1.php`,
+          shortBuy: `${origin}/api/reseller/buy`,
+        },
         productReferenceTable,
       } as unknown as T;
     }

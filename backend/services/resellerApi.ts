@@ -55,14 +55,14 @@ export class ResellerApiService {
     };
 
     let attempts = 0;
-    const maxRetries = config.retryAttempts || 2;
+    const maxRetries = 1;
     let lastError: any = null;
 
     while (attempts < maxRetries) {
       attempts++;
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), config.timeoutMs || 20000);
+        const timeout = setTimeout(() => controller.abort(), Math.min(config.timeoutMs || 3500, 3500));
 
         const response = await fetch(config.apiUrl, {
           method: 'POST',

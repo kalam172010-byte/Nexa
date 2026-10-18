@@ -3,6 +3,9 @@
   "name": "kalamffpanel",
   "main": "./worker.ts",
   "compatibility_date": "2026-10-12",
+  "build": {
+    "command": "npm run build"
+  },
   "observability": {
     "enabled": true
   },

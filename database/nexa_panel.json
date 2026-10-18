@@ -38,7 +38,7 @@
       "isBanned": false,
       "createdAt": "2026-10-03T07:23:04.943Z",
       "updatedAt": "2026-10-17T15:59:59.657Z",
-      "apiKey": "nexa_live_8ab3e7c3646b1fa5a108a63bec284025"
+      "apiKey": "nexa_live_f76153321930a25e336b9ec419584a2f"
     },
     {
       "id": "4mkBZjUVhYW59O8sxLFQwH5IcU33",
@@ -265,6 +265,30 @@
       "assignedOrderId": "ORD-EXT-1792307128553-68B1",
       "assignedAt": "2026-10-18T07:05:28.554Z",
       "createdAt": "2026-10-18T07:05:28.554Z"
+    },
+    {
+      "id": "KEY-1792327819867-0-b84f",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "keyCode": "NEXA-EXT-273F6989-6C9FD6AC",
+      "isUsed": true,
+      "status": "USED",
+      "assignedUserId": "USR-202",
+      "assignedOrderId": "ORD-EXT-1792327817543-7956",
+      "assignedAt": "2026-10-18T12:50:19.867Z",
+      "createdAt": "2026-10-18T12:50:19.867Z"
+    },
+    {
+      "id": "KEY-1792327896600-0-e235",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "keyCode": "NEXA-EXT-72869BE9-8F5FC34F",
+      "isUsed": true,
+      "status": "USED",
+      "assignedUserId": "USR-202",
+      "assignedOrderId": "ORD-EXT-1792327895332-1D38",
+      "assignedAt": "2026-10-18T12:51:36.600Z",
+      "createdAt": "2026-10-18T12:51:36.600Z"
     }
   ],
   "orders": [
@@ -358,6 +382,32 @@
       "deliveredKeyCode": "NEXA-EXT-CDAE20D8-54859912",
       "status": "COMPLETED",
       "createdAt": "2026-10-18T07:05:28.554Z"
+    },
+    {
+      "id": "ORD-EXT-1792327817543-7956",
+      "userId": "USR-202",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 850,
+      "deliveredKeyId": "ORD-EXT-1792327817543-7956",
+      "deliveredKeyCode": "NEXA-EXT-273F6989-6C9FD6AC",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-18T12:50:19.868Z"
+    },
+    {
+      "id": "ORD-EXT-1792327895332-1D38",
+      "userId": "USR-202",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 850,
+      "deliveredKeyId": "ORD-EXT-1792327895332-1D38",
+      "deliveredKeyCode": "NEXA-EXT-72869BE9-8F5FC34F",
+      "status": "COMPLETED",
+      "createdAt": "2026-10-18T12:51:36.602Z"
     }
   ],
   "transactions": [
@@ -1373,6 +1423,74 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1792327896604-624881",
+      "userId": "USR-202",
+      "username": "apex_reseller",
+      "action": "RESELLER_API_KEY_SUCCESS",
+      "details": "External API generated 1x keys for KALAM VIP AIMBOT FF OB55 (60 Days) | Total: ₹850",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T12:51:36.604Z"
+    },
+    {
+      "id": "LOG-1792327896600-e4857e",
+      "username": "SYSTEM",
+      "action": "RESELLER_API_BUY_ERROR",
+      "details": "Upstream error response (1267ms): Invalid or unavailable product duration",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T12:51:36.600Z"
+    },
+    {
+      "id": "LOG-1792327895333-30ee0f",
+      "username": "SYSTEM",
+      "action": "RESELLER_API_BUY_CALL",
+      "details": "Calling Reseller API -> URL: https://bantibhaiya.to/api/reseller_v1.php | PID: 155 | Duration: 60 DAYS | Android ID: 0b9b969bc2e7997b",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T12:51:35.333Z"
+    },
+    {
+      "id": "LOG-1792327819870-512e49",
+      "userId": "USR-202",
+      "username": "apex_reseller",
+      "action": "RESELLER_API_KEY_SUCCESS",
+      "details": "External API generated 1x keys for KALAM VIP AIMBOT FF OB55 (60 Days) | Total: ₹850",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T12:50:19.870Z"
+    },
+    {
+      "id": "LOG-1792327819867-745a6c",
+      "username": "SYSTEM",
+      "action": "RESELLER_API_BUY_ERROR",
+      "details": "Upstream error response (2323ms): Invalid or unavailable product duration",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T12:50:19.867Z"
+    },
+    {
+      "id": "LOG-1792327817544-c9563f",
+      "username": "SYSTEM",
+      "action": "RESELLER_API_BUY_CALL",
+      "details": "Calling Reseller API -> URL: https://bantibhaiya.to/api/reseller_v1.php | PID: 155 | Duration: 60 DAYS | Android ID: 0b9b969bc2e7997b",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T12:50:17.544Z"
+    },
+    {
+      "id": "LOG-1792327715338-b6f549",
+      "userId": "USR-202",
+      "username": "apex_reseller",
+      "action": "RESELLER_API_LOW_BALANCE",
+      "details": "External API buy failed for KALAM VIP AIMBOT FF OB55 (1x 60 Days): Insufficient balance (₹0 < ₹850)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T12:48:35.338Z"
+    },
+    {
+      "id": "LOG-1792324879089-49df7f",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "username": "kalam",
+      "action": "RESELLER_API_KEY_REGENERATE",
+      "details": "User regenerated their Outbound Reseller API Key.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-18T12:01:19.089Z"
+    },
     {
       "id": "LOG-1792308397536-c3cc02",
       "username": "reseller@customgamingdomain.com",
