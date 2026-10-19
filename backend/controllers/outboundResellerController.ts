@@ -4,7 +4,7 @@ import { db } from '../db/database';
 import { WalletService } from '../services/walletService';
 import { ResellerApiService } from '../services/resellerApi';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { DigitalKey, Order, Transaction, User } from '../models/types';
+import { DigitalKey, Order, ProductVariant, Transaction, User } from '../models/types';
 import { FirestoreSyncService } from '../services/firestoreSync';
 
 export class OutboundResellerController {
@@ -228,7 +228,7 @@ export class OutboundResellerController {
       );
 
       let matchedProduct = candidateProducts[0];
-      let matchedVariant = undefined;
+      let matchedVariant: ProductVariant | undefined = undefined;
 
       // Try to find a candidate product that also has an exact or partial duration match
       for (const candProd of candidateProducts) {

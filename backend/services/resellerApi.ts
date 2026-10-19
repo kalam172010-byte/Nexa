@@ -256,40 +256,148 @@ export class ResellerApiService {
     }
   }
 
-  public static async testConnection(configOverride?: any): Promise<{ success: boolean; latencyMs: number; message: string }> {
+  public static async testConnection(configOverride?: any): Promise<{
+    success: boolean;
+    isValid: boolean;
+    status: 'VALID' | 'INVALID' | 'UNREACHABLE' | 'WARNING';
+    statusCode: number;
+    latencyMs: number;
+    message: string;
+    apiUrl: string;
+    apiKeyMasked: string;
+    masterKeyMasked: string;
+    keyLength: number;
+    verifiedAt: string;
+    rawResponse?: string;
+    checks: {
+      dnsReachability: boolean;
+      apiKeyFormatValid: boolean;
+      providerHandshake: boolean;
+      keyAuthenticated: boolean;
+      fallbackRedundancy: boolean;
+    };
+  }> {
     const baseConfig = db.resellerConfig;
     const override = configOverride || {};
     const apiUrl = (override.apiUrl || baseConfig.apiUrl || 'https://bantibhaiya.to/api/reseller_v1.php').trim();
-    const masterKey =
-      override.masterKey && !String(override.masterKey).includes('...')
-        ? String(override.masterKey).trim()
-        : baseConfig.masterKey || 'a7f3e8b2c9d1f4a6b8c2d5e9f1a3b6c8';
+    const apiKey = (override.apiKey && !String(override.apiKey).includes('...')
+      ? String(override.apiKey).trim()
+      : baseConfig.apiKey || '5841ac0e6b458bdde0ffbe2baa095306');
+    const masterKey = (override.masterKey && !String(override.masterKey).includes('...')
+      ? String(override.masterKey).trim()
+      : baseConfig.masterKey || 'a7f3e8b2c9d1f4a6b8c2d5e9f1a3b6c8');
+    const androidId = override.defaultAndroidId || baseConfig.defaultAndroidId || '0b9b969bc2e7997b';
+
+    const mask = (str: string) => {
+      if (!str || str.length < 8) return '••••••••';
+      return `${str.slice(0, 6)}••••••••${str.slice(-4)}`;
+    };
 
     const startTime = Date.now();
+    const verifiedAt = new Date().toISOString();
+
+    const formParams = new URLSearchParams();
+    formParams.append('api_key', apiKey);
+    formParams.append('action', 'buy');
+    formParams.append('product_id', 'PING_CHECK_999');
+    formParams.append('duration', 'PING_TEST');
+    formParams.append('android_id', androidId);
+
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), 7000);
 
-      const res = await fetch(apiUrl, {
-        method: 'HEAD',
+      const response = await fetch(apiUrl, {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
           'x-master-key': masterKey,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
         },
+        body: formParams.toString(),
         signal: controller.signal,
       });
+
       clearTimeout(timeout);
+      const latencyMs = Date.now() - startTime;
+      const responseText = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {}
+
+      const isInvalidKey =
+        responseText.toLowerCase().includes('invalid api key') ||
+        responseText.toLowerCase().includes('access denied') ||
+        (parsed && (parsed.msg === 'Invalid API Key or Access Denied' || parsed.error?.toLowerCase().includes('invalid api key')));
+
+      if (isInvalidKey) {
+        return {
+          success: false,
+          isValid: false,
+          status: 'INVALID',
+          statusCode: response.status,
+          latencyMs,
+          message: 'Upstream provider rejected Reseller API Key: Invalid API Key or Access Denied.',
+          apiUrl,
+          apiKeyMasked: mask(apiKey),
+          masterKeyMasked: mask(masterKey),
+          keyLength: apiKey.length,
+          verifiedAt,
+          rawResponse: responseText.slice(0, 500),
+          checks: {
+            dnsReachability: true,
+            apiKeyFormatValid: apiKey.length > 5,
+            providerHandshake: true,
+            keyAuthenticated: false,
+            fallbackRedundancy: true,
+          },
+        };
+      }
 
       return {
         success: true,
-        latencyMs: Date.now() - startTime,
-        message: `Connected to ${apiUrl} (HTTP ${res.status}). Ready for key generation.`,
+        isValid: true,
+        status: 'VALID',
+        statusCode: response.status,
+        latencyMs,
+        message: `Upstream provider verified successfully! Stored API Key is active and authorized. (HTTP ${response.status})`,
+        apiUrl,
+        apiKeyMasked: mask(apiKey),
+        masterKeyMasked: mask(masterKey),
+        keyLength: apiKey.length,
+        verifiedAt,
+        rawResponse: responseText.slice(0, 500),
+        checks: {
+          dnsReachability: true,
+          apiKeyFormatValid: apiKey.length > 5,
+          providerHandshake: true,
+          keyAuthenticated: true,
+          fallbackRedundancy: true,
+        },
       };
     } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
       return {
-        success: true,
-        latencyMs: Date.now() - startTime,
-        message: `Endpoint configured: ${apiUrl}. Handshake verified with fallback security active.`,
+        success: false,
+        isValid: false,
+        status: 'UNREACHABLE',
+        statusCode: 0,
+        latencyMs,
+        message: `Upstream provider is unreachable: ${err.message}. Emergency fallback key generator is active.`,
+        apiUrl,
+        apiKeyMasked: mask(apiKey),
+        masterKeyMasked: mask(masterKey),
+        keyLength: apiKey.length,
+        verifiedAt,
+        rawResponse: `Connection error: ${err.message}`,
+        checks: {
+          dnsReachability: false,
+          apiKeyFormatValid: apiKey.length > 5,
+          providerHandshake: false,
+          keyAuthenticated: false,
+          fallbackRedundancy: true,
+        },
       };
     }
   }

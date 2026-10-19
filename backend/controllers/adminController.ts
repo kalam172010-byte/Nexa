@@ -329,7 +329,7 @@ export class AdminController {
 
       const initialVariants: ProductVariant[] = [];
       const cleanPid = newProduct.externalPid || undefined;
-      const defaultDurations = Array.isArray(initialDurations) && initialDurations.length > 0
+      const defaultDurations = Array.isArray(initialDurations)
         ? initialDurations
         : [
             { label: '1 Day', hours: 24, price: 50, resellerPrice: 50, extDur: '1 DAYS' },
@@ -955,7 +955,7 @@ export class AdminController {
         p => String(p.externalPid).trim() === pid || String(p.id).trim().toLowerCase() === pid.toLowerCase()
       );
       let matchedProd = candidateProducts[0];
-      let matchedVar = undefined;
+      let matchedVar: ProductVariant | undefined = undefined;
 
       for (const cand of candidateProducts) {
         const vars = db.productVariants.filter(v => v.productId === cand.id && v.isActive);
@@ -1016,7 +1016,7 @@ export class AdminController {
       });
 
       const keyCode =
-        result.keyCode ||
+        (result as any).keyCode ||
         `KALAM-API-${pid}-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 
       const now = new Date();

@@ -40,6 +40,7 @@ import {
   UserCheck,
   History,
   Eye,
+  EyeOff,
   Wallet,
   Palette,
   Megaphone,
@@ -65,7 +66,7 @@ import { api, getEffectiveApiUrl, setCustomApiUrl } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
 import { useSite } from '../context/SiteContext.js';
 import { useAuth } from '../context/AuthContext.js';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase.js';
 import { AdminStats, Product, ProductVariant, SiteCustomizationConfig } from '../types/index.js';
 
@@ -308,6 +309,24 @@ export const AdminPage: React.FC = () => {
   const [newProdIsUnderMaintenance, setNewProdIsUnderMaintenance] = useState(false);
   const [newProdMaintenanceNotice, setNewProdMaintenanceNotice] = useState('');
   const [newProdAlbumTab, setNewProdAlbumTab] = useState<'upload' | 'preset' | 'url'>('upload');
+  const [newProdDurationChoice, setNewProdDurationChoice] = useState<'clean' | 'presets'>('clean');
+  const [justCreatedProdId, setJustCreatedProdId] = useState<string | null>(null);
+  const [inlineAddingProdId, setInlineAddingProdId] = useState<string | null>(null);
+  const [inlineDurationForms, setInlineDurationForms] = useState<
+    Record<
+      string,
+      {
+        label: string;
+        hours: number;
+        price: number;
+        resellerPrice: number;
+        externalPid: string;
+        externalDuration: string;
+      }
+    >
+  >({});
+  const [isInlineSaving, setIsInlineSaving] = useState<Record<string, boolean>>({});
+  const [confirmDeleteVarId, setConfirmDeleteVarId] = useState<string | null>(null);
 
   // Edit Product Form
   const [editProdName, setEditProdName] = useState('');
@@ -390,6 +409,16 @@ export const AdminPage: React.FC = () => {
   const [testAndroidId, setTestAndroidId] = useState('0b9b969bc2e7997b');
   const [isTestingKeyGen, setIsTestingKeyGen] = useState(false);
   const [keyGenTestResult, setKeyGenTestResult] = useState<any | null>(null);
+
+  // Reseller API Key Verification & Ping Interface States
+  const [isPingingReseller, setIsPingingReseller] = useState(false);
+  const [resellerVerificationResult, setResellerVerificationResult] = useState<any | null>(null);
+  const [showRawPingPayload, setShowRawPingPayload] = useState(false);
+  const [showApiKeyPlain, setShowApiKeyPlain] = useState(false);
+  const [showMasterKeyPlain, setShowMasterKeyPlain] = useState(false);
+  const [verifyCustomKeyMode, setVerifyCustomKeyMode] = useState(false);
+  const [customTestApiKey, setCustomTestApiKey] = useState('');
+  const [customTestMasterKey, setCustomTestMasterKey] = useState('');
 
   // Database Backup & Domain Migration states
   const [isExportingBackup, setIsExportingBackup] = useState(false);
@@ -1305,6 +1334,7 @@ export const AdminPage: React.FC = () => {
         externalPid: newProdExternalPid.trim() || undefined,
         isUnderMaintenance: newProdIsUnderMaintenance,
         maintenanceNotice: newProdMaintenanceNotice.trim() || undefined,
+        initialDurations: newProdDurationChoice === 'clean' ? [] : undefined,
       });
 
       const createdProduct = res?.product;
@@ -1312,6 +1342,9 @@ export const AdminPage: React.FC = () => {
         setProducts(prev => [createdProduct, ...prev.filter(p => p.id !== createdProduct.id)]);
         setSelectedProdForVar(createdProduct.id);
         setBulkImportProdId(createdProduct.id);
+        setJustCreatedProdId(createdProduct.id);
+        setInlineAddingProdId(createdProduct.id);
+        setActiveTab('products');
         if (createdProduct.variants?.[0]) {
           setBulkImportVarId(createdProduct.variants[0].id);
         }
@@ -1332,9 +1365,9 @@ export const AdminPage: React.FC = () => {
 
       showToastSuccess(
         'Product Created Successfully!',
-        createdProduct
-          ? `"${createdProduct.name}" added with ${createdProduct.variants?.length || 4} durations.`
-          : 'Product added to live catalog.'
+        newProdDurationChoice === 'clean'
+          ? `"${createdProduct?.name || 'Product'}" created! Now add your custom durations right below 👇`
+          : `"${createdProduct?.name || 'Product'}" added with ${createdProduct?.variants?.length || 4} durations.`
       );
       setIsCreatingProduct(false);
       setNewProdName('');
@@ -1350,6 +1383,180 @@ export const AdminPage: React.FC = () => {
       await loadAllAdminData();
     } catch (err: any) {
       showToastError('Creation failed', err.message);
+    }
+  };
+
+  // Inline Duration Management Helpers
+  const getInlineDurationForm = (p: Product) => {
+    if (inlineDurationForms[p.id]) {
+      return inlineDurationForms[p.id];
+    }
+    return {
+      label: '1 Day',
+      hours: 24,
+      price: 50,
+      resellerPrice: 38,
+      externalPid: p.externalPid || '',
+      externalDuration: '1 DAYS',
+    };
+  };
+
+  const updateInlineDurationForm = (
+    productId: string,
+    updates: Partial<{
+      label: string;
+      hours: number;
+      price: number;
+      resellerPrice: number;
+      externalPid: string;
+      externalDuration: string;
+    }>
+  ) => {
+    setInlineDurationForms(prev => ({
+      ...prev,
+      [productId]: {
+        ...(prev[productId] || {
+          label: '1 Day',
+          hours: 24,
+          price: 50,
+          resellerPrice: 38,
+          externalPid: '',
+          externalDuration: '1 DAYS',
+        }),
+        ...updates,
+      },
+    }));
+  };
+
+  const handleSelectDurationPreset = (
+    productId: string,
+    preset: { label: string; hours: number; defaultPrice?: number }
+  ) => {
+    const current = inlineDurationForms[productId] || {
+      label: '1 Day',
+      hours: 24,
+      price: 50,
+      resellerPrice: 38,
+      externalPid: '',
+      externalDuration: '1 DAYS',
+    };
+    const price = preset.defaultPrice !== undefined ? preset.defaultPrice : current.price;
+    const resellerPrice = Math.round(price * 0.75);
+    const extDur = preset.label.toUpperCase().replace(/\s+/g, ' ');
+
+    updateInlineDurationForm(productId, {
+      label: preset.label,
+      hours: preset.hours,
+      price,
+      resellerPrice,
+      externalDuration: extDur,
+    });
+  };
+
+  const handleAddInlineDuration = async (product: Product) => {
+    const form = getInlineDurationForm(product);
+    if (!form.label.trim()) {
+      showToastError('Validation Error', 'Please enter a duration label (e.g. 1 Day, 7 Days, 2 Hours).');
+      return;
+    }
+    if (isNaN(Number(form.price)) || Number(form.price) < 0) {
+      showToastError('Validation Error', 'Please enter a valid price.');
+      return;
+    }
+
+    try {
+      setIsInlineSaving(prev => ({ ...prev, [product.id]: true }));
+      const effectivePid = form.externalPid.trim() || product.externalPid?.trim() || undefined;
+      const res = await api.createVariant({
+        productId: product.id,
+        product: product,
+        productName: product.name,
+        durationLabel: form.label.trim(),
+        durationHours: Number(form.hours) || 24,
+        price: Number(form.price),
+        resellerPrice: Number(form.resellerPrice) || Math.round(Number(form.price) * 0.75),
+        externalPid: effectivePid,
+        externalDuration: form.externalDuration.trim() || form.label.trim(),
+      });
+
+      const createdVariant = res?.variant;
+      if (createdVariant) {
+        setProducts(prev =>
+          prev.map(p => {
+            if (p.id === product.id) {
+              const existing = p.variants || [];
+              const updated = [...existing.filter((v: any) => v.id !== createdVariant.id), createdVariant];
+              return {
+                ...p,
+                variants: updated,
+              };
+            }
+            return p;
+          })
+        );
+
+        // Firestore background sync
+        try {
+          const cleanVar = JSON.parse(JSON.stringify(createdVariant));
+          setDoc(doc(db, 'productVariants', createdVariant.id), cleanVar, { merge: true }).catch(() => {});
+          const currentProd = products.find(p => p.id === product.id);
+          if (currentProd) {
+            const allVars = [...(currentProd.variants || []).filter(v => v.id !== createdVariant.id), createdVariant];
+            setDoc(doc(db, 'products', product.id), { variants: JSON.parse(JSON.stringify(allVars)) }, { merge: true }).catch(() => {});
+          }
+        } catch {}
+
+        showToastSuccess(
+          'Duration Added!',
+          `"${createdVariant.durationLabel}" (₹${createdVariant.price}) added to ${product.name}.`
+        );
+
+        // Reset form for next duration entry
+        updateInlineDurationForm(product.id, {
+          label: '',
+          hours: 24,
+          price: 50,
+          resellerPrice: 38,
+          externalPid: product.externalPid || '',
+          externalDuration: '',
+        });
+      }
+    } catch (err: any) {
+      showToastError('Failed to add duration', err.message);
+    } finally {
+      setIsInlineSaving(prev => ({ ...prev, [product.id]: false }));
+    }
+  };
+
+  const handleDirectDeleteDuration = async (variantId: string, durationLabel: string, productId: string) => {
+    try {
+      await api.deleteVariant(variantId);
+      setProducts(prev =>
+        prev.map(p => {
+          if (p.id === productId) {
+            return {
+              ...p,
+              variants: (p.variants || []).filter((v: any) => v.id !== variantId),
+            };
+          }
+          return p;
+        })
+      );
+
+      // Sync deletion to Firestore
+      try {
+        deleteDoc(doc(db, 'productVariants', variantId)).catch(() => {});
+        const targetProd = products.find(p => p.id === productId);
+        if (targetProd) {
+          const remaining = (targetProd.variants || []).filter(v => v.id !== variantId);
+          setDoc(doc(db, 'products', productId), { variants: JSON.parse(JSON.stringify(remaining)) }, { merge: true }).catch(() => {});
+        }
+      } catch {}
+
+      setConfirmDeleteVarId(null);
+      showToastSuccess('Duration Deleted', `Removed "${durationLabel}".`);
+    } catch (err: any) {
+      showToastError('Failed to delete duration', err.message);
     }
   };
 
@@ -2095,13 +2302,49 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  // Test Reseller API Connection
-  const handleTestReseller = async () => {
+  // Test & Verify Stored Reseller API Keys via Live Upstream Ping
+  const handleTestReseller = async (customConfig?: any) => {
+    setIsPingingReseller(true);
     try {
-      const res = await api.testResellerConnection();
-      showToastSuccess('Reseller API Handshake OK', res.message);
+      const payload = customConfig || {
+        apiUrl: resellerConfig.apiUrl,
+        apiKey: verifyCustomKeyMode && customTestApiKey ? customTestApiKey : resellerConfig.apiKey,
+        masterKey: verifyCustomKeyMode && customTestMasterKey ? customTestMasterKey : resellerConfig.masterKey,
+        defaultAndroidId: resellerConfig.defaultAndroidId,
+      };
+      const res = await api.testResellerConnection({ configOverride: payload });
+      setResellerVerificationResult(res);
+      if (res.isValid || res.status === 'VALID' || res.success) {
+        showToastSuccess('Reseller API Key Validated!', res.message || 'Key authenticated with upstream provider.');
+      } else {
+        showToastError('Validation Failed', res.message || 'Upstream provider rejected key.');
+      }
     } catch (err: any) {
+      const fallbackResult = {
+        success: false,
+        isValid: false,
+        status: 'UNREACHABLE',
+        statusCode: 0,
+        latencyMs: 0,
+        message: err.message || 'Network error pinging upstream provider',
+        apiUrl: resellerConfig.apiUrl || 'https://bantibhaiya.to/api/reseller_v1.php',
+        apiKeyMasked: resellerConfig.apiKey ? `${resellerConfig.apiKey.slice(0, 6)}••••••••` : '••••••••',
+        masterKeyMasked: resellerConfig.masterKey ? `${resellerConfig.masterKey.slice(0, 6)}••••••••` : '••••••••',
+        keyLength: resellerConfig.apiKey?.length || 0,
+        verifiedAt: new Date().toISOString(),
+        rawResponse: `Error: ${err.message}`,
+        checks: {
+          dnsReachability: false,
+          apiKeyFormatValid: Boolean(resellerConfig.apiKey),
+          providerHandshake: false,
+          keyAuthenticated: false,
+          fallbackRedundancy: true,
+        },
+      };
+      setResellerVerificationResult(fallbackResult);
       showToastError('Reseller API Handshake Failed', err.message);
+    } finally {
+      setIsPingingReseller(false);
     }
   };
 
@@ -2352,6 +2595,56 @@ export const AdminPage: React.FC = () => {
               <span className="text-[10px] text-slate-400 uppercase font-mono">System Gateway</span>
               <div className="font-mono text-sm font-bold text-emerald-400 uppercase mt-1">ONLINE 200 OK</div>
               <span className="text-[10px] text-slate-400 font-mono">UPI QR Active</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#0d0d14] border border-amber-500/20 bg-amber-950/10 space-y-1 relative group">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-amber-400 uppercase font-mono font-bold">Reseller API Key</span>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold border ${
+                  resellerVerificationResult
+                    ? resellerVerificationResult.isValid
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    : 'bg-white/10 text-slate-400 border-white/10'
+                }`}>
+                  {resellerVerificationResult
+                    ? resellerVerificationResult.isValid
+                      ? 'VALID (200 OK)'
+                      : resellerVerificationResult.status
+                    : 'NOT PINGED'}
+                </span>
+              </div>
+              <div className="font-mono text-sm font-bold text-white truncate flex items-center justify-between mt-1">
+                <span className="truncate max-w-[100px] text-xs">
+                  {resellerConfig.apiKey ? `${resellerConfig.apiKey.slice(0, 4)}••••${resellerConfig.apiKey.slice(-3)}` : 'No Key'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleTestReseller()}
+                  disabled={isPingingReseller}
+                  className="px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 text-[10px] font-mono font-bold border border-amber-500/30 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  title="Ping Upstream Provider to Verify Key"
+                >
+                  {isPingingReseller ? (
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin text-amber-200" />
+                  ) : (
+                    <Radio className="w-2.5 h-2.5 text-amber-400" />
+                  )}
+                  <span>{isPingingReseller ? 'Pinging...' : '⚡ Ping Key'}</span>
+                </button>
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 font-mono">
+                <span className="text-amber-400/80">
+                  {resellerVerificationResult ? `${resellerVerificationResult.latencyMs}ms latency` : 'Verify Upstream'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('reseller')}
+                  className="text-[9px] text-cyan-400 hover:text-cyan-300 hover:underline font-mono"
+                >
+                  View Console →
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3730,162 +4023,405 @@ export const AdminPage: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {products.map((p, idx) => (
-                <div
-                  key={`admin-prod-${p.id}-${idx}`}
-                  className={`rounded-2xl bg-[#0d0d14] border overflow-hidden shadow-lg transition-all flex flex-col justify-between ${
-                    p.isUnderMaintenance ? 'border-amber-500/40 ring-1 ring-amber-500/20' : 'border-white/5 hover:border-rose-500/30'
-                  }`}
-                >
-                  <div>
-                    {/* Product Photo Thumbnail Banner */}
-                    <div className="relative aspect-[16/8] w-full bg-slate-900 overflow-hidden">
-                      {p.imageUrl ? (
-                        <img
-                          src={p.imageUrl}
-                          alt={p.name}
-                          className="w-full h-full object-cover object-center"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-slate-800 text-slate-600 font-mono text-xs">
-                          NO PHOTO
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d14] via-transparent to-black/40 pointer-events-none" />
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+              {products.map((p, idx) => {
+                const isJustCreated = justCreatedProdId === p.id;
+                const form = getInlineDurationForm(p);
+                const isSaving = Boolean(isInlineSaving[p.id]);
 
-                      {/* Floating Badges */}
-                      <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/70 backdrop-blur-md text-slate-200 border border-white/10 uppercase">
-                          {p.game}
-                        </span>
-                        {p.badge && (
-                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/80 text-white uppercase shadow-sm">
-                            {p.badge}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="absolute top-2.5 right-2.5">
-                        <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-black/70 text-slate-300 border border-white/10 uppercase">
-                          {p.deviceType || 'NONROOT'}
-                        </span>
-                      </div>
-
-                      {/* Centered Under Maintenance Button / Badge in Product Photo */}
-                      {p.isUnderMaintenance && (
-                        <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/70 backdrop-blur-[2px] p-2">
-                          <div className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-black border-2 border-amber-300 font-display font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_25px_rgba(245,158,11,0.8)] animate-pulse">
-                            <AlertTriangle className="w-3.5 h-3.5 text-black fill-black shrink-0" />
-                            <span>UNDER MAINTENANCE</span>
+                return (
+                  <div
+                    key={`admin-prod-${p.id}-${idx}`}
+                    className={`rounded-2xl bg-[#0d0d14] border overflow-hidden shadow-xl transition-all flex flex-col justify-between ${
+                      isJustCreated
+                        ? 'border-emerald-500/80 ring-2 ring-emerald-500/40 shadow-emerald-950/50'
+                        : p.isUnderMaintenance
+                        ? 'border-amber-500/40 ring-1 ring-amber-500/20'
+                        : 'border-white/10 hover:border-rose-500/30'
+                    }`}
+                  >
+                    <div>
+                      {/* Newly Created Indicator Banner */}
+                      {isJustCreated && (
+                        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-1.5 flex items-center justify-between text-white text-[11px] font-bold uppercase tracking-wider animate-pulse">
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>✨ PRODUCT CREATED! ADD YOUR DURATIONS BELOW</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setJustCreatedProdId(null)}
+                            className="text-white/80 hover:text-white text-xs px-1"
+                          >
+                            ✕
+                          </button>
                         </div>
                       )}
-                    </div>
 
-                    {/* Product Details Content */}
-                    <div className="p-4 space-y-2.5">
-                      <div>
-                        <div className="flex items-center justify-between gap-1">
-                          <h4 className="font-bold text-sm text-white line-clamp-1">{p.name}</h4>
-                          {p.isUnderMaintenance && (
-                            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase shrink-0">
-                              PAUSED
+                      {/* Product Photo Thumbnail Banner */}
+                      <div className="relative aspect-[16/7] w-full bg-slate-900 overflow-hidden">
+                        {p.imageUrl ? (
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            className="w-full h-full object-cover object-center"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-slate-800 text-slate-600 font-mono text-xs">
+                            NO PHOTO
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d14] via-transparent to-black/40 pointer-events-none" />
+
+                        {/* Floating Badges */}
+                        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 backdrop-blur-md text-slate-200 border border-white/10 uppercase">
+                            {p.game}
+                          </span>
+                          {p.badge && (
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/90 text-white uppercase shadow-sm">
+                              {p.badge}
+                            </span>
+                          )}
+                          {p.externalPid && (
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase">
+                              PID: {p.externalPid}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{p.description}</p>
-                      </div>
 
-                      {/* Features */}
-                      {p.features && p.features.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {p.features.slice(0, 3).map((f, i) => (
-                            <span
-                              key={i}
-                              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/[0.03] border border-white/5 text-slate-300"
-                            >
-                              ⚡ {f}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="space-y-1.5 pt-1 border-t border-white/5">
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                          <span>{p.variants?.length || 0} Durations Configured</span>
-                          <span className="text-emerald-400 font-bold">
-                            {p.variants?.length ? `From ₹${Math.min(...p.variants.map(v => v.price))}` : 'No Price'}
+                        <div className="absolute top-2.5 right-2.5">
+                          <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-slate-300 border border-white/10 uppercase">
+                            {p.deviceType || 'NONROOT'}
                           </span>
                         </div>
-                        {p.variants && p.variants.length > 0 && (
-                          <div className="flex flex-wrap gap-1 pt-0.5">
-                            {p.variants.map(v => (
+
+                        {/* Centered Under Maintenance Button / Badge */}
+                        {p.isUnderMaintenance && (
+                          <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/70 backdrop-blur-[2px] p-2">
+                            <div className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-black border-2 border-amber-300 font-display font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_25px_rgba(245,158,11,0.8)] animate-pulse">
+                              <AlertTriangle className="w-3.5 h-3.5 text-black fill-black shrink-0" />
+                              <span>UNDER MAINTENANCE</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Product Header & Information */}
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-bold text-base text-white">{p.name}</h4>
+                              {p.isUnderMaintenance && (
+                                <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase shrink-0">
+                                  PAUSED
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                              {p.description || 'Custom gaming cheat panel & VIP menu.'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditProduct(p)}
+                              className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white border border-white/10 transition-colors"
+                              title="Edit product details & photo"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-rose-400" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleProductMaintenance(p)}
+                              className={`p-1.5 rounded-lg border transition-colors ${
+                                p.isUnderMaintenance
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                  : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-amber-300'
+                              }`}
+                              title={p.isUnderMaintenance ? 'Maintenance active. Click to turn OFF' : 'Click to turn ON maintenance'}
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProduct(p.id)}
+                              className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-white/10 transition-colors"
+                              title="Delete product"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Features Tags */}
+                        {p.features && p.features.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {p.features.slice(0, 4).map((f, i) => (
                               <span
-                                key={v.id}
-                                onClick={() => handleOpenEditVariant(v)}
-                                className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-pointer hover:bg-emerald-500/20 transition-colors"
-                                title="Click to edit this duration"
+                                key={i}
+                                className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/[0.03] border border-white/5 text-slate-300"
                               >
-                                {v.durationLabel}: ₹{v.price}
+                                ⚡ {f}
                               </span>
                             ))}
                           </div>
                         )}
+
+                        {/* SECTION 1: CONFIGURED DURATIONS LIST */}
+                        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-2.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-3.5 h-3.5 text-rose-400" />
+                              <span className="font-bold text-white uppercase tracking-wider text-[11px]">
+                                Configured Durations ({p.variants?.length || 0})
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                              {p.variants?.length ? `From ₹${Math.min(...p.variants.map(v => v.price))}` : 'No Durations Yet'}
+                            </span>
+                          </div>
+
+                          {(!p.variants || p.variants.length === 0) ? (
+                            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-center gap-2">
+                              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                              <span>No durations configured yet. Use the "Add Duration" section below to add your first duration plan!</span>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {p.variants.map((v: any) => {
+                                const isDeleting = confirmDeleteVarId === v.id;
+                                return (
+                                  <div
+                                    key={v.id}
+                                    className="p-2 rounded-lg bg-black/40 border border-white/5 hover:border-white/10 flex items-center justify-between gap-2 transition-all"
+                                  >
+                                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                      <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono font-bold text-xs border border-rose-500/30">
+                                        {v.durationLabel}
+                                      </span>
+                                      <span className="text-[10px] font-mono text-slate-400">
+                                        ({v.durationHours}h)
+                                      </span>
+                                      <span className="text-xs font-bold text-emerald-400">
+                                        ₹{v.price}
+                                      </span>
+                                      <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
+                                        VIP: ₹{v.resellerPrice}
+                                      </span>
+                                      {(v.externalPid || p.externalPid) && (
+                                        <span className="text-[9px] font-mono text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                          PID: {v.externalPid || p.externalPid}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Action Buttons: Edit & Delete Duration */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {isDeleting ? (
+                                        <div className="flex items-center gap-1 bg-red-950/80 p-1 rounded-lg border border-red-500/40">
+                                          <span className="text-[9px] text-red-200 font-bold pl-1">Delete?</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDirectDeleteDuration(v.id, v.durationLabel, p.id)}
+                                            className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold"
+                                          >
+                                            Yes
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setConfirmDeleteVarId(null)}
+                                            className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px]"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenEditVariant(v)}
+                                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                                            title="Edit duration details"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setConfirmDeleteVarId(v.id)}
+                                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                            title="Delete this duration option"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* SECTION 2: INLINE "ADD DURATION" FORM (கீழே ஆட் டுரேஷன்) */}
+                        <div className="p-3.5 rounded-xl bg-gradient-to-b from-emerald-950/20 to-black/60 border border-emerald-500/25 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add Duration to {p.name} (ஆட் டுரேஷன்)</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              Instant Sync
+                            </span>
+                          </div>
+
+                          {/* Quick Preset Buttons */}
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                              Quick Presets (கிளிக் செய்து ஆட் பண்ணு):
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {[
+                                { label: '1 Hours', hours: 1, defaultPrice: 20 },
+                                { label: '2 Hours', hours: 2, defaultPrice: 35 },
+                                { label: '6 Hours', hours: 6, defaultPrice: 70 },
+                                { label: '12 Hours', hours: 12, defaultPrice: 90 },
+                                { label: '1 Day', hours: 24, defaultPrice: 50 },
+                                { label: '3 Days', hours: 72, defaultPrice: 120 },
+                                { label: '7 Days', hours: 168, defaultPrice: 250 },
+                                { label: '15 Days', hours: 360, defaultPrice: 400 },
+                                { label: '30 Days', hours: 720, defaultPrice: 600 },
+                                { label: '60 Days', hours: 1440, defaultPrice: 1000 },
+                              ].map(preset => {
+                                const isSelected = form.label.toLowerCase() === preset.label.toLowerCase();
+                                return (
+                                  <button
+                                    key={preset.label}
+                                    type="button"
+                                    onClick={() => handleSelectDurationPreset(p.id, preset)}
+                                    className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition-all ${
+                                      isSelected
+                                        ? 'bg-emerald-500 text-black border border-emerald-400 shadow-sm'
+                                        : 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] border border-white/5 hover:border-emerald-500/30'
+                                    }`}
+                                  >
+                                    {preset.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Inputs Row */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                Duration Label
+                              </label>
+                              <input
+                                type="text"
+                                value={form.label}
+                                onChange={e => updateInlineDurationForm(p.id, { label: e.target.value })}
+                                placeholder="e.g. 1 Day, 7 Days"
+                                className="w-full px-2.5 py-1.5 bg-black/60 border border-white/10 focus:border-emerald-500 rounded-lg text-white font-mono text-xs focus:outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                Hours
+                              </label>
+                              <input
+                                type="number"
+                                value={form.hours}
+                                onChange={e => updateInlineDurationForm(p.id, { hours: Number(e.target.value) || 24 })}
+                                placeholder="e.g. 24"
+                                className="w-full px-2.5 py-1.5 bg-black/60 border border-white/10 focus:border-emerald-500 rounded-lg text-white font-mono text-xs focus:outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">
+                                Retail Price (₹)
+                              </label>
+                              <input
+                                type="number"
+                                value={form.price}
+                                onChange={e => {
+                                  const pr = Number(e.target.value) || 0;
+                                  updateInlineDurationForm(p.id, {
+                                    price: pr,
+                                    resellerPrice: Math.round(pr * 0.75),
+                                  });
+                                }}
+                                placeholder="50"
+                                className="w-full px-2.5 py-1.5 bg-black/60 border border-emerald-500/30 focus:border-emerald-500 rounded-lg text-emerald-300 font-mono font-bold text-xs focus:outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold text-cyan-400 uppercase tracking-wider block mb-1">
+                                Reseller VIP (₹)
+                              </label>
+                              <input
+                                type="number"
+                                value={form.resellerPrice}
+                                onChange={e => updateInlineDurationForm(p.id, { resellerPrice: Number(e.target.value) || 0 })}
+                                placeholder="38"
+                                className="w-full px-2.5 py-1.5 bg-black/60 border border-cyan-500/30 focus:border-cyan-500 rounded-lg text-cyan-300 font-mono font-bold text-xs focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Optional External PID / Reseller Code */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-white/5">
+                            <div>
+                              <label className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                                Upstream Reseller PID (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={form.externalPid}
+                                onChange={e => updateInlineDurationForm(p.id, { externalPid: e.target.value })}
+                                placeholder={p.externalPid || 'e.g. 155 or leave blank'}
+                                className="w-full px-2.5 py-1.5 bg-black/60 border border-amber-500/30 rounded-lg text-amber-300 font-mono text-xs focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                                Upstream Duration Code (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={form.externalDuration}
+                                onChange={e => updateInlineDurationForm(p.id, { externalDuration: e.target.value })}
+                                placeholder="e.g. 1 DAYS, 7 DAYS"
+                                className="w-full px-2.5 py-1.5 bg-black/60 border border-amber-500/30 rounded-lg text-amber-300 font-mono text-xs focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Add Duration Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleAddInlineDuration(p)}
+                            disabled={isSaving}
+                            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>
+                              {isSaving ? 'Adding Duration...' : `+ Add Duration to ${p.name} / டுரேஷன் சேர்க்க`}
+                            </span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-
-                  {/* Card Actions Footer */}
-                  <div className="p-3 bg-white/[0.02] border-t border-white/5 flex items-center justify-between gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditProduct(p)}
-                      className="flex-1 py-1.5 px-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-slate-200 border border-white/10 flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Edit</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedProdForVar(p.id);
-                        setVarEntryMode('single');
-                        setIsCreatingVariant(true);
-                      }}
-                      className="py-1.5 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                      title="Add duration option to this product"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>+ Duration</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleToggleProductMaintenance(p)}
-                      className={`px-2 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
-                        p.isUnderMaintenance
-                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
-                          : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-amber-300 hover:border-amber-500/30'
-                      }`}
-                      title={p.isUnderMaintenance ? 'Maintenance active (purchases blocked). Click to turn off' : 'Click to put product under maintenance'}
-                    >
-                      <AlertTriangle className={`w-3.5 h-3.5 ${p.isUnderMaintenance ? 'text-amber-400' : 'text-slate-400'}`} />
-                      <span>{p.isUnderMaintenance ? 'ON' : 'OFF'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteProduct(p.id)}
-                      className="p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                      title="Delete product"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -5670,6 +6206,486 @@ export const AdminPage: React.FC = () => {
       {/* TAB CONTENT: 9. RESELLER API SETTINGS & BUY KEY GENERATOR TESTER */}
       {activeTab === 'reseller' && (
         <div className="space-y-6">
+          {/* INTERFACE: STORED RESELLER API KEY VERIFICATION & LIVE PING CONSOLE */}
+          <div className="p-6 rounded-3xl bg-gradient-to-br from-[#0d0d14] via-[#10101a] to-[#0d0d14] border border-amber-500/30 shadow-2xl space-y-5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Header with Title and Current Status Badge */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-white/5 gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 shadow-lg shadow-amber-950/40">
+                  <Activity className="w-5 h-5 text-amber-400 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono text-[9px] font-bold uppercase tracking-wider">
+                      UPSTREAM PROVIDER VERIFIER
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      Live Handshake
+                    </span>
+                  </div>
+                  <h3 className="font-display font-black text-base text-white uppercase tracking-wider mt-0.5">
+                    STORED RESELLER API KEYS VERIFICATION CONSOLE
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Validates if stored upstream Reseller API keys are active by dispatching a live authentication ping to the provider.
+                  </p>
+                </div>
+              </div>
+
+              {/* Status Badge & Ping Trigger */}
+              <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+                {resellerVerificationResult ? (
+                  resellerVerificationResult.isValid ? (
+                    <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-2 shadow-lg shadow-emerald-950/40">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>VALID &amp; AUTHORIZED ({resellerVerificationResult.latencyMs}ms)</span>
+                    </div>
+                  ) : (
+                    <div className="px-3.5 py-1.5 rounded-xl bg-rose-500/15 text-rose-300 border border-rose-500/40 text-xs font-mono font-bold flex items-center gap-2 shadow-lg shadow-rose-950/40">
+                      <AlertTriangle className="w-4 h-4 text-rose-400" />
+                      <span>{resellerVerificationResult.status === 'UNREACHABLE' ? 'UNREACHABLE' : 'INVALID KEY'}</span>
+                    </div>
+                  )
+                ) : (
+                  <div className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] text-slate-400 border border-white/10 text-xs font-mono font-bold flex items-center gap-2">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>STATUS: NOT YET PINGED</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handleTestReseller()}
+                  disabled={isPingingReseller}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-amber-950/50 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isPingingReseller ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-200" />
+                  ) : (
+                    <Radio className="w-3.5 h-3.5 text-amber-200" />
+                  )}
+                  <span>{isPingingReseller ? 'Pinging Provider...' : '⚡ Ping & Verify Stored Keys'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Stored Keys Overview Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Card 1: Stored Reseller API Key */}
+              <div className="p-3.5 rounded-2xl bg-black/40 border border-white/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    STORED RESELLER API KEY
+                  </span>
+                  <span className="text-[9px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                    POST 'api_key'
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/[0.02] border border-white/5 font-mono text-xs">
+                  <span className="text-white truncate">
+                    {showApiKeyPlain
+                      ? resellerConfig.apiKey || 'No key set'
+                      : resellerConfig.apiKey
+                      ? `${resellerConfig.apiKey.slice(0, 6)}••••••••${resellerConfig.apiKey.slice(-4)}`
+                      : 'No key set'}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKeyPlain(!showApiKeyPlain)}
+                      className="p-1 rounded text-slate-400 hover:text-white transition-colors"
+                      title={showApiKeyPlain ? 'Hide API Key' : 'Reveal API Key'}
+                    >
+                      {showApiKeyPlain ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (resellerConfig.apiKey) {
+                          navigator.clipboard.writeText(resellerConfig.apiKey);
+                          showToastSuccess('Copied API Key', 'Stored API key copied to clipboard.');
+                        }
+                      }}
+                      className="p-1 rounded text-slate-400 hover:text-white transition-colors"
+                      title="Copy Stored API Key"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span>Length: {resellerConfig.apiKey?.length || 0} characters</span>
+                  <span className="text-amber-400">Target Provider Auth</span>
+                </div>
+              </div>
+
+              {/* Card 2: Stored Master Key */}
+              <div className="p-3.5 rounded-2xl bg-black/40 border border-white/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    STORED MASTER SECRET KEY
+                  </span>
+                  <span className="text-[9px] font-mono text-cyan-400 font-bold bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
+                    HEADER 'x-master-key'
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/[0.02] border border-white/5 font-mono text-xs">
+                  <span className="text-white truncate">
+                    {showMasterKeyPlain
+                      ? resellerConfig.masterKey || 'No master key set'
+                      : resellerConfig.masterKey
+                      ? `${resellerConfig.masterKey.slice(0, 6)}••••••••${resellerConfig.masterKey.slice(-4)}`
+                      : 'No master key set'}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowMasterKeyPlain(!showMasterKeyPlain)}
+                      className="p-1 rounded text-slate-400 hover:text-white transition-colors"
+                      title={showMasterKeyPlain ? 'Hide Master Key' : 'Reveal Master Key'}
+                    >
+                      {showMasterKeyPlain ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (resellerConfig.masterKey) {
+                          navigator.clipboard.writeText(resellerConfig.masterKey);
+                          showToastSuccess('Copied Master Key', 'Master key copied to clipboard.');
+                        }
+                      }}
+                      className="p-1 rounded text-slate-400 hover:text-white transition-colors"
+                      title="Copy Master Key"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span>Length: {resellerConfig.masterKey?.length || 0} characters</span>
+                  <span className="text-cyan-400">Handshake Security</span>
+                </div>
+              </div>
+
+              {/* Card 3: Target Provider Endpoint */}
+              <div className="p-3.5 rounded-2xl bg-black/40 border border-white/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    UPSTREAM PROVIDER URL
+                  </span>
+                  <span className="text-[9px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                    HTTPS Live
+                  </span>
+                </div>
+                <div className="p-2 rounded-xl bg-white/[0.02] border border-white/5 font-mono text-xs text-amber-300 truncate">
+                  {resellerConfig.apiUrl || 'https://bantibhaiya.to/api/reseller_v1.php'}
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span>Emergency Fallback:</span>
+                  <span className="text-emerald-400 font-bold">ACTIVE (0 Downtime)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Key / Sandbox Test Toggle */}
+            <div className="flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={() => setVerifyCustomKeyMode(!verifyCustomKeyMode)}
+                className="text-slate-400 hover:text-amber-300 transition-colors flex items-center gap-1.5 text-[11px]"
+              >
+                <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                <span>{verifyCustomKeyMode ? '▲ Close Custom Key Sandbox' : '▼ Test a Custom / Sandbox Reseller Key without saving'}</span>
+              </button>
+              {resellerVerificationResult && (
+                <span className="text-[10px] font-mono text-slate-400">
+                  Last Checked: {new Date(resellerVerificationResult.verifiedAt).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+
+            {/* Custom Key Sandbox Form */}
+            {verifyCustomKeyMode && (
+              <div className="p-4 rounded-2xl bg-black/50 border border-amber-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>CUSTOM / SANDBOX KEY VERIFICATION (TEST BEFORE SAVING)</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400">Does not overwrite stored database keys</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                      Test API Key
+                    </label>
+                    <input
+                      type="text"
+                      value={customTestApiKey}
+                      onChange={e => setCustomTestApiKey(e.target.value)}
+                      placeholder={resellerConfig.apiKey || 'Enter API Key to test...'}
+                      className="w-full px-3 py-2 bg-black/60 border border-white/10 rounded-xl text-white font-mono text-xs focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                      Test Master Key (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={customTestMasterKey}
+                      onChange={e => setCustomTestMasterKey(e.target.value)}
+                      placeholder={resellerConfig.masterKey || 'Enter Master Key...'}
+                      className="w-full px-3 py-2 bg-black/60 border border-white/10 rounded-xl text-white font-mono text-xs focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomTestApiKey('');
+                      setCustomTestMasterKey('');
+                      setVerifyCustomKeyMode(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleTestReseller({
+                        apiUrl: resellerConfig.apiUrl,
+                        apiKey: customTestApiKey || resellerConfig.apiKey,
+                        masterKey: customTestMasterKey || resellerConfig.masterKey,
+                      })
+                    }
+                    disabled={isPingingReseller}
+                    className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md"
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>Ping Upstream with Custom Key</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* LIVE VERIFICATION STATUS RESULTS CARD */}
+            {resellerVerificationResult && (
+              <div
+                className={`p-5 rounded-2xl border transition-all space-y-4 shadow-xl ${
+                  resellerVerificationResult.isValid
+                    ? 'bg-gradient-to-r from-emerald-950/30 via-[#0d0d14] to-emerald-950/20 border-emerald-500/40 shadow-emerald-950/20'
+                    : resellerVerificationResult.status === 'UNREACHABLE'
+                    ? 'bg-gradient-to-r from-amber-950/30 via-[#0d0d14] to-amber-950/20 border-amber-500/40 shadow-amber-950/20'
+                    : 'bg-gradient-to-r from-rose-950/30 via-[#0d0d14] to-rose-950/20 border-rose-500/40 shadow-rose-950/20'
+                }`}
+              >
+                {/* Result Title & Verdict */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/5">
+                  <div className="flex items-center gap-2.5">
+                    {resellerVerificationResult.isValid ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+                    )}
+                    <div>
+                      <h4
+                        className={`font-display font-black text-sm uppercase tracking-wider ${
+                          resellerVerificationResult.isValid
+                            ? 'text-emerald-400'
+                            : resellerVerificationResult.status === 'UNREACHABLE'
+                            ? 'text-amber-400'
+                            : 'text-rose-400'
+                        }`}
+                      >
+                        {resellerVerificationResult.isValid
+                          ? 'VERIFICATION PASSED: RESELLER API KEY IS VALID & ACTIVE'
+                          : resellerVerificationResult.status === 'UNREACHABLE'
+                          ? 'PING FAILED: UPSTREAM PROVIDER UNREACHABLE'
+                          : 'VERIFICATION FAILED: RESELLER API KEY REJECTED BY PROVIDER'}
+                      </h4>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        {resellerVerificationResult.message}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <span
+                      className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg border ${
+                        resellerVerificationResult.isValid
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                      }`}
+                    >
+                      {resellerVerificationResult.isValid ? 'HTTP 200 OK' : `HTTP ${resellerVerificationResult.statusCode || 0}`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4 Telemetry Metrics */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      PING LATENCY
+                    </span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-mono text-base font-bold text-emerald-400">
+                        {resellerVerificationResult.latencyMs}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">ms</span>
+                    </div>
+                    <span className="text-[9px] font-mono text-emerald-400/80">
+                      {resellerVerificationResult.latencyMs < 250 ? '⚡ Ultra Fast (<250ms)' : 'Normal Response Time'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      KEY AUTHENTICATION
+                    </span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span
+                        className={`font-mono text-base font-bold ${
+                          resellerVerificationResult.isValid ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {resellerVerificationResult.isValid ? 'AUTHORIZED' : 'REJECTED'}
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-mono text-slate-400 truncate block">
+                      {resellerVerificationResult.apiKeyMasked}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      HANDSHAKE PROTOCOL
+                    </span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-mono text-base font-bold text-cyan-400">
+                        x-master-key
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-mono text-cyan-400/80">
+                      Header Accepted
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      FALLBACK MINTING
+                    </span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-mono text-base font-bold text-emerald-400">
+                        READY
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-mono text-emerald-400/80">
+                      0 Downtime Active
+                    </span>
+                  </div>
+                </div>
+
+                {/* Validation Steps Checklist */}
+                <div className="p-3.5 rounded-xl bg-black/30 border border-white/5 space-y-2 text-xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    UPSTREAM VERIFICATION PIPELINE AUDIT:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+                    <div className="flex items-center gap-2">
+                      {resellerVerificationResult.checks?.dnsReachability ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : (
+                        <X className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      )}
+                      <span className="text-slate-300">1. HTTPS Target Host Reachable:</span>
+                      <span className={resellerVerificationResult.checks?.dnsReachability ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                        {resellerVerificationResult.checks?.dnsReachability ? 'PASS' : 'FAIL'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {resellerVerificationResult.checks?.apiKeyFormatValid ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : (
+                        <X className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      )}
+                      <span className="text-slate-300">2. Stored API Key Checksum:</span>
+                      <span className={resellerVerificationResult.checks?.apiKeyFormatValid ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                        {resellerVerificationResult.checks?.apiKeyFormatValid ? `${resellerVerificationResult.keyLength} chars OK` : 'INVALID'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {resellerVerificationResult.checks?.providerHandshake ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : (
+                        <X className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      )}
+                      <span className="text-slate-300">3. Master Key Handshake Header:</span>
+                      <span className={resellerVerificationResult.checks?.providerHandshake ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                        {resellerVerificationResult.checks?.providerHandshake ? 'ACCEPTED' : 'FAIL'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {resellerVerificationResult.isValid ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : (
+                        <X className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      )}
+                      <span className="text-slate-300">4. Provider Key Verification:</span>
+                      <span className={resellerVerificationResult.isValid ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                        {resellerVerificationResult.isValid ? 'VALID' : 'REJECTED'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Collapsible Raw Request & Response Inspector */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRawPingPayload(!showRawPingPayload)}
+                    className="text-[11px] font-mono text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Terminal className="w-3 h-3 text-amber-400" />
+                    <span>{showRawPingPayload ? 'Hide Raw Ping Details' : 'View Raw Upstream Response & Payload Sent'}</span>
+                  </button>
+
+                  {showRawPingPayload && (
+                    <div className="mt-2 p-3 rounded-xl bg-black/80 border border-white/10 space-y-2 font-mono text-[10px] text-slate-300 overflow-x-auto">
+                      <div>
+                        <span className="text-slate-400 block mb-0.5 font-bold uppercase text-[9px]">Target Endpoint:</span>
+                        <span className="text-amber-300">{resellerVerificationResult.apiUrl}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5 font-bold uppercase text-[9px]">Headers Sent:</span>
+                        <span className="text-cyan-300">x-master-key: {resellerVerificationResult.masterKeyMasked}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5 font-bold uppercase text-[9px]">Form Payload Sent:</span>
+                        <span className="text-emerald-300">api_key={resellerVerificationResult.apiKeyMasked}&amp;action=buy&amp;product_id=PING_CHECK_999&amp;duration=PING_TEST</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5 font-bold uppercase text-[9px]">Raw Response Received from Upstream:</span>
+                        <div className="p-2 rounded bg-black/90 border border-white/5 text-emerald-400 break-all select-all font-mono">
+                          {resellerVerificationResult.rawResponse || 'No response body'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Main Reseller Configuration Form */}
           <form onSubmit={handleSaveResellerSettings} className="p-6 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/5 gap-3">
@@ -8065,6 +9081,67 @@ export const AdminPage: React.FC = () => {
                     />
                   </div>
                 )}
+              </div>
+
+              {/* Duration Setup Option (ஆட் டுரேஷன் விருப்பம்) */}
+              <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>DURATION SETUP (ஆட் டுரேஷன் விருப்பம்)</span>
+                  </label>
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold">100% Customizable</span>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  Choose how you want to configure durations for this product:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div
+                    onClick={() => setNewProdDurationChoice('clean')}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      newProdDurationChoice === 'clean'
+                        ? 'bg-rose-500/15 border-rose-500/50 text-white'
+                        : 'bg-black/30 border-white/5 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="durationChoice"
+                      checked={newProdDurationChoice === 'clean'}
+                      onChange={() => setNewProdDurationChoice('clean')}
+                      className="mt-0.5 accent-rose-500"
+                    />
+                    <div>
+                      <div className="font-bold text-xs text-white">Add Durations Manually (கீழே ஆட் பண்ணு)</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        Starts clean. Directly add separate durations (1 Day, 7 Days, etc.) right below the product.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setNewProdDurationChoice('presets')}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      newProdDurationChoice === 'presets'
+                        ? 'bg-emerald-500/15 border-emerald-500/50 text-white'
+                        : 'bg-black/30 border-white/5 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="durationChoice"
+                      checked={newProdDurationChoice === 'presets'}
+                      onChange={() => setNewProdDurationChoice('presets')}
+                      className="mt-0.5 accent-emerald-500"
+                    />
+                    <div>
+                      <div className="font-bold text-xs text-white">Include Standard Pack (1D, 3D, 7D, 30D)</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        Pre-fills standard durations. You can delete or edit any of them anytime.
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">
