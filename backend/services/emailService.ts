@@ -269,12 +269,11 @@ export class EmailService {
           message: 'Verification code sent to your inbox.',
         };
       } catch (err: any) {
-        console.warn('Real SMTP send failed, falling back to simulated delivery:', err.message);
         db.logActivity(
           undefined,
           email,
           'EMAIL_OTP_FALLBACK',
-          `SMTP attempt failed (${err.message}). OTP generated for preview: ${code}`
+          `SMTP attempt notice (${err.message}). OTP code generated: ${code}`
         );
 
         return {
@@ -417,12 +416,11 @@ export class EmailService {
           message: 'Password reset instructions dispatched to your inbox.',
         };
       } catch (err: any) {
-        console.warn('SMTP send failed for reset email:', err.message);
         db.logActivity(
           undefined,
           email,
           'PASSWORD_RESET_EMAIL_FALLBACK',
-          `SMTP attempt failed (${err.message}). Token generated: ${resetToken}`
+          `SMTP attempt notice (${err.message}). Token generated: ${resetToken}`
         );
 
         return {

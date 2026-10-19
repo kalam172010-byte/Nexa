@@ -96,6 +96,86 @@ export class WalletService {
     return { user, transaction };
   }
 
+  /**
+   * Server-side validation service method that verifies a user's current wallet balance
+   * against the required key purchase price before allowing key generation, and performs
+   * atomic deduction strictly from that specific user's account.
+   */
+  public static async verifyAndDeductApiKeyPurchase(
+    userId: string,
+    totalPrice: number,
+    description: string,
+    referenceId?: string
+  ): Promise<{
+    success: boolean;
+    user?: User;
+    transaction?: Transaction;
+    currentBalance: number;
+    remainingBalance: number;
+    error?: string;
+  }> {
+    const user = db.users.find(u => u.id === userId);
+    if (!user) {
+      return {
+        success: false,
+        currentBalance: 0,
+        remainingBalance: 0,
+        error: 'User account not found.',
+      };
+    }
+
+    // Refresh balance from Firestore if possible for real-time accuracy
+    try {
+      const url = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(userId)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const docData: any = await res.json();
+        if (docData?.fields?.balance) {
+          const fsBal = typeof docData.fields.balance.doubleValue === 'number'
+            ? docData.fields.balance.doubleValue
+            : typeof docData.fields.balance.integerValue === 'string'
+            ? parseInt(docData.fields.balance.integerValue, 10)
+            : Number(docData.fields.balance.doubleValue || 0);
+          if (typeof fsBal === 'number') {
+            user.balance = fsBal;
+          }
+        }
+      }
+    } catch {}
+
+    const currentBalance = user.balance;
+
+    if (currentBalance < totalPrice) {
+      return {
+        success: false,
+        user,
+        currentBalance,
+        remainingBalance: currentBalance,
+        error: `Insufficient wallet balance in your API account (@${user.username}). Available Balance: ₹${currentBalance.toFixed(2)}, Required: ₹${totalPrice.toFixed(2)}. Key purchase denied.`,
+      };
+    }
+
+    // Atomic deduction
+    try {
+      const { user: updatedUser, transaction } = this.deductFunds(userId, totalPrice, description, referenceId);
+      return {
+        success: true,
+        user: updatedUser,
+        transaction,
+        currentBalance,
+        remainingBalance: updatedUser.balance,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        user,
+        currentBalance,
+        remainingBalance: currentBalance,
+        error: err.message || 'Failed to deduct wallet funds.',
+      };
+    }
+  }
+
   public static processReferralReward(userId: string, purchaseAmount: number): void {
     const user = db.users.find(u => u.id === userId);
     if (!user || !user.referredBy) return;

@@ -275,37 +275,35 @@ export class OutboundResellerController {
       const unitPrice = Math.max(1, isResellerOrAdmin ? matchedVariant.resellerPrice : matchedVariant.price);
       const totalPrice = unitPrice * quantity;
 
-      // 5. STRICT WALLET BALANCE VERIFICATION (Must have funds in wallet to generate keys via API - NO BYPASSES)
-      const currentBalance = WalletService.getBalance(user.id);
-      if (currentBalance <= 0 || currentBalance < totalPrice) {
-        db.logActivity(
-          user.id,
-          user.username,
-          'RESELLER_API_LOW_BALANCE',
-          `External API buy blocked for ${matchedProduct.name} (${quantity}x ${matchedVariant.durationLabel}): Insufficient wallet balance (₹${currentBalance} < ₹${totalPrice})`
-        );
-        res.status(400).json({
-          status: false,
-          status_code: 400,
-          error: `Insufficient wallet balance in your API account (@${user.username}). Required: ₹${totalPrice.toFixed(2)}, Available Wallet Balance: ₹${currentBalance.toFixed(2)}. Key cannot be generated without wallet balance.`,
-          message: `Insufficient wallet balance in your API account (@${user.username}). Required: ₹${totalPrice.toFixed(2)}, Available Wallet Balance: ₹${currentBalance.toFixed(2)}. Key cannot be generated without wallet balance.`,
-          required_amount: totalPrice,
-          current_balance: currentBalance,
-        });
-        return;
-      }
-
       const orderId = `ORD-EXT-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
-      // 6. Strictly deduct funds from the API account's wallet
-      WalletService.deductFunds(
+      // 5. SERVER-SIDE WALLET BALANCE VALIDATION & ATOMIC DEDUCTION LAYER
+      const verification = await WalletService.verifyAndDeductApiKeyPurchase(
         user.id,
         totalPrice,
         `[This Key Buyed by API] External API Purchase (${quantity}x): ${matchedProduct.name} (${matchedVariant.durationLabel})`,
         orderId
       );
 
-      const remainingBalance = WalletService.getBalance(user.id);
+      if (!verification.success) {
+        db.logActivity(
+          user.id,
+          user.username,
+          'RESELLER_API_LOW_BALANCE',
+          `External API buy blocked for ${matchedProduct.name}: ${verification.error}`
+        );
+        res.status(400).json({
+          status: false,
+          status_code: 400,
+          error: verification.error,
+          message: verification.error,
+          required_amount: totalPrice,
+          current_balance: verification.currentBalance,
+        });
+        return;
+      }
+
+      const remainingBalance = verification.remainingBalance;
       // Immediately sync balance to Firestore so website UI reflects deduction in real-time
       FirestoreSyncService.syncUserBalance(user.id, remainingBalance).catch(e => {
         console.warn('[OutboundReseller] Firestore balance sync warning:', e);
@@ -420,22 +418,37 @@ export class OutboundResellerController {
         createdAt: now.toISOString(),
       };
       db.orders.unshift(newOrder);
-      db.saveSync();
 
-      // Sync Order to Firestore in real-time
-      FirestoreSyncService.syncOrder(newOrder).catch(e => {
-        console.warn('[OutboundReseller] Firestore order sync warning:', e);
-      });
-
-      // Sync Transaction to Firestore in real-time
-      const latestTx = db.transactions.find(t => t.referenceId === orderId);
+      const latestTx = db.transactions.find(t => t.referenceId === orderId) || {
+        id: `TXN-${Date.now()}`,
+        userId: user.id,
+        type: 'PURCHASE' as const,
+        amount: -totalPrice,
+        description: `[This Key Buyed by API] External API Purchase (${quantity}x): ${matchedProduct.name} (${matchedVariant.durationLabel})`,
+        referenceId: orderId,
+        status: 'SUCCESS' as const,
+        purchaseSource: 'API' as const,
+        purchaseSourceLabel: 'Buy from API',
+        createdAt: now.toISOString(),
+      };
       if (latestTx) {
         latestTx.purchaseSource = 'API';
         latestTx.purchaseSourceLabel = 'Buy from API';
-        FirestoreSyncService.syncTransaction(latestTx).catch(e => {
-          console.warn('[OutboundReseller] Firestore tx sync warning:', e);
-        });
       }
+
+      db.saveSync();
+
+      // EXECUTE ATOMIC TRANSACTION COMMIT IN FIRESTORE
+      // Simultaneously updates user balance, stores issued digital keys, order record, and debit transaction
+      FirestoreSyncService.commitAtomicKeyPurchase({
+        userId: user.id,
+        newBalance: remainingBalance,
+        keyObjects: deliveredKeyObjects,
+        order: newOrder,
+        transaction: latestTx,
+      }).catch(e => {
+        console.warn('[OutboundReseller] Atomic commit background notice:', e);
+      });
 
       db.logActivity(
         user.id,

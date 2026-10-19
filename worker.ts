@@ -723,6 +723,25 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     const isResellerOrAdmin = user.role === 'RESELLER' || user.role === 'ADMIN' || user.role === 'SUPER ADMIN';
     const unitPrice = Number(isResellerOrAdmin ? variant.resellerPrice : variant.price) || 80;
     const totalPrice = Number((unitPrice * quantity).toFixed(2));
+    // Fetch latest balance from Firestore for 100% up-to-date real-time accuracy
+    try {
+      const uDocUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(user.id)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      const uRes = await fetch(uDocUrl);
+      if (uRes.ok) {
+        const uData: any = await uRes.json();
+        if (uData && uData.fields && uData.fields.balance) {
+          const fsBal = typeof uData.fields.balance.doubleValue === 'number'
+            ? uData.fields.balance.doubleValue
+            : typeof uData.fields.balance.integerValue === 'string'
+            ? parseInt(uData.fields.balance.integerValue, 10)
+            : Number(uData.fields.balance.doubleValue || 0);
+          if (typeof fsBal === 'number') {
+            user.balance = fsBal;
+          }
+        }
+      }
+    } catch {}
+
     const currentBalance = Number(user.balance || 0);
 
     // STRICT WALLET BALANCE CHECK: Never generate a key via API if the user's wallet has insufficient balance!

@@ -355,20 +355,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                     </button>
                   </div>
 
-                  {previewOtp && (
-                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs flex items-center justify-between">
-                      <span>
-                        Code: <strong className="font-mono text-white text-sm tracking-wider tabular-nums">{previewOtp}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setOtpCode(previewOtp)}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs font-medium transition-colors cursor-pointer"
-                      >
-                        Fill Code
-                      </button>
-                    </div>
-                  )}
+
 
                   <div>
                     <label className="text-xs font-medium text-slate-300 block mb-1.5">

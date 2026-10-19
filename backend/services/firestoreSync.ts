@@ -265,4 +265,136 @@ export class FirestoreSyncService {
       console.warn('[FirestoreSync] Failed to update user apiKey in Firestore:', err);
     }
   }
+
+  /**
+   * Executes an ATOMIC Firestore transaction (:commit batch write) that simultaneously:
+   * 1. Deducts the product price from the specific user's balance
+   * 2. Writes the newly issued digital key document into digitalKeys
+   * 3. Records the purchase order document in orders
+   * 4. Records the purchase debit record in transactions
+   *
+   * Guarantees atomic all-or-nothing execution: the purchase history and key records
+   * are written ONLY if the balance deduction and transaction commit succeeds!
+   */
+  public static async commitAtomicKeyPurchase(params: {
+    userId: string;
+    newBalance: number;
+    keyObjects: DigitalKey[];
+    order: Order;
+    transaction: Transaction;
+  }): Promise<boolean> {
+    const { userId, newBalance, keyObjects, order, transaction } = params;
+    const commitUrl = `${FIRESTORE_BASE}:commit?key=${API_KEY}`;
+
+    const writes: any[] = [];
+
+    // 1. Write user balance update
+    const user = db.users.find(u => u.id === userId);
+    const userIdsToSync = new Set<string>([userId]);
+    if (user && (user as any).firebaseUid) {
+      userIdsToSync.add((user as any).firebaseUid);
+    }
+
+    for (const uid of userIdsToSync) {
+      writes.push({
+        update: {
+          name: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/users/${encodeURIComponent(uid)}`,
+          fields: {
+            balance: { doubleValue: Number(newBalance) },
+            updatedAt: { stringValue: new Date().toISOString() },
+          },
+        },
+        updateMask: {
+          fieldPaths: ['balance', 'updatedAt'],
+        },
+      });
+    }
+
+    // 2. Write digital keys
+    for (const key of keyObjects) {
+      const product = db.products.find(p => p.id === key.productId);
+      const variant = db.productVariants.find(v => v.id === key.variantId);
+      writes.push({
+        update: {
+          name: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/digitalKeys/${encodeURIComponent(key.id)}`,
+          fields: {
+            id: { stringValue: key.id },
+            productId: { stringValue: key.productId },
+            variantId: { stringValue: key.variantId || '' },
+            productName: { stringValue: key.productName || product?.name || 'Gaming Digital Key' },
+            gameName: { stringValue: key.gameName || product?.game || 'FREEFIRE' },
+            durationLabel: { stringValue: key.durationLabel || variant?.durationLabel || '1 Day' },
+            keyCode: { stringValue: key.keyCode },
+            isUsed: { booleanValue: Boolean(key.isUsed) },
+            status: { stringValue: key.status || 'ACTIVE' },
+            assignedUserId: { stringValue: key.assignedUserId || userId },
+            assignedOrderId: { stringValue: key.assignedOrderId || order.id },
+            assignedAt: { stringValue: key.assignedAt || new Date().toISOString() },
+            expiresAt: { stringValue: key.expiresAt || new Date(Date.now() + 24 * 3600 * 1000).toISOString() },
+            purchaseSource: { stringValue: key.purchaseSource || 'API' },
+            purchaseSourceLabel: { stringValue: key.purchaseSourceLabel || 'Buy from API' },
+            createdAt: { stringValue: key.createdAt || new Date().toISOString() },
+          },
+        },
+      });
+    }
+
+    // 3. Write order document
+    writes.push({
+      update: {
+        name: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/orders/${encodeURIComponent(order.id)}`,
+        fields: {
+          id: { stringValue: order.id },
+          userId: { stringValue: order.userId },
+          productId: { stringValue: order.productId },
+          variantId: { stringValue: order.variantId },
+          productName: { stringValue: order.productName },
+          durationLabel: { stringValue: order.durationLabel },
+          pricePaid: { doubleValue: Number(order.pricePaid) },
+          deliveredKeyId: { stringValue: order.deliveredKeyId || order.id },
+          deliveredKeyCode: { stringValue: order.deliveredKeyCode || '' },
+          status: { stringValue: order.status || 'COMPLETED' },
+          purchaseSource: { stringValue: order.purchaseSource || 'API' },
+          purchaseSourceLabel: { stringValue: order.purchaseSourceLabel || 'Buy from API' },
+          createdAt: { stringValue: order.createdAt || new Date().toISOString() },
+        },
+      },
+    });
+
+    // 4. Write transaction document
+    const ruleType = transaction.type === 'PURCHASE' ? 'DEBIT' : transaction.type;
+    writes.push({
+      update: {
+        name: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/transactions/${encodeURIComponent(transaction.id)}`,
+        fields: {
+          id: { stringValue: transaction.id },
+          userId: { stringValue: transaction.userId },
+          type: { stringValue: ruleType },
+          amount: { doubleValue: Number(transaction.amount) },
+          description: { stringValue: transaction.description },
+          referenceId: { stringValue: transaction.referenceId || '' },
+          purchaseSource: { stringValue: transaction.purchaseSource || 'API' },
+          purchaseSourceLabel: { stringValue: transaction.purchaseSourceLabel || 'Buy from API' },
+          createdAt: { stringValue: transaction.createdAt || new Date().toISOString() },
+        },
+      },
+    });
+
+    try {
+      const res = await fetch(commitUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ writes }),
+      });
+
+      if (!res.ok) {
+        console.warn('[FirestoreSync] Atomic commit API returned status:', res.status, await res.text());
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('[FirestoreSync] Error performing atomic commit:', err);
+      return false;
+    }
+  }
 }

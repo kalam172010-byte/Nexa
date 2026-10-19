@@ -12,6 +12,7 @@ import {
   Users,
   Sparkles,
   TrendingUp,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useSite } from '../context/SiteContext.js';
@@ -30,6 +31,8 @@ interface LeaderboardUser {
   keysCount: number;
   totalSpent: number;
 }
+
+
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
