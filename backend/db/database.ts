@@ -105,6 +105,31 @@ export class Database {
         if (Array.isArray(parsed.products) && Array.isArray(parsed.productVariants)) {
           const productIds = new Set(parsed.products.map((p: any) => p.id));
           parsed.productVariants = parsed.productVariants.filter((v: any) => productIds.has(v.productId));
+          for (const v of parsed.productVariants) {
+            if (typeof v.price === 'number' && v.price > 0) {
+              v.resellerPrice = v.price;
+            }
+          }
+        }
+        if (Array.isArray(parsed.users)) {
+          const seenApiKeys = new Set<string>();
+          let modifiedUsers = false;
+          for (const u of parsed.users) {
+            if (
+              !u.apiKey ||
+              seenApiKeys.has(u.apiKey) ||
+              u.apiKey === 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
+            ) {
+              u.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+              modifiedUsers = true;
+            }
+            seenApiKeys.add(u.apiKey);
+          }
+          if (modifiedUsers) {
+            try {
+              fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+            } catch {}
+          }
         }
         return parsed;
       } catch (err) {

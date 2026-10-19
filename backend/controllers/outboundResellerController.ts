@@ -86,22 +86,30 @@ export class OutboundResellerController {
         return;
       }
 
-      // 1. Authenticate user/reseller strictly by their account API key
+      // 1. Authenticate user/reseller strictly by their unique account API key
       const cleanApiKey = String(apiKey).trim();
       const headerUserId = (req.headers['x-user-id'] as string | undefined)?.trim();
       const headerEmail = (req.headers['x-user-email'] as string | undefined)?.toLowerCase().trim();
 
-      // Check local DB first
+      // Check local DB first by exact API key match
       let user = db.users.find(u => u.apiKey && u.apiKey.trim() === cleanApiKey);
 
-      // If not in local DB, search Firestore in real-time
+      // If not in local DB, search Firestore in real-time by exact API key
       if (!user) {
         const firestoreUser = await FirestoreSyncService.findUserByApiKey(cleanApiKey);
         if (firestoreUser) {
-          const localMatch = db.users.find(u => u.id === firestoreUser.id);
+          const localMatch = db.users.find(
+            u =>
+              u.id === firestoreUser.id ||
+              (firestoreUser.firebaseUid && u.id === firestoreUser.firebaseUid) ||
+              (firestoreUser.email && u.email.toLowerCase() === firestoreUser.email.toLowerCase())
+          );
           if (localMatch) {
             localMatch.apiKey = cleanApiKey;
             localMatch.balance = firestoreUser.balance;
+            if (firestoreUser.firebaseUid) {
+              localMatch.firebaseUid = firestoreUser.firebaseUid;
+            }
             user = localMatch;
           } else {
             db.users.push(firestoreUser);
@@ -111,25 +119,19 @@ export class OutboundResellerController {
         }
       }
 
-      // Check header hint if still not matched
-      if (!user && (headerUserId || headerEmail)) {
-        user = db.users.find(
+      // Check header hint ONLY if the user does not already have a different API key assigned
+      if (!user && (headerUserId || headerEmail) && cleanApiKey.startsWith('nexa_live_')) {
+        const candidate = db.users.find(
           u =>
-            (headerUserId && u.id === headerUserId) ||
+            (headerUserId && (u.id === headerUserId || u.firebaseUid === headerUserId)) ||
             (headerEmail && u.email.toLowerCase() === headerEmail)
         );
-        if (user && cleanApiKey.startsWith('nexa_live_')) {
-          user.apiKey = cleanApiKey;
+        if (candidate && (!candidate.apiKey || candidate.apiKey.trim() === cleanApiKey)) {
+          candidate.apiKey = cleanApiKey;
+          user = candidate;
           db.saveSync();
           FirestoreSyncService.syncUserApiKey(user.id, cleanApiKey).catch(() => {});
         }
-      }
-
-      // Master admin key fallback if explicitly provided
-      if (!user && (cleanApiKey === 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7' || cleanApiKey === 'nexa_master_admin_token')) {
-        user =
-          db.users.find(u => u.email.toLowerCase() === 'kalam172010@gmail.com' || u.email.toLowerCase() === 'kalamkalam1234kd@gmail.com') ||
-          db.users.find(u => u.role === 'ADMIN' || u.role === 'SUPER ADMIN');
       }
 
       if (!user) {
@@ -152,6 +154,15 @@ export class OutboundResellerController {
         return;
       }
 
+      // Refresh authoritative balance from Firestore so external API checks are 100% accurate
+      try {
+        const liveBal = await FirestoreSyncService.getAuthoritativeBalance(user);
+        if (typeof liveBal === 'number' && !Number.isNaN(liveBal)) {
+          user.balance = liveBal;
+          db.saveSync();
+        }
+      } catch {}
+
       // External panels balance verification handshake: action=get_balance or action=balance
       if (rawAction === 'get_balance' || rawAction === 'balance' || rawAction === 'check_balance' || rawAction === 'status') {
         const bal = WalletService.getBalance(user.id);
@@ -162,6 +173,7 @@ export class OutboundResellerController {
           wallet_balance: bal,
           user: user.username,
           username: user.username,
+          email: user.email,
           role: user.role,
           currency: 'INR',
           message: 'Account verified successfully.',
@@ -171,7 +183,6 @@ export class OutboundResellerController {
 
       // External panels service list handshake: action=get_products or action=products or action=services
       if (rawAction === 'get_products' || rawAction === 'products' || rawAction === 'services') {
-        const isResellerOrAdmin = user.role === 'RESELLER' || user.role === 'ADMIN' || user.role === 'SUPER ADMIN';
         const productsList = db.products.map(p => {
           const variants = db.productVariants.filter(v => v.productId === p.id && v.isActive);
           return {
@@ -183,7 +194,7 @@ export class OutboundResellerController {
               variantId: v.id,
               durationLabel: v.durationLabel,
               externalPid: v.externalPid || p.externalPid || '155',
-              price: isResellerOrAdmin ? v.resellerPrice : v.price,
+              price: v.price,
             })),
           };
         });
@@ -205,23 +216,75 @@ export class OutboundResellerController {
         return;
       }
 
-      // 2. Find product by numeric PID or ID (e.g. "155", "66", "150", "123")
+      // 2. Find product & variant by numeric PID and Duration
       const cleanPid = String(productId).trim();
       const cleanDuration = String(duration).trim().toLowerCase();
 
-      let matchedProduct = db.products.find(p => 
-        String(p.externalPid).trim() === cleanPid ||
-        String(p.id).trim().toLowerCase() === cleanPid.toLowerCase()
+      // Candidate products matching PID
+      const candidateProducts = db.products.filter(
+        p =>
+          String(p.externalPid).trim() === cleanPid ||
+          String(p.id).trim().toLowerCase() === cleanPid.toLowerCase()
       );
 
-      // If not directly found on product, check if any variant has this externalPid
-      if (!matchedProduct) {
-        const varWithPid = db.productVariants.find(v => 
-          String(v.externalPid).trim() === cleanPid || 
-          String(v.id).trim().toLowerCase() === cleanPid.toLowerCase()
+      let matchedProduct = candidateProducts[0];
+      let matchedVariant = undefined;
+
+      // Try to find a candidate product that also has an exact or partial duration match
+      for (const candProd of candidateProducts) {
+        const vars = db.productVariants.filter(v => v.productId === candProd.id && v.isActive);
+        const exactVar = vars.find(
+          v =>
+            v.durationLabel.trim().toLowerCase() === cleanDuration ||
+            v.externalDuration?.trim().toLowerCase() === cleanDuration
         );
-        if (varWithPid) {
-          matchedProduct = db.products.find(p => p.id === varWithPid.productId);
+        if (exactVar) {
+          matchedProduct = candProd;
+          matchedVariant = exactVar;
+          break;
+        }
+      }
+
+      if (!matchedVariant) {
+        for (const candProd of candidateProducts) {
+          const vars = db.productVariants.filter(v => v.productId === candProd.id && v.isActive);
+          const partialVar = vars.find(
+            v =>
+              v.durationLabel.toLowerCase().includes(cleanDuration) ||
+              cleanDuration.includes(v.durationLabel.toLowerCase())
+          );
+          if (partialVar) {
+            matchedProduct = candProd;
+            matchedVariant = partialVar;
+            break;
+          }
+        }
+      }
+
+      // If not found on product directly, check if any variant has this externalPid + duration
+      if (!matchedVariant) {
+        const varsWithPid = db.productVariants.filter(
+          v =>
+            v.isActive &&
+            (String(v.externalPid).trim() === cleanPid ||
+              String(v.id).trim().toLowerCase() === cleanPid.toLowerCase())
+        );
+        const exactVarWithPid =
+          varsWithPid.find(
+            v =>
+              v.durationLabel.trim().toLowerCase() === cleanDuration ||
+              v.externalDuration?.trim().toLowerCase() === cleanDuration
+          ) ||
+          varsWithPid.find(
+            v =>
+              v.durationLabel.toLowerCase().includes(cleanDuration) ||
+              cleanDuration.includes(v.durationLabel.toLowerCase())
+          ) ||
+          varsWithPid[0];
+
+        if (exactVarWithPid) {
+          matchedVariant = exactVarWithPid;
+          matchedProduct = db.products.find(p => p.id === exactVarWithPid.productId) || matchedProduct;
         }
       }
 
@@ -239,45 +302,42 @@ export class OutboundResellerController {
         return;
       }
 
-      // 3. Find the variant for this product matching the duration plan
-      const productVariants = db.productVariants.filter(v => v.productId === matchedProduct.id && v.isActive);
-      
-      let matchedVariant = productVariants.find(v => 
-        v.durationLabel.trim().toLowerCase() === cleanDuration ||
-        v.externalDuration?.trim().toLowerCase() === cleanDuration
-      );
-
+      // 3. Fallback variant lookup on matchedProduct if still not resolved
       if (!matchedVariant) {
-        // Partial or normalized matching (e.g. "1 day" matching "1 DAYS" or "1 Day Non-Root")
-        matchedVariant = productVariants.find(v => 
-          v.durationLabel.toLowerCase().includes(cleanDuration) ||
-          cleanDuration.includes(v.durationLabel.toLowerCase())
-        );
+        const productVariants = db.productVariants.filter(v => v.productId === matchedProduct.id && v.isActive);
+        matchedVariant =
+          productVariants.find(
+            v =>
+              v.durationLabel.trim().toLowerCase() === cleanDuration ||
+              v.externalDuration?.trim().toLowerCase() === cleanDuration
+          ) ||
+          productVariants.find(
+            v =>
+              v.durationLabel.toLowerCase().includes(cleanDuration) ||
+              cleanDuration.includes(v.durationLabel.toLowerCase())
+          ) ||
+          productVariants[0] || {
+            id: `VAR-AUTO-${cleanPid}`,
+            productId: matchedProduct.id,
+            durationLabel: String(duration),
+            durationHours: 24,
+            price: 50,
+            resellerPrice: 50,
+            stockCount: 999,
+            externalPid: cleanPid,
+            externalDuration: String(duration),
+            isActive: true,
+          };
       }
 
-      if (!matchedVariant) {
-        matchedVariant = productVariants[0] || {
-          id: `VAR-AUTO-${cleanPid}`,
-          productId: matchedProduct.id,
-          durationLabel: String(duration),
-          durationHours: 24,
-          price: 50,
-          resellerPrice: 38,
-          stockCount: 999,
-          externalPid: cleanPid,
-          externalDuration: String(duration),
-          isActive: true,
-        };
-      }
-
-      // 4. Determine unit price & total price
-      const isResellerOrAdmin = user.role === 'RESELLER' || user.role === 'ADMIN' || user.role === 'SUPER ADMIN';
-      const unitPrice = Math.max(1, isResellerOrAdmin ? matchedVariant.resellerPrice : matchedVariant.price);
-      const totalPrice = unitPrice * quantity;
+      // 4. Determine exact unit price & total price (if a key is ₹50, deduct ₹50 from the account wallet)
+      const unitPrice = Math.max(1, Number(matchedVariant.price || matchedVariant.resellerPrice || 50));
+      const totalPrice = Math.round(unitPrice * quantity * 100) / 100;
 
       const orderId = `ORD-EXT-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
       // 5. SERVER-SIDE WALLET BALANCE VALIDATION & ATOMIC DEDUCTION LAYER
+      // Only allow purchase if the user's account wallet has sufficient balance!
       const verification = await WalletService.verifyAndDeductApiKeyPurchase(
         user.id,
         totalPrice,
@@ -304,12 +364,8 @@ export class OutboundResellerController {
       }
 
       const remainingBalance = verification.remainingBalance;
-      // Immediately sync balance to Firestore so website UI reflects deduction in real-time
-      FirestoreSyncService.syncUserBalance(user.id, remainingBalance).catch(e => {
-        console.warn('[OutboundReseller] Firestore balance sync warning:', e);
-      });
 
-      // 7. Issue Keys (quantity times) - Try Live Upstream Reseller API first if configured, then Local Pool, then Auto-Mint
+      // 6. Issue Keys (quantity times) - Try Live Upstream Reseller API first if configured, then Local Pool, then Auto-Mint
       const deliveredKeys: string[] = [];
       const deliveredKeyObjects: DigitalKey[] = [];
       const effectiveExternalPid = matchedVariant.externalPid?.trim() || matchedProduct.externalPid?.trim();
@@ -340,6 +396,8 @@ export class OutboundResellerController {
                 isUsed: false,
                 status: 'ACTIVE',
                 assignedUserId: user.id,
+                assignedUserEmail: user.email.toLowerCase(),
+                assignedApiKey: cleanApiKey,
                 assignedOrderId: orderId,
                 assignedAt: now.toISOString(),
                 expiresAt: expiryDate.toISOString(),
@@ -354,7 +412,12 @@ export class OutboundResellerController {
 
         if (!keyObj) {
           const unassignedKeyIndex = db.digitalKeys.findIndex(
-            k => k.productId === matchedProduct.id && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
+            k =>
+              k.productId === matchedProduct.id &&
+              (!k.variantId || k.variantId === matchedVariant.id) &&
+              !k.isUsed &&
+              k.status === 'ACTIVE' &&
+              !k.assignedUserId
           );
 
           if (unassignedKeyIndex !== -1) {
@@ -362,6 +425,8 @@ export class OutboundResellerController {
             keyObj.isUsed = false;
             keyObj.status = 'ACTIVE';
             keyObj.assignedUserId = user.id;
+            keyObj.assignedUserEmail = user.email.toLowerCase();
+            keyObj.assignedApiKey = cleanApiKey;
             keyObj.assignedOrderId = orderId;
             keyObj.assignedAt = now.toISOString();
             keyObj.expiresAt = expiryDate.toISOString();
@@ -382,6 +447,8 @@ export class OutboundResellerController {
               isUsed: false,
               status: 'ACTIVE',
               assignedUserId: user.id,
+              assignedUserEmail: user.email.toLowerCase(),
+              assignedApiKey: cleanApiKey,
               assignedOrderId: orderId,
               assignedAt: now.toISOString(),
               expiresAt: expiryDate.toISOString(),
@@ -394,17 +461,14 @@ export class OutboundResellerController {
         }
         deliveredKeys.push(keyObj.keyCode);
         deliveredKeyObjects.push(keyObj);
-
-        // Immediately push key to Firestore so website shows it in real-time
-        FirestoreSyncService.syncDigitalKey(keyObj).catch(e => {
-          console.warn('[OutboundReseller] Firestore key sync warning:', e);
-        });
       }
 
       // Record order tagged with purchaseSource: 'API'
       const newOrder: Order = {
         id: orderId,
         userId: user.id,
+        userEmail: user.email.toLowerCase(),
+        apiKey: cleanApiKey,
         productId: matchedProduct.id,
         variantId: matchedVariant.id,
         productName: matchedProduct.name,
@@ -422,6 +486,8 @@ export class OutboundResellerController {
       const latestTx = db.transactions.find(t => t.referenceId === orderId) || {
         id: `TXN-${Date.now()}`,
         userId: user.id,
+        userEmail: user.email.toLowerCase(),
+        apiKey: cleanApiKey,
         type: 'PURCHASE' as const,
         amount: -totalPrice,
         description: `[This Key Buyed by API] External API Purchase (${quantity}x): ${matchedProduct.name} (${matchedVariant.durationLabel})`,
@@ -434,13 +500,15 @@ export class OutboundResellerController {
       if (latestTx) {
         latestTx.purchaseSource = 'API';
         latestTx.purchaseSourceLabel = 'Buy from API';
+        latestTx.userEmail = user.email.toLowerCase();
+        latestTx.apiKey = cleanApiKey;
       }
 
       db.saveSync();
 
-      // EXECUTE ATOMIC TRANSACTION COMMIT IN FIRESTORE
+      // EXECUTE ATOMIC TRANSACTION COMMIT IN FIRESTORE AND AWAIT IT
       // Simultaneously updates user balance, stores issued digital keys, order record, and debit transaction
-      FirestoreSyncService.commitAtomicKeyPurchase({
+      await FirestoreSyncService.commitAtomicKeyPurchase({
         userId: user.id,
         newBalance: remainingBalance,
         keyObjects: deliveredKeyObjects,
@@ -464,6 +532,7 @@ export class OutboundResellerController {
         key: deliveredKeys[0],
         keys: deliveredKeys,
         quantity: quantity,
+        unit_price: unitPrice,
         total_price: totalPrice,
         wallet_deducted: totalPrice,
         remaining_balance: remainingBalance,
@@ -495,17 +564,26 @@ export class OutboundResellerController {
         return;
       }
 
-      let dbUser: User | undefined = db.users.find(u => u.id === user.id);
+      let dbUser: User | undefined = db.users.find(
+        u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+      );
       const clientHintKey = (req.headers['x-user-api-key'] as string | undefined)?.trim();
+
+      // Ensure clientHintKey is not already owned by a different user
+      const isHintKeyUnique =
+        clientHintKey &&
+        clientHintKey.startsWith('nexa_live_') &&
+        !db.users.some(u => u.id !== dbUser?.id && u.apiKey === clientHintKey);
+
       if (!dbUser) {
         dbUser = {
           id: user.id,
           username: user.username,
-          email: user.email,
+          email: user.email.toLowerCase(),
           passwordHash: '',
           role: user.role,
           balance: user.balance,
-          apiKey: clientHintKey && clientHintKey.startsWith('nexa_live_')
+          apiKey: isHintKeyUnique
             ? clientHintKey
             : `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
           referralCode: `NX${user.id.slice(0, 4).toUpperCase()}`,
@@ -516,11 +594,10 @@ export class OutboundResellerController {
         };
         db.users.push(dbUser);
         db.saveSync();
-      } else if (!dbUser.apiKey) {
-        dbUser.apiKey =
-          clientHintKey && clientHintKey.startsWith('nexa_live_')
-            ? clientHintKey
-            : `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+      } else if (!dbUser.apiKey || db.users.some(u => u.id !== dbUser!.id && u.apiKey === dbUser!.apiKey)) {
+        dbUser.apiKey = isHintKeyUnique
+          ? clientHintKey
+          : `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
         db.saveSync();
       }
       // Ensure Firestore user document has the current apiKey

@@ -68,23 +68,45 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
     fetchKeys();
   }, [statusFilter, search]);
 
-  // Real-time Firestore onSnapshot listener for instant key delivery
+  // Real-time Firestore onSnapshot listener for instant key delivery (matches by ID, Email, or API Key)
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id && !user?.email) return;
+
+    const myId = (user?.id || '').trim();
+    const myEmail = (user?.email || '').trim().toLowerCase();
+    const myApiKey = (
+      user?.apiKey ||
+      localStorage.getItem(`nexa_user_api_key_${myId}`) ||
+      localStorage.getItem('nexa_user_outbound_api_key') ||
+      ''
+    ).trim();
 
     try {
-      const q = query(
-        collection(db, 'digitalKeys'),
-        where('assignedUserId', '==', user.id)
-      );
+      const colRef = collection(db, 'digitalKeys');
 
       const unsubscribe = onSnapshot(
-        q,
+        colRef,
         snapshot => {
           const fsKeys: DigitalKey[] = [];
           snapshot.forEach(docSnap => {
             const data = docSnap.data() as any;
-            const isApi = data.purchaseSource === 'API' || String(data.assignedOrderId || '').startsWith('API-ORD-') || String(docSnap.id).includes('EXT') || String(docSnap.id).includes('API');
+            const docUserId = String(data.assignedUserId || '').trim();
+            const docEmail = String(data.assignedUserEmail || '').trim().toLowerCase();
+            const docApiKey = String(data.assignedApiKey || '').trim();
+
+            const belongsToUser =
+              (myId && docUserId === myId) ||
+              (myEmail && docEmail && docEmail === myEmail) ||
+              (myApiKey && docApiKey && docApiKey === myApiKey);
+
+            if (!belongsToUser) return;
+
+            const isApi =
+              data.purchaseSource === 'API' ||
+              String(data.assignedOrderId || '').startsWith('API-ORD-') ||
+              String(docSnap.id).includes('EXT') ||
+              String(docSnap.id).includes('API');
+
             fsKeys.push({
               id: docSnap.id,
               keyCode: data.keyCode || '',
@@ -141,7 +163,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
     } catch (err) {
       console.warn('[MyKeysPage] Listener attach error:', err);
     }
-  }, [user?.id, statusFilter, search]);
+  }, [user?.id, user?.email, user?.apiKey, statusFilter, search]);
 
   const handleCopy = (keyCode: string, id: string) => {
     navigator.clipboard.writeText(keyCode);
@@ -164,6 +186,14 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
   const filteredKeys = keys.filter(k => {
     const src = k.purchaseSource === 'API' ? 'API' : 'WEB';
     if (sourceFilter !== 'ALL' && src !== sourceFilter) return false;
+    if (statusFilter !== 'ALL' && k.status !== statusFilter) return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const matchCode = (k.keyCode || '').toLowerCase().includes(q);
+      const matchProd = (k.productName || '').toLowerCase().includes(q);
+      const matchGame = (k.gameName || '').toLowerCase().includes(q);
+      if (!matchCode && !matchProd && !matchGame) return false;
+    }
     return true;
   });
 

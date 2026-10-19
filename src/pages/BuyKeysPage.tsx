@@ -118,18 +118,35 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     }, 2500);
 
     let unsubscribeSnapshot: (() => void) | null = null;
-    if (user?.id) {
+    if (user?.id || user?.email) {
+      const myId = (user?.id || '').trim();
+      const myEmail = (user?.email || '').trim().toLowerCase();
+      const myApiKey = (
+        user?.apiKey ||
+        localStorage.getItem(`nexa_user_api_key_${myId}`) ||
+        localStorage.getItem('nexa_user_outbound_api_key') ||
+        ''
+      ).trim();
+
       try {
-        const q = query(
-          collection(db, 'digitalKeys'),
-          where('assignedUserId', '==', user.id)
-        );
+        const colRef = collection(db, 'digitalKeys');
         unsubscribeSnapshot = onSnapshot(
-          q,
+          colRef,
           snapshot => {
             const fsKeys: DigitalKey[] = [];
             snapshot.forEach(docSnap => {
               const data = docSnap.data() as any;
+              const docUserId = String(data.assignedUserId || '').trim();
+              const docEmail = String(data.assignedUserEmail || '').trim().toLowerCase();
+              const docApiKey = String(data.assignedApiKey || '').trim();
+
+              const belongsToUser =
+                (myId && docUserId === myId) ||
+                (myEmail && docEmail && docEmail === myEmail) ||
+                (myApiKey && docApiKey && docApiKey === myApiKey);
+
+              if (!belongsToUser) return;
+
               const isApi =
                 data.purchaseSource === 'API' ||
                 String(data.assignedOrderId || '').startsWith('API-ORD-') ||
@@ -189,7 +206,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
       clearInterval(interval);
       if (unsubscribeSnapshot) unsubscribeSnapshot();
     };
-  }, [role, user?.id]);
+  }, [role, user?.id, user?.email, user?.apiKey]);
 
   const toggleAccordion = (productId: string) => {
     setExpandedMap(prev => ({
@@ -212,7 +229,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
   const handlePurchase = async (product: Product, variant: ProductVariant) => {
     const qty = getQuantity(variant.id);
-    const unitPrice = role === 'RESELLER' ? variant.resellerPrice : variant.price;
+    const unitPrice = Number(variant.price || variant.resellerPrice || 50);
     const totalCost = unitPrice * qty;
 
     if (balance < totalCost) {
@@ -591,8 +608,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                       {product.variants && product.variants.length > 0 ? (
                         product.variants.map(variant => {
                           const qty = getQuantity(variant.id);
-                          const unitPrice =
-                            role === 'RESELLER' ? variant.resellerPrice : variant.price;
+                          const unitPrice = Number(variant.price || variant.resellerPrice || 50);
                           const totalPrice = unitPrice * qty;
                           const isBuying = isBuyingId === variant.id;
 

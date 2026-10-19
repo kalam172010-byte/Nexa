@@ -14,22 +14,32 @@ export class WalletController {
         return;
       }
 
+      const userAltIds = new Set<string>([user.id]);
+      if ((user as any).firebaseUid) userAltIds.add((user as any).firebaseUid);
+      const userEmail = (user.email || '').trim().toLowerCase();
+      const userApiKey = (user.apiKey || '').trim();
+
       // Calculate today deposit
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
 
       const todayDeposits = db.deposits
-        .filter(d => d.userId === user.id && d.status === 'SUCCESS' && new Date(d.createdAt) >= startOfDay)
+        .filter(d => userAltIds.has(d.userId) && d.status === 'SUCCESS' && new Date(d.createdAt) >= startOfDay)
         .reduce((sum, d) => sum + d.amount, 0);
 
       // Calculate total deposit
       const totalDeposits = db.deposits
-        .filter(d => d.userId === user.id && d.status === 'SUCCESS')
+        .filter(d => userAltIds.has(d.userId) && d.status === 'SUCCESS')
         .reduce((sum, d) => sum + d.amount, 0);
+
+      const matchesUserOrder = (o: any) =>
+        userAltIds.has(o.userId) ||
+        (userEmail && (o.userEmail || '').trim().toLowerCase() === userEmail) ||
+        (userApiKey && (o.apiKey || '').trim() === userApiKey);
 
       // Today sales (for reseller) or orders (for user)
       const todaySales = db.orders
-        .filter(o => o.userId === user.id && new Date(o.createdAt) >= startOfDay)
+        .filter(o => matchesUserOrder(o) && new Date(o.createdAt) >= startOfDay)
         .length;
 
       // Monthly sales
@@ -38,13 +48,13 @@ export class WalletController {
       startOfMonth.setHours(0, 0, 0, 0);
 
       const monthlySales = db.orders
-        .filter(o => o.userId === user.id && new Date(o.createdAt) >= startOfMonth)
+        .filter(o => matchesUserOrder(o) && new Date(o.createdAt) >= startOfMonth)
         .length;
 
       // Referrals count
-      const referralCount = db.referrals.filter(r => r.referrerId === user.id).length;
+      const referralCount = db.referrals.filter(r => userAltIds.has(r.referrerId)).length;
       const referralEarnings = db.referrals
-        .filter(r => r.referrerId === user.id)
+        .filter(r => userAltIds.has(r.referrerId))
         .reduce((sum, r) => sum + r.rewardEarned, 0);
 
       const currentBalance = WalletService.getBalance(user.id);
@@ -250,7 +260,17 @@ export class WalletController {
 
       const { type, search, status } = req.query;
 
-      let txList = db.transactions.filter(t => t.userId === user.id);
+      const userAltIds = new Set<string>([user.id]);
+      if ((user as any).firebaseUid) userAltIds.add((user as any).firebaseUid);
+      const userEmail = (user.email || '').trim().toLowerCase();
+      const userApiKey = (user.apiKey || '').trim();
+
+      let txList = db.transactions.filter(
+        t =>
+          userAltIds.has(t.userId) ||
+          (userEmail && (t.userEmail || '').trim().toLowerCase() === userEmail) ||
+          (userApiKey && (t.apiKey || '').trim() === userApiKey)
+      );
 
       // Filter by type tab: ALL, DEPOSITS, PURCHASES, REFUNDS
       if (type && type !== 'ALL') {

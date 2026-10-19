@@ -13,10 +13,32 @@ export class KeyController {
 
       const { status, search } = req.query;
 
+      const userAltIds = new Set<string>([user.id]);
+      if ((user as any).firebaseUid) {
+        userAltIds.add((user as any).firebaseUid);
+      }
+
+      const dbUser = db.users.find(
+        u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+      );
+      if (dbUser) {
+        userAltIds.add(dbUser.id);
+        if (dbUser.firebaseUid) userAltIds.add(dbUser.firebaseUid);
+      }
+      const userEmail = (dbUser?.email || user.email || '').toLowerCase().trim();
+      const userApiKey = (dbUser?.apiKey || user.apiKey || '').trim();
+
+      const isUserKeyMatch = (k: any) => {
+        if (k.assignedUserId && userAltIds.has(k.assignedUserId)) return true;
+        if (userEmail && k.assignedUserEmail && k.assignedUserEmail.toLowerCase().trim() === userEmail) return true;
+        if (userApiKey && k.assignedApiKey && k.assignedApiKey.trim() === userApiKey) return true;
+        return false;
+      };
+
       // Update any expired keys based on current time
       const now = new Date();
       db.digitalKeys.forEach(k => {
-        if (k.assignedUserId === user.id && k.status === 'ACTIVE' && k.expiresAt) {
+        if (isUserKeyMatch(k) && k.status === 'ACTIVE' && k.expiresAt) {
           if (new Date(k.expiresAt) < now) {
             k.status = 'EXPIRED';
           }
@@ -24,13 +46,8 @@ export class KeyController {
       });
       db.save();
 
-      const userAltIds = new Set<string>([user.id]);
-      if ((user as any).firebaseUid) {
-        userAltIds.add((user as any).firebaseUid);
-      }
-
       let userKeys = db.digitalKeys
-        .filter(k => k.assignedUserId && userAltIds.has(k.assignedUserId))
+        .filter(k => isUserKeyMatch(k))
         .map(key => {
           const product = db.products.find(p => p.id === key.productId);
           const variant = db.productVariants.find(v => v.id === key.variantId);
@@ -39,6 +56,7 @@ export class KeyController {
             key.purchaseSource === 'API' ||
             order?.purchaseSource === 'API' ||
             String(key.assignedOrderId || '').startsWith('API-ORD-') ||
+            String(key.assignedOrderId || '').startsWith('ORD-EXT-') ||
             String(key.id).includes('EXT') ||
             String(key.id).includes('API');
           return {
@@ -87,8 +105,26 @@ export class KeyController {
         return;
       }
 
+      const userAltIds = new Set<string>([user.id]);
+      if ((user as any).firebaseUid) userAltIds.add((user as any).firebaseUid);
+      const dbUser = db.users.find(
+        u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+      );
+      if (dbUser) {
+        userAltIds.add(dbUser.id);
+        if (dbUser.firebaseUid) userAltIds.add(dbUser.firebaseUid);
+      }
+      const userEmail = (dbUser?.email || user.email || '').toLowerCase().trim();
+      const userApiKey = (dbUser?.apiKey || user.apiKey || '').trim();
+
       const { id } = req.params;
-      const key = db.digitalKeys.find(k => k.id === id && k.assignedUserId === user.id);
+      const key = db.digitalKeys.find(
+        k =>
+          k.id === id &&
+          ((k.assignedUserId && userAltIds.has(k.assignedUserId)) ||
+            (userEmail && k.assignedUserEmail && k.assignedUserEmail.toLowerCase().trim() === userEmail) ||
+            (userApiKey && k.assignedApiKey && k.assignedApiKey.trim() === userApiKey))
+      );
       if (!key) {
         res.status(404).json({ error: 'Key not found in your inventory.' });
         return;

@@ -720,8 +720,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     );
 
     const { product, variant } = findProductAndVariant(String(rawPid || '155'), String(rawDuration || '1 Day'));
-    const isResellerOrAdmin = user.role === 'RESELLER' || user.role === 'ADMIN' || user.role === 'SUPER ADMIN';
-    const unitPrice = Number(isResellerOrAdmin ? variant.resellerPrice : variant.price) || 80;
+    const unitPrice = Math.max(1, Number(variant.price || variant.resellerPrice || 50));
     const totalPrice = Number((unitPrice * quantity).toFixed(2));
     // Fetch latest balance from Firestore for 100% up-to-date real-time accuracy
     try {
@@ -801,10 +800,11 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       if (!keyCode) {
         // Check unused local key in EDGE_DB
         const unusedKey = edgeDb.digitalKeys.find(
-          k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE'
+          k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
         );
         if (unusedKey) {
-          unusedKey.isUsed = true;
+          unusedKey.isUsed = false;
+          unusedKey.status = 'ACTIVE';
           unusedKey.assignedUserId = user.id;
           unusedKey.assignedOrderId = subOrderId;
           unusedKey.assignedAt = new Date().toISOString();
@@ -823,7 +823,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
             productId: product.id,
             variantId: variant.id,
             keyCode,
-            isUsed: true,
+            isUsed: false,
             assignedUserId: user.id,
             assignedOrderId: subOrderId,
             assignedAt: new Date().toISOString(),
@@ -842,7 +842,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           productId: product.id,
           variantId: variant.id,
           keyCode,
-          isUsed: true,
+          isUsed: false,
           assignedUserId: user.id,
           assignedOrderId: subOrderId,
           assignedAt: new Date().toISOString(),
@@ -879,7 +879,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       try {
         const kObj = deliveredKeyObjects[i];
         const kUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/digitalKeys/${encodeURIComponent(kObj.id)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
-        fetch(kUrl, {
+        await fetch(kUrl, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -891,9 +891,11 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
               gameName: { stringValue: product.game || 'Free Fire' },
               durationLabel: { stringValue: variant.durationLabel },
               keyCode: { stringValue: kObj.keyCode },
-              isUsed: { booleanValue: Boolean(kObj.isUsed) },
-              status: { stringValue: kObj.status },
+              isUsed: { booleanValue: false },
+              status: { stringValue: 'ACTIVE' },
               assignedUserId: { stringValue: user.id },
+              assignedUserEmail: { stringValue: (user.email || '').toLowerCase() },
+              assignedApiKey: { stringValue: apiKey.trim() },
               assignedOrderId: { stringValue: subOrderId },
               assignedAt: { stringValue: kObj.assignedAt || new Date().toISOString() },
               expiresAt: { stringValue: kObj.expiresAt || '' },

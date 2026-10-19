@@ -60,10 +60,8 @@ export class AuthController {
         email: normalizedEmail,
         passwordHash: hashPassword(password),
         role: isAdminEmail ? 'ADMIN' : 'USER',
-        balance: isAdminEmail ? 5000.0 : 0.0,
-        apiKey: isAdminEmail
-          ? 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
-          : `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
+        balance: 0.0,
+        apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
         referralCode: newReferralCode,
         referredBy,
         twoFactorEnabled: false,
@@ -75,6 +73,7 @@ export class AuthController {
       db.users.push(newUser);
       db.logActivity(newUser.id, newUser.username, 'USER_REGISTER', `New user registered via referral: ${referralCode || 'None'}`);
       db.save();
+      FirestoreSyncService.syncUserApiKey(newUser.id, newUser.apiKey!).catch(() => {});
 
       const token = generateToken(newUser);
       const { passwordHash, ...safeUser } = newUser;
@@ -128,6 +127,12 @@ export class AuthController {
         res.status(403).json({ error: 'Your account has been suspended. Please contact support.' });
         return;
       }
+
+      if (!user.apiKey || db.users.some(u => u.id !== user.id && u.apiKey === user.apiKey)) {
+        user.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+        db.saveSync();
+      }
+      FirestoreSyncService.syncUserApiKey(user.id, user.apiKey).catch(() => {});
 
       db.logActivity(user.id, user.username, 'USER_LOGIN', 'User logged in successfully');
       const token = generateToken(user);
@@ -265,7 +270,9 @@ export class AuthController {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      let user = db.users.find(u => u.id === uid || u.email.toLowerCase() === normalizedEmail);
+      let user = db.users.find(
+        u => u.id === uid || u.firebaseUid === uid || u.email.toLowerCase() === normalizedEmail
+      );
 
       const ADMIN_EMAILS = [
         'kk7953926@gmail.com',
@@ -282,14 +289,13 @@ export class AuthController {
         const newReferralCode = `NX${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
         user = {
           id: uid,
+          firebaseUid: uid,
           username: username || `user_${Date.now().toString().slice(-4)}`,
           email: normalizedEmail,
           passwordHash: '',
           role: isAdminEmail ? 'ADMIN' : 'USER',
           balance: 0.0,
-          apiKey: isAdminEmail
-            ? 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
-            : `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
+          apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
           referralCode: newReferralCode,
           twoFactorEnabled: false,
           isBanned: false,
@@ -299,23 +305,28 @@ export class AuthController {
         db.users.push(user);
         db.logActivity(user.id, user.username, 'FIREBASE_AUTH_SIGNUP', `Registered via Firebase: ${normalizedEmail}`);
         db.saveSync();
+        FirestoreSyncService.syncUserApiKey(user.id, user.apiKey!).catch(() => {});
       } else {
-        if (isAdminEmail && user.role !== 'ADMIN') {
+        if (isAdminEmail && user.role !== 'ADMIN' && user.role !== 'SUPER ADMIN') {
           user.role = 'ADMIN';
         }
-        if (!user.apiKey) {
-          user.apiKey = isAdminEmail
-            ? 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
-            : `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+        if (!user.apiKey || db.users.some(u => u.id !== user!.id && u.apiKey === user!.apiKey)) {
+          user.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
         }
-        (user as any).firebaseUid = uid;
+        user.firebaseUid = uid;
         user.updatedAt = new Date().toISOString();
+
+        // Sync balance from Firestore if Firestore has a record for this user
+        try {
+          const liveBal = await FirestoreSyncService.getAuthoritativeBalance(user);
+          if (typeof liveBal === 'number' && !Number.isNaN(liveBal)) {
+            user.balance = liveBal;
+          }
+        } catch {}
+
         db.logActivity(user.id, user.username, 'FIREBASE_AUTH_LOGIN', `Logged in via Firebase: ${normalizedEmail}`);
         db.saveSync();
         FirestoreSyncService.syncUserApiKey(user.id, user.apiKey).catch(() => {});
-        if (uid !== user.id) {
-          FirestoreSyncService.syncUserApiKey(uid, user.apiKey).catch(() => {});
-        }
       }
 
       const token = generateToken(user);
@@ -596,7 +607,8 @@ export class AuthController {
             email: normalizedEmail,
             passwordHash: '',
             role: isAdminEmail ? 'ADMIN' : 'USER',
-            balance: isAdminEmail ? 5000.0 : 0.0,
+            balance: 0.0,
+            apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
             referralCode: newReferralCode,
             twoFactorEnabled: false,
             isBanned: false,
@@ -607,6 +619,7 @@ export class AuthController {
           db.users.push(user);
           db.logActivity(user.id, user.username, 'OTP_SIGNUP', `Registered via Email OTP: ${normalizedEmail}`);
           db.save();
+          FirestoreSyncService.syncUserApiKey(user.id, user.apiKey!).catch(() => {});
         } else {
           res.status(404).json({ error: 'No account registered with this email. Please sign up first.' });
           return;

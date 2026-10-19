@@ -95,7 +95,7 @@ const DEFAULT_SEED_PRODUCTS = [
         durationLabel: '1 Day',
         durationHours: 24,
         price: 50,
-        resellerPrice: 38,
+        resellerPrice: 50,
         stockCount: 999,
         externalPid: '155',
         externalDuration: '1 DAYS',
@@ -108,7 +108,7 @@ const DEFAULT_SEED_PRODUCTS = [
         durationLabel: '7 Days',
         durationHours: 168,
         price: 250,
-        resellerPrice: 190,
+        resellerPrice: 250,
         stockCount: 999,
         externalPid: '155',
         externalDuration: '7 DAYS',
@@ -121,7 +121,7 @@ const DEFAULT_SEED_PRODUCTS = [
         durationLabel: '60 Days',
         durationHours: 1440,
         price: 1100,
-        resellerPrice: 850,
+        resellerPrice: 1100,
         stockCount: 999,
         externalPid: '155',
         externalDuration: '60 DAYS',
@@ -151,7 +151,7 @@ const DEFAULT_SEED_PRODUCTS = [
         durationLabel: '1 Day Test',
         durationHours: 24,
         price: 50,
-        resellerPrice: 38,
+        resellerPrice: 50,
         stockCount: 999,
         externalPid: '65',
         externalDuration: '1 DAYS',
@@ -164,7 +164,7 @@ const DEFAULT_SEED_PRODUCTS = [
         durationLabel: '7 Days',
         durationHours: 168,
         price: 220,
-        resellerPrice: 165,
+        resellerPrice: 220,
         stockCount: 999,
         externalPid: '65',
         externalDuration: '7 DAYS',
@@ -560,7 +560,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           durationLabel: data.duration || '1 Day',
           keyCode: delKey,
           isUsed: false,
-          assignedUserId: storedUser?.id || 'USR-KALAM-172010',
+          assignedUserId: data.user_id || storedUser?.id || 'USR-KALAM-172010',
+          assignedUserEmail: storedUser?.email ? String(storedUser.email).toLowerCase() : undefined,
+          assignedApiKey: storedUser?.apiKey,
           assignedOrderId: ordId,
           assignedAt: new Date().toISOString(),
           status: 'ACTIVE',
@@ -591,6 +593,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       try {
         if (data.apiKey) {
           localStorage.setItem('nexa_user_outbound_api_key', data.apiKey);
+          if (storedUser) {
+            storedUser.apiKey = data.apiKey;
+            localStorage.setItem(`nexa_user_api_key_${storedUser.id}`, data.apiKey);
+            localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+          }
         }
         if (typeof data.walletBalance === 'number' && storedUser) {
           storedUser.balance = data.walletBalance;
@@ -1099,11 +1106,58 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const pid = bodyObj.productId || bodyObj.product_id || '155';
       const dur = bodyObj.duration || bodyObj.durationLabel || '1 Day';
       const aid = bodyObj.androidId || activeCfg.defaultAndroidId || '0b9b969bc2e7997b';
+
+      const products = getCachedProducts();
+      let matchedProd = products.find(p => String(p.externalPid) === String(pid)) || products[0];
+      let matchedVar = matchedProd?.variants?.find((v: any) =>
+        String(v.durationLabel).toLowerCase().includes(String(dur).toLowerCase())
+      ) || matchedProd?.variants?.[0];
+
+      const unitPrice = Math.max(1, Number(matchedVar?.price || matchedVar?.resellerPrice || 50));
+      const curBal = Number(storedUser?.balance ?? 0);
+      if (curBal <= 0 || curBal < unitPrice) {
+        throw new ApiError(
+          `Insufficient wallet balance. Required: ₹${unitPrice.toFixed(2)}, Available: ₹${curBal.toFixed(2)}. Please deposit funds first.`,
+          400
+        );
+      }
+
+      const newBal = Number((curBal - unitPrice).toFixed(2));
+      if (storedUser) {
+        storedUser.balance = newBal;
+        localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+        saveCachedUsers(getCachedUsers().map(u => (u.id === storedUser.id ? { ...u, balance: newBal } : u)));
+      }
+
       const sampleKey = `KALAM-${String(pid).toUpperCase()}-${Math.random().toString(16).slice(2, 6).toUpperCase()}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+      const newKeyRec = {
+        id: `KEY-API-${Date.now()}`,
+        productId: matchedProd?.id || pid,
+        variantId: matchedVar?.id,
+        productName: matchedProd?.name || 'VIP Gaming Panel',
+        gameName: matchedProd?.game || 'FREEFIRE',
+        durationLabel: matchedVar?.durationLabel || dur,
+        keyCode: sampleKey,
+        isUsed: false,
+        assignedUserId: storedUser?.id || 'USR-KALAM-172010',
+        assignedUserEmail: storedUser?.email ? String(storedUser.email).toLowerCase() : undefined,
+        assignedApiKey: storedUser?.apiKey,
+        assignedOrderId: `API-ORD-${Date.now()}`,
+        assignedAt: new Date().toISOString(),
+        status: 'ACTIVE',
+        purchaseSource: 'API',
+        purchaseSourceLabel: 'Buy from API',
+        createdAt: new Date().toISOString(),
+      };
+      saveCachedKeys([newKeyRec, ...getCachedKeys()]);
+
       return {
         success: true,
         status: 200,
         latencyMs: 164,
+        key: sampleKey,
+        wallet_deducted: unitPrice,
+        remaining_balance: newBal,
         rawResponse: JSON.stringify({
           status: true,
           message: 'Key generated successfully',
@@ -1111,6 +1165,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           product_id: pid,
           duration: dur,
           android_id: aid,
+          wallet_deducted: unitPrice,
+          remaining_balance: newBal,
         }, null, 2),
         payloadSent: {
           api_key: activeCfg.apiKey || '5841ac0e6b458bdde0ffbe2baa095306',
@@ -1358,9 +1414,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         matchedVar = matchedProd?.variants?.[0];
       }
       const qty = Math.max(1, Number(bodyObj.quantity) || 1);
-      const isReseller = storedUser?.role === 'RESELLER' || storedUser?.role === 'ADMIN' || storedUser?.role === 'SUPER ADMIN';
-      const unitPrice = isReseller ? Number(matchedVar?.resellerPrice || 38) : Number(matchedVar?.price || 50);
-      const total = unitPrice * qty;
+      const unitPrice = Math.max(1, Number(matchedVar?.price || matchedVar?.resellerPrice || 50));
+      const total = Math.round(unitPrice * qty * 100) / 100;
       const curBal = Number(storedUser?.balance ?? 0);
       if (curBal <= 0 || curBal < total) {
         throw new ApiError(`Insufficient wallet balance. Required: ₹${total.toFixed(2)}, Available: ₹${curBal.toFixed(2)}`, 400);
@@ -1388,6 +1443,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           keyCode: code,
           isUsed: false,
           assignedUserId: storedUser?.id || 'USR-KALAM-172010',
+          assignedUserEmail: storedUser?.email ? String(storedUser.email).toLowerCase() : undefined,
+          assignedApiKey: storedUser?.apiKey,
           assignedOrderId: orderId,
           assignedAt: new Date().toISOString(),
           expiresAt: new Date(Date.now() + (matchedVar?.durationHours || 24) * 3600 * 1000).toISOString(),
@@ -1402,6 +1459,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const order = {
         id: orderId,
         userId: storedUser?.id || 'USR-KALAM-172010',
+        userEmail: storedUser?.email ? String(storedUser.email).toLowerCase() : undefined,
+        apiKey: storedUser?.apiKey,
         productId: matchedProd?.id,
         variantId: matchedVar?.id,
         productName: matchedProd?.name || 'VIP Gaming Panel',
@@ -1449,7 +1508,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
 
     if (endpoint.startsWith('/keys') && method === 'GET') {
-      const allKeys = getCachedKeys().filter(k => !storedUser?.id || !k.assignedUserId || k.assignedUserId === storedUser.id);
+      const userEmail = (storedUser?.email || '').trim().toLowerCase();
+      const userApiKey = (storedUser?.apiKey || localStorage.getItem('nexa_user_outbound_api_key') || '').trim();
+      const allKeys = getCachedKeys().filter(
+        k =>
+          !storedUser?.id ||
+          k.assignedUserId === storedUser.id ||
+          (userEmail && (k.assignedUserEmail || '').trim().toLowerCase() === userEmail) ||
+          (userApiKey && (k.assignedApiKey || '').trim() === userApiKey)
+      );
       return {
         keys: allKeys.map(k => ({
           ...k,

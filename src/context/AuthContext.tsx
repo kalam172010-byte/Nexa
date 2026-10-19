@@ -74,7 +74,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (checkIsAdmin(userData.email, userData.username)) {
       userData.role = 'ADMIN';
     }
-    console.log('[AuthContext] Saving user session locally and setting state:', userData.username, 'Role:', userData.role);
+    if ((userData as any).apiKey) {
+      try {
+        localStorage.setItem(`nexa_user_api_key_${userData.id}`, (userData as any).apiKey);
+        localStorage.setItem('nexa_user_outbound_api_key', (userData as any).apiKey);
+      } catch {}
+    }
     localStorage.setItem('nexa_auth_token', userToken);
     localStorage.setItem('nexa_user_data', JSON.stringify(userData));
     setToken(userToken);
@@ -82,7 +87,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const clearUserSession = useCallback(() => {
-    console.log('[AuthContext] Clearing user session from state and localStorage');
     localStorage.removeItem('nexa_auth_token');
     localStorage.removeItem('nexa_user_data');
     setToken(null);
@@ -91,19 +95,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const elevateToAdmin = useCallback(
     async (secretKey?: string): Promise<boolean> => {
-      const currentEmail = user?.email?.toLowerCase() || '';
-      const currentUsername = user?.username?.toLowerCase() || '';
-      const isTargetAdmin =
-        checkIsAdmin(currentEmail, currentUsername) ||
-        secretKey === 'admin123' ||
-        secretKey === 'nexa_admin' ||
-        secretKey === 'kalam123' ||
-        secretKey === 'admin' ||
-        secretKey === 'superadmin' ||
-        !secretKey; // Always allow direct elevation for primary admin session
-
       if (user) {
-        const updatedUser: User = { ...user, role: 'ADMIN', balance: Math.max(user.balance, 5000) };
+        const updatedUser: User = { ...user, role: 'ADMIN' };
         saveUserSession(updatedUser, token || 'mock-token-cloudflare-static');
         try {
           await api.updateUserRole(user.id, 'ADMIN');
@@ -115,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           username: 'kalam',
           email: 'kalam172010@gmail.com',
           role: 'ADMIN',
-          balance: 5000.0,
+          balance: 0.0,
           referralCode: 'NXKALAM1',
           twoFactorEnabled: false,
           isBanned: false,
@@ -144,22 +137,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // Sync user profile document in Firestore
           try {
-            await setDoc(
-              doc(db, 'users', res.user.id),
-              {
-                id: res.user.id,
-                username: res.user.username,
-                email: res.user.email,
-                role: checkIsAdmin(res.user.email, res.user.username) ? 'ADMIN' : res.user.role,
-                balance: res.user.balance,
-                apiKey: res.user.apiKey,
-                referralCode: res.user.referralCode,
-                twoFactorEnabled: res.user.twoFactorEnabled || false,
-                isBanned: res.user.isBanned || false,
-                updatedAt: new Date().toISOString(),
-              },
-              { merge: true }
-            );
+            const profilePayload = {
+              id: res.user.id,
+              username: res.user.username,
+              email: res.user.email,
+              role: checkIsAdmin(res.user.email, res.user.username) ? 'ADMIN' : res.user.role,
+              balance: res.user.balance,
+              apiKey: res.user.apiKey,
+              referralCode: res.user.referralCode,
+              twoFactorEnabled: res.user.twoFactorEnabled || false,
+              isBanned: res.user.isBanned || false,
+              updatedAt: new Date().toISOString(),
+            };
+            await setDoc(doc(db, 'users', res.user.id), profilePayload, { merge: true });
+            if (firebaseUser.uid && firebaseUser.uid !== res.user.id) {
+              await setDoc(doc(db, 'users', firebaseUser.uid), { ...profilePayload, id: firebaseUser.uid }, { merge: true });
+            }
           } catch (firestoreErr) {
             console.warn('Firestore user profile sync non-critical warning:', firestoreErr);
           }
@@ -176,6 +169,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (checkIsAdmin(clientUser.email, clientUser.username)) {
               clientUser.role = 'ADMIN';
             }
+            if (!(clientUser as any).apiKey) {
+              (clientUser as any).apiKey = `nexa_live_${firebaseUser.uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+              await setDoc(userDocRef, { apiKey: (clientUser as any).apiKey }, { merge: true });
+            }
           } else {
             const username =
               customUsername ||
@@ -184,13 +181,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               `user_${firebaseUser.uid.slice(0, 6)}`;
 
             const isAdmin = checkIsAdmin(firebaseUser.email, username);
+            const generatedApiKey = `nexa_live_${firebaseUser.uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
 
             clientUser = {
               id: firebaseUser.uid,
               username,
               email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
               role: isAdmin ? 'ADMIN' : 'USER',
-              balance: isAdmin ? 5000.0 : 0.0,
+              balance: 0.0,
+              apiKey: generatedApiKey,
               referralCode: `REF_${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
               twoFactorEnabled: false,
               isBanned: false,
@@ -618,7 +617,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateBalanceLocally = (newBalance: number) => {
-    setUser(prev => (prev ? { ...prev, balance: newBalance } : null));
+    setUser(prev => {
+      if (!prev) return null;
+      const updated = { ...prev, balance: newBalance };
+      try {
+        localStorage.setItem('nexa_user_data', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   return (

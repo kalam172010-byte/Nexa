@@ -19,6 +19,7 @@ export function seedDatabaseIfEmpty() {
       passwordHash: hashPassword('user123'),
       role: 'USER',
       balance: 0.0,
+      apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
       referralCode: 'NEXA99PRO',
       twoFactorEnabled: false,
       isBanned: false,
@@ -33,6 +34,7 @@ export function seedDatabaseIfEmpty() {
       passwordHash: hashPassword('reseller123'),
       role: 'RESELLER',
       balance: 0.0,
+      apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
       referralCode: 'APEXVIP77',
       twoFactorEnabled: false,
       isBanned: false,
@@ -46,7 +48,8 @@ export function seedDatabaseIfEmpty() {
       email: 'kalam172010@gmail.com',
       passwordHash: hashPassword('admin123'),
       role: 'ADMIN',
-      balance: 5000.0,
+      balance: 0.0,
+      apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
       referralCode: 'NXKALAM1',
       twoFactorEnabled: false,
       isBanned: false,
@@ -57,7 +60,7 @@ export function seedDatabaseIfEmpty() {
     db.users.push(user1, reseller1, kalamAdmin);
   }
 
-  // Ensure primary admin accounts have ADMIN privileges without overriding custom passwords
+  // Ensure primary admin accounts have ADMIN privileges and unique API keys without overriding custom passwords
   const adminEmails = [
     { email: 'kk7953926@gmail.com', username: 'kk7953926', id: 'USR-1792242683123' },
     { email: 'kalam172010@gmail.com', username: 'kalam', id: 'USR-KALAM-172010' },
@@ -69,6 +72,10 @@ export function seedDatabaseIfEmpty() {
     if (existing) {
       existing.role = 'ADMIN';
       existing.username = adm.username;
+      if (!existing.apiKey || db.users.some(u => u.id !== existing.id && u.apiKey === existing.apiKey)) {
+        existing.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+        db.saveSync();
+      }
       if (!existing.passwordHash) {
         existing.passwordHash = hashPassword('admin123');
         db.saveSync();
@@ -80,7 +87,8 @@ export function seedDatabaseIfEmpty() {
         email: adm.email,
         passwordHash: hashPassword('admin123'),
         role: 'ADMIN',
-        balance: 5000.0,
+        balance: 0.0,
+        apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
         referralCode: `NX${adm.username.toUpperCase().slice(0, 6)}`,
         twoFactorEnabled: false,
         isBanned: false,

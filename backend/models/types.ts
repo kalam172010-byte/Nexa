@@ -2,6 +2,7 @@ export type UserRole = 'USER' | 'RESELLER' | 'ADMIN' | 'SUPER ADMIN';
 
 export interface User {
   id: string;
+  firebaseUid?: string;
   username: string;
   email: string;
   passwordHash: string;
@@ -58,6 +59,8 @@ export interface DigitalKey {
   keyCode: string;
   isUsed: boolean;
   assignedUserId?: string;
+  assignedUserEmail?: string;
+  assignedApiKey?: string;
   assignedOrderId?: string;
   assignedAt?: string;
   expiresAt?: string;
@@ -73,6 +76,8 @@ export interface DigitalKey {
 export interface Order {
   id: string;
   userId: string;
+  userEmail?: string;
+  apiKey?: string;
   productId: string;
   variantId: string;
   productName: string;
@@ -89,6 +94,8 @@ export interface Order {
 export interface Transaction {
   id: string;
   userId: string;
+  userEmail?: string;
+  apiKey?: string;
   type: 'DEPOSIT' | 'PURCHASE' | 'REFUND' | 'REFERRAL_BONUS' | 'ADMIN_ADJUST';
   amount: number;
   description: string;

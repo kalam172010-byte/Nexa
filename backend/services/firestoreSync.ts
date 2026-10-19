@@ -82,7 +82,8 @@ export class FirestoreSyncService {
     if (!doc || !doc.fields) return null;
     const fields = doc.fields;
     const docPath = doc.name || '';
-    const id = fields.id?.stringValue || docPath.split('/').pop() || `USR-${Date.now()}`;
+    const docId = docPath.split('/').pop() || '';
+    const id = fields.id?.stringValue || docId || `USR-${Date.now()}`;
     const username = fields.username?.stringValue || fields.displayName?.stringValue || 'user';
     const email = fields.email?.stringValue || '';
     const role = (fields.role?.stringValue || 'USER') as any;
@@ -99,6 +100,7 @@ export class FirestoreSyncService {
 
     return {
       id,
+      firebaseUid: docId && docId !== id ? docId : fields.firebaseUid?.stringValue || undefined,
       username,
       email,
       passwordHash: '',
@@ -114,26 +116,92 @@ export class FirestoreSyncService {
   }
 
   /**
-   * Sync user's deducted balance to Firestore in real-time
+   * Fetch the authoritative user balance from Firestore if a document exists for user.id, user.firebaseUid, or user.apiKey
+   */
+  public static async getAuthoritativeBalance(user: User): Promise<number> {
+    const candidateIds = new Set<string>([user.id]);
+    if (user.firebaseUid) candidateIds.add(user.firebaseUid);
+
+    for (const cid of candidateIds) {
+      try {
+        const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(cid)}?key=${API_KEY}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const docData: any = await res.json();
+          if (docData?.fields?.balance !== undefined) {
+            const fsBal =
+              typeof docData.fields.balance.doubleValue === 'number'
+                ? docData.fields.balance.doubleValue
+                : typeof docData.fields.balance.integerValue === 'string'
+                ? parseInt(docData.fields.balance.integerValue, 10)
+                : Number(docData.fields.balance.doubleValue || 0);
+            if (!Number.isNaN(fsBal)) {
+              return Math.max(0, Math.round(fsBal * 100) / 100);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (user.apiKey) {
+      try {
+        const fsUser = await this.findUserByApiKey(user.apiKey);
+        if (fsUser && typeof fsUser.balance === 'number' && !Number.isNaN(fsUser.balance)) {
+          return Math.max(0, Math.round(fsUser.balance * 100) / 100);
+        }
+      } catch {}
+    }
+
+    return Math.max(0, Math.round((user.balance || 0) * 100) / 100);
+  }
+
+  private static buildFullUserFields(docId: string, user: User | undefined, balanceOverride?: number, apiKeyOverride?: string) {
+    const bal = balanceOverride !== undefined ? balanceOverride : (user?.balance ?? 0);
+    const key = apiKeyOverride !== undefined ? apiKeyOverride : (user?.apiKey || '');
+    const nowIso = new Date().toISOString();
+    return {
+      id: { stringValue: docId },
+      username: { stringValue: user?.username || 'user' },
+      email: { stringValue: (user?.email || '').toLowerCase() },
+      role: { stringValue: user?.role || 'USER' },
+      balance: { doubleValue: Math.max(0, Number(bal)) },
+      apiKey: { stringValue: key },
+      referralCode: { stringValue: user?.referralCode || `NX${docId.slice(0, 4).toUpperCase()}` },
+      isBanned: { booleanValue: Boolean(user?.isBanned) },
+      twoFactorEnabled: { booleanValue: Boolean(user?.twoFactorEnabled) },
+      createdAt: { stringValue: user?.createdAt || nowIso },
+      updatedAt: { stringValue: nowIso },
+    };
+  }
+
+  /**
+   * Sync user's deducted balance to Firestore in real-time across all linked user document IDs
    */
   public static async syncUserBalance(userId: string, newBalance: number): Promise<void> {
     try {
-      const user = db.users.find(u => u.id === userId);
+      const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
       const userIdsToSync = new Set<string>([userId]);
-      if (user && (user as any).firebaseUid) {
-        userIdsToSync.add((user as any).firebaseUid);
+      if (user) {
+        userIdsToSync.add(user.id);
+        if (user.firebaseUid) userIdsToSync.add(user.firebaseUid);
+      }
+
+      // Also check if Firestore has another doc with this user's apiKey or email
+      if (user?.apiKey) {
+        const fsMatch = await this.findUserByApiKey(user.apiKey).catch(() => null);
+        if (fsMatch) {
+          userIdsToSync.add(fsMatch.id);
+          if (fsMatch.firebaseUid) userIdsToSync.add(fsMatch.firebaseUid);
+        }
       }
 
       for (const id of userIdsToSync) {
-        const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?updateMask.fieldPaths=balance&updateMask.fieldPaths=updatedAt&key=${API_KEY}`;
+        const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?key=${API_KEY}`;
         await fetch(patchUrl, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            fields: {
-              balance: { doubleValue: Number(newBalance) },
-              updatedAt: { stringValue: new Date().toISOString() },
-            },
+            fields: this.buildFullUserFields(id, user, newBalance, user?.apiKey),
           }),
         }).catch(() => {});
       }
@@ -149,6 +217,7 @@ export class FirestoreSyncService {
     try {
       const product = db.products.find(p => p.id === key.productId);
       const variant = db.productVariants.find(v => v.id === key.variantId);
+      const owner = db.users.find(u => u.id === key.assignedUserId || u.firebaseUid === key.assignedUserId);
       const productName = key.productName || product?.name || 'Gaming Digital Key';
       const gameName = key.gameName || product?.game || 'FREEFIRE';
       const durationLabel = key.durationLabel || variant?.durationLabel || '1 Day';
@@ -169,6 +238,8 @@ export class FirestoreSyncService {
             isUsed: { booleanValue: Boolean(key.isUsed) },
             status: { stringValue: key.status || 'ACTIVE' },
             assignedUserId: { stringValue: key.assignedUserId || '' },
+            assignedUserEmail: { stringValue: (key.assignedUserEmail || owner?.email || '').toLowerCase() },
+            assignedApiKey: { stringValue: key.assignedApiKey || owner?.apiKey || '' },
             assignedOrderId: { stringValue: key.assignedOrderId || '' },
             assignedAt: { stringValue: key.assignedAt || new Date().toISOString() },
             expiresAt: { stringValue: key.expiresAt || new Date(Date.now() + 24 * 3600 * 1000).toISOString() },
@@ -188,6 +259,7 @@ export class FirestoreSyncService {
    */
   public static async syncOrder(order: Order): Promise<void> {
     try {
+      const owner = db.users.find(u => u.id === order.userId || u.firebaseUid === order.userId);
       const patchUrl = `${FIRESTORE_BASE}/orders/${encodeURIComponent(order.id)}?key=${API_KEY}`;
       await fetch(patchUrl, {
         method: 'PATCH',
@@ -196,6 +268,8 @@ export class FirestoreSyncService {
           fields: {
             id: { stringValue: order.id },
             userId: { stringValue: order.userId },
+            userEmail: { stringValue: (order.userEmail || owner?.email || '').toLowerCase() },
+            apiKey: { stringValue: order.apiKey || owner?.apiKey || '' },
             productId: { stringValue: order.productId },
             variantId: { stringValue: order.variantId },
             productName: { stringValue: order.productName },
@@ -220,7 +294,7 @@ export class FirestoreSyncService {
    */
   public static async syncTransaction(tx: Transaction): Promise<void> {
     try {
-      // Map PURCHASE -> DEBIT and DEPOSIT -> CREDIT for full compatibility with rules
+      const owner = db.users.find(u => u.id === tx.userId || u.firebaseUid === tx.userId);
       const ruleCompatibleType = tx.type === 'PURCHASE' ? 'DEBIT' : (tx.type === 'DEPOSIT' ? 'CREDIT' : tx.type);
       const patchUrl = `${FIRESTORE_BASE}/transactions/${encodeURIComponent(tx.id)}?key=${API_KEY}`;
       await fetch(patchUrl, {
@@ -230,6 +304,8 @@ export class FirestoreSyncService {
           fields: {
             id: { stringValue: tx.id },
             userId: { stringValue: tx.userId },
+            userEmail: { stringValue: (tx.userEmail || owner?.email || '').toLowerCase() },
+            apiKey: { stringValue: tx.apiKey || owner?.apiKey || '' },
             type: { stringValue: ruleCompatibleType },
             amount: { doubleValue: Number(tx.amount) },
             description: { stringValue: tx.description },
@@ -246,21 +322,27 @@ export class FirestoreSyncService {
   }
 
   /**
-   * Update or ensure user document in Firestore has their current apiKey
+   * Update or ensure user document in Firestore has their current apiKey and full user profile
    */
   public static async syncUserApiKey(userId: string, apiKey: string): Promise<void> {
     try {
-      const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(userId)}?updateMask.fieldPaths=apiKey&updateMask.fieldPaths=updatedAt&key=${API_KEY}`;
-      await fetch(patchUrl, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fields: {
-            apiKey: { stringValue: apiKey },
-            updatedAt: { stringValue: new Date().toISOString() },
-          },
-        }),
-      });
+      const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
+      const userIdsToSync = new Set<string>([userId]);
+      if (user) {
+        userIdsToSync.add(user.id);
+        if (user.firebaseUid) userIdsToSync.add(user.firebaseUid);
+      }
+
+      for (const id of userIdsToSync) {
+        const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?key=${API_KEY}`;
+        await fetch(patchUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: this.buildFullUserFields(id, user, user?.balance, apiKey),
+          }),
+        }).catch(() => {});
+      }
     } catch (err) {
       console.warn('[FirestoreSync] Failed to update user apiKey in Firestore:', err);
     }
@@ -272,9 +354,6 @@ export class FirestoreSyncService {
    * 2. Writes the newly issued digital key document into digitalKeys
    * 3. Records the purchase order document in orders
    * 4. Records the purchase debit record in transactions
-   *
-   * Guarantees atomic all-or-nothing execution: the purchase history and key records
-   * are written ONLY if the balance deduction and transaction commit succeeds!
    */
   public static async commitAtomicKeyPurchase(params: {
     userId: string;
@@ -288,27 +367,35 @@ export class FirestoreSyncService {
 
     const writes: any[] = [];
 
-    // 1. Write user balance update
-    const user = db.users.find(u => u.id === userId);
+    // 1. Write user balance update across all linked IDs for this account
+    const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
     const userIdsToSync = new Set<string>([userId]);
-    if (user && (user as any).firebaseUid) {
-      userIdsToSync.add((user as any).firebaseUid);
+    if (user) {
+      userIdsToSync.add(user.id);
+      if (user.firebaseUid) {
+        userIdsToSync.add(user.firebaseUid);
+      }
+    }
+
+    if (user?.apiKey) {
+      const fsMatch = await this.findUserByApiKey(user.apiKey).catch(() => null);
+      if (fsMatch) {
+        userIdsToSync.add(fsMatch.id);
+        if (fsMatch.firebaseUid) userIdsToSync.add(fsMatch.firebaseUid);
+      }
     }
 
     for (const uid of userIdsToSync) {
       writes.push({
         update: {
           name: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/users/${encodeURIComponent(uid)}`,
-          fields: {
-            balance: { doubleValue: Number(newBalance) },
-            updatedAt: { stringValue: new Date().toISOString() },
-          },
-        },
-        updateMask: {
-          fieldPaths: ['balance', 'updatedAt'],
+          fields: this.buildFullUserFields(uid, user, newBalance, user?.apiKey),
         },
       });
     }
+
+    const ownerEmail = (user?.email || order.userEmail || '').toLowerCase();
+    const ownerApiKey = user?.apiKey || order.apiKey || '';
 
     // 2. Write digital keys
     for (const key of keyObjects) {
@@ -328,6 +415,8 @@ export class FirestoreSyncService {
             isUsed: { booleanValue: Boolean(key.isUsed) },
             status: { stringValue: key.status || 'ACTIVE' },
             assignedUserId: { stringValue: key.assignedUserId || userId },
+            assignedUserEmail: { stringValue: (key.assignedUserEmail || ownerEmail).toLowerCase() },
+            assignedApiKey: { stringValue: key.assignedApiKey || ownerApiKey },
             assignedOrderId: { stringValue: key.assignedOrderId || order.id },
             assignedAt: { stringValue: key.assignedAt || new Date().toISOString() },
             expiresAt: { stringValue: key.expiresAt || new Date(Date.now() + 24 * 3600 * 1000).toISOString() },
@@ -346,6 +435,8 @@ export class FirestoreSyncService {
         fields: {
           id: { stringValue: order.id },
           userId: { stringValue: order.userId },
+          userEmail: { stringValue: (order.userEmail || ownerEmail).toLowerCase() },
+          apiKey: { stringValue: order.apiKey || ownerApiKey },
           productId: { stringValue: order.productId },
           variantId: { stringValue: order.variantId },
           productName: { stringValue: order.productName },
@@ -362,13 +453,15 @@ export class FirestoreSyncService {
     });
 
     // 4. Write transaction document
-    const ruleType = transaction.type === 'PURCHASE' ? 'DEBIT' : transaction.type;
+    const ruleType = transaction.type === 'PURCHASE' ? 'DEBIT' : (transaction.type === 'DEPOSIT' ? 'CREDIT' : transaction.type);
     writes.push({
       update: {
         name: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/transactions/${encodeURIComponent(transaction.id)}`,
         fields: {
           id: { stringValue: transaction.id },
           userId: { stringValue: transaction.userId },
+          userEmail: { stringValue: (transaction.userEmail || ownerEmail).toLowerCase() },
+          apiKey: { stringValue: transaction.apiKey || ownerApiKey },
           type: { stringValue: ruleType },
           amount: { doubleValue: Number(transaction.amount) },
           description: { stringValue: transaction.description },

@@ -46,16 +46,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get, list: if true;
 
-      allow create: if isValidId(userId) &&
-        incoming().id == userId &&
-        incoming().email is string &&
-        incoming().email.size() <= 256 &&
-        incoming().username is string &&
-        incoming().username.size() <= 64 &&
-        incoming().balance is number &&
-        incoming().balance >= 0;
-
-      allow update: if isValidId(userId) &&
+      allow create, update: if isValidId(userId) &&
         (!('balance' in incoming()) || (incoming().balance is number && incoming().balance >= 0));
 
       allow delete: if isAdmin();
@@ -87,18 +78,18 @@ service cloud.firestore {
       allow get, list: if true;
       allow create, update: if isValidId(orderId) &&
         incoming().userId is string &&
-        incoming().status in ['COMPLETED', 'FAILED', 'PENDING'];
+        incoming().status in ['COMPLETED', 'FAILED', 'PENDING', 'REFUNDED'];
       allow delete: if isAdmin();
     }
 
     // --- TRANSACTIONS COLLECTION ---
     match /transactions/{transactionId} {
       allow get, list: if true;
-      allow create: if isValidId(transactionId) &&
+      allow create, update: if isValidId(transactionId) &&
         incoming().userId is string &&
         incoming().amount is number &&
         incoming().type in ['CREDIT', 'DEBIT', 'PURCHASE', 'DEPOSIT', 'REFERRAL_BONUS', 'ADMIN_ADJUST', 'REFUND'];
-      allow update, delete: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // --- DEPOSITS COLLECTION ---

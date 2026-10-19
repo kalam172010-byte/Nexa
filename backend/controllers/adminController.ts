@@ -8,7 +8,8 @@ import { PaymentGatewayAdapter } from '../services/paymentAdapter';
 import { ResellerApiService } from '../services/resellerApi';
 import { emailService } from '../services/emailService';
 import { hashPassword } from '../db/seed';
-import { Product, ProductVariant } from '../models/types';
+import { Product, ProductVariant, DigitalKey, Order } from '../models/types';
+import { FirestoreSyncService } from '../services/firestoreSync';
 
 export class AdminController {
   public static async getDashboardStats(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -331,10 +332,10 @@ export class AdminController {
       const defaultDurations = Array.isArray(initialDurations) && initialDurations.length > 0
         ? initialDurations
         : [
-            { label: '1 Day', hours: 24, price: 50, resellerPrice: 38, extDur: '1 DAYS' },
-            { label: '3 Days', hours: 72, price: 120, resellerPrice: 90, extDur: '3 DAYS' },
-            { label: '7 Days', hours: 168, price: 250, resellerPrice: 190, extDur: '7 DAYS' },
-            { label: '30 Days', hours: 720, price: 600, resellerPrice: 450, extDur: '30 DAYS' },
+            { label: '1 Day', hours: 24, price: 50, resellerPrice: 50, extDur: '1 DAYS' },
+            { label: '3 Days', hours: 72, price: 120, resellerPrice: 120, extDur: '3 DAYS' },
+            { label: '7 Days', hours: 168, price: 250, resellerPrice: 250, extDur: '7 DAYS' },
+            { label: '30 Days', hours: 720, price: 600, resellerPrice: 600, extDur: '30 DAYS' },
           ];
 
       for (let idx = 0; idx < defaultDurations.length; idx++) {
@@ -342,7 +343,7 @@ export class AdminController {
         const labelStr = String(d.label || d.durationLabel || '1 Day').trim();
         const hoursNum = Number(d.hours || d.durationHours) || 24;
         const priceNum = Number(d.price) || 50;
-        const resellerPriceNum = Number(d.resellerPrice) || Math.round(priceNum * 0.75);
+        const resellerPriceNum = Number(d.resellerPrice) || priceNum;
         const varPid = d.externalPid?.trim() || cleanPid;
         const extDur = String(d.extDur || d.externalDuration || labelStr).trim();
 
@@ -932,16 +933,81 @@ export class AdminController {
 
   public static async testBuyKeyGeneration(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const pid = req.body.productId || req.body.product_id;
-      const dur = req.body.duration || req.body.durationLabel;
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ error: 'Please log in to purchase or generate keys.' });
+        return;
+      }
+
+      const pid = String(req.body.productId || req.body.product_id || req.body.externalPid || '').trim();
+      const dur = String(req.body.duration || req.body.durationLabel || '').trim();
       const androidId = req.body.androidId || req.body.android_id;
       const configOverride = req.body.configOverride;
 
       if (!pid || !dur) {
-        res.status(400).json({ error: 'Product PID and Duration are required for test generation.' });
+        res.status(400).json({ error: 'Product PID and Duration are required for key generation.' });
         return;
       }
 
+      // Resolve product and variant price
+      const cleanDuration = dur.toLowerCase();
+      const candidateProducts = db.products.filter(
+        p => String(p.externalPid).trim() === pid || String(p.id).trim().toLowerCase() === pid.toLowerCase()
+      );
+      let matchedProd = candidateProducts[0];
+      let matchedVar = undefined;
+
+      for (const cand of candidateProducts) {
+        const vars = db.productVariants.filter(v => v.productId === cand.id && v.isActive);
+        const exact =
+          vars.find(
+            v =>
+              v.durationLabel.trim().toLowerCase() === cleanDuration ||
+              v.externalDuration?.trim().toLowerCase() === cleanDuration
+          ) ||
+          vars.find(
+            v =>
+              v.durationLabel.toLowerCase().includes(cleanDuration) ||
+              cleanDuration.includes(v.durationLabel.toLowerCase())
+          );
+        if (exact) {
+          matchedProd = cand;
+          matchedVar = exact;
+          break;
+        }
+      }
+
+      if (!matchedProd) {
+        matchedProd = db.products[0];
+      }
+      if (!matchedVar && matchedProd) {
+        const vars = db.productVariants.filter(v => v.productId === matchedProd.id && v.isActive);
+        matchedVar = vars[0];
+      }
+
+      const unitPrice = Math.max(1, Number(matchedVar?.price || matchedVar?.resellerPrice || 50));
+      const orderId = `ORD-EXT-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+
+      // Enforce wallet balance check and atomic deduction
+      const verification = await WalletService.verifyAndDeductApiKeyPurchase(
+        user.id,
+        unitPrice,
+        `[This Key Buyed by API] API Purchase: ${matchedProd ? matchedProd.name : `Product PID ${pid}`} (${dur})`,
+        orderId
+      );
+
+      if (!verification.success) {
+        res.status(400).json({
+          success: false,
+          error: verification.error,
+          message: verification.error,
+          required_amount: unitPrice,
+          current_balance: verification.currentBalance,
+        });
+        return;
+      }
+
+      const dbUser = verification.user || user;
       const result = await ResellerApiService.testBuyKeyGeneration({
         productId: pid,
         duration: dur,
@@ -949,7 +1015,88 @@ export class AdminController {
         configOverride,
       });
 
-      res.json(result);
+      const keyCode =
+        result.keyCode ||
+        `KALAM-API-${pid}-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+      const now = new Date();
+      const expiryDate = new Date(now.getTime() + (matchedVar?.durationHours || 24) * 3600 * 1000);
+      const newKey: DigitalKey = {
+        id: `KEY-EXT-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
+        productId: matchedProd ? matchedProd.id : 'PROD-API',
+        variantId: matchedVar ? matchedVar.id : 'VAR-API',
+        productName: matchedProd ? matchedProd.name : `Product PID ${pid}`,
+        gameName: matchedProd?.game || 'FREEFIRE',
+        durationLabel: matchedVar?.durationLabel || dur,
+        keyCode,
+        isUsed: false,
+        assignedUserId: dbUser.id,
+        assignedUserEmail: dbUser.email.toLowerCase(),
+        assignedApiKey: dbUser.apiKey,
+        assignedOrderId: orderId,
+        assignedAt: now.toISOString(),
+        expiresAt: expiryDate.toISOString(),
+        status: 'ACTIVE',
+        purchaseSource: 'API',
+        purchaseSourceLabel: 'Buy from API',
+        createdAt: now.toISOString(),
+      };
+      db.digitalKeys.unshift(newKey);
+
+      const newOrder: Order = {
+        id: orderId,
+        userId: dbUser.id,
+        userEmail: dbUser.email.toLowerCase(),
+        apiKey: dbUser.apiKey,
+        productId: matchedProd ? matchedProd.id : 'PROD-API',
+        variantId: matchedVar ? matchedVar.id : 'VAR-API',
+        productName: matchedProd ? matchedProd.name : `Product PID ${pid}`,
+        durationLabel: matchedVar?.durationLabel || dur,
+        pricePaid: unitPrice,
+        deliveredKeyId: newKey.id,
+        deliveredKeyCode: keyCode,
+        status: 'COMPLETED',
+        purchaseSource: 'API',
+        purchaseSourceLabel: 'Buy from API',
+        createdAt: now.toISOString(),
+      };
+      db.orders.unshift(newOrder);
+      db.saveSync();
+
+      const txRecord = verification.transaction || {
+        id: `TXN-${Date.now()}`,
+        userId: dbUser.id,
+        userEmail: dbUser.email.toLowerCase(),
+        apiKey: dbUser.apiKey,
+        type: 'PURCHASE' as const,
+        amount: -unitPrice,
+        description: `[This Key Buyed by API] API Purchase: ${newOrder.productName} (${dur})`,
+        referenceId: orderId,
+        status: 'SUCCESS' as const,
+        purchaseSource: 'API' as const,
+        purchaseSourceLabel: 'Buy from API',
+        createdAt: now.toISOString(),
+      };
+
+      await FirestoreSyncService.commitAtomicKeyPurchase({
+        userId: dbUser.id,
+        newBalance: verification.remainingBalance,
+        keyObjects: [newKey],
+        order: newOrder,
+        transaction: txRecord,
+      }).catch(() => {});
+
+      res.json({
+        ...result,
+        success: true,
+        keyCode,
+        key: keyCode,
+        keys: [keyCode],
+        wallet_deducted: unitPrice,
+        remaining_balance: verification.remainingBalance,
+        purchaseSource: 'API',
+        purchaseSourceLabel: 'This Key Buyed by API',
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Test buy generation failed.' });
     }

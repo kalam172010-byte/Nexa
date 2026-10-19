@@ -441,39 +441,67 @@ export const ResellerApiPage: React.FC = () => {
           </button>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider block">
-            Your Secret API Token (<code className="text-white">api_key</code> / <code className="text-white">x-api-key</code>)
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type={showKey ? 'text' : 'password'}
-              readOnly
-              value={creds?.apiKey || getInitialApiKey()}
-              className="w-full px-4 py-3 bg-[#090a0f] border border-amber-500/25 rounded-xl text-amber-300 font-mono text-xs select-all shadow-inner"
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey(!showKey)}
-              className="p-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 transition-colors border border-amber-500/30 cursor-pointer"
-              title={showKey ? 'Hide Token' : 'Show Token'}
-            >
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const tokenToCopy = creds?.apiKey || getInitialApiKey();
-                navigator.clipboard.writeText(tokenToCopy);
-                setCopiedKey(true);
-                showToastSuccess('Copied Secret API Token', tokenToCopy);
-                setTimeout(() => setCopiedKey(false), 2000);
-              }}
-              className="px-4 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-lg shadow-amber-950/40"
-            >
-              {copiedKey ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4" />}
-              <span>{copiedKey ? 'Copied!' : 'Copy Token'}</span>
-            </button>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider block">
+              Your Unique Account API Token (<code className="text-white">api_key</code> / <code className="text-white">x-api-key</code>)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type={showKey ? 'text' : 'password'}
+                readOnly
+                value={creds?.apiKey || user?.apiKey || getInitialApiKey(user?.id)}
+                className="w-full px-4 py-3 bg-[#090a0f] border border-amber-500/25 rounded-xl text-amber-300 font-mono text-xs select-all shadow-inner"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="p-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 transition-colors border border-amber-500/30 cursor-pointer"
+                title={showKey ? 'Hide Token' : 'Show Token'}
+              >
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const tokenToCopy = creds?.apiKey || user?.apiKey || getInitialApiKey(user?.id);
+                  navigator.clipboard.writeText(tokenToCopy);
+                  setCopiedKey(true);
+                  showToastSuccess('Copied Secret API Token', tokenToCopy);
+                  setTimeout(() => setCopiedKey(false), 2000);
+                }}
+                className="px-4 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-lg shadow-amber-950/40"
+              >
+                {copiedKey ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedKey ? 'Copied!' : 'Copy Token'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Per-Account Wallet Balance & API Purchase Guard Status */}
+          <div className="p-3.5 rounded-2xl bg-[#090a0f] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className={`w-4 h-4 shrink-0 ${balance > 0 ? 'text-emerald-400' : 'text-rose-400'}`} />
+              <div className="text-xs">
+                <span className="text-slate-300 font-semibold">Linked Account Wallet: </span>
+                <span className="text-white font-mono font-bold">{user?.email || user?.username}</span>
+                <span className="text-slate-400 block sm:inline sm:ml-2">
+                  (External API requests deduct exact key cost from this wallet &amp; sync generated keys to My Keys)
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[11px] font-mono text-slate-400">Wallet Balance:</span>
+              <span
+                className={`px-2.5 py-1 rounded-lg font-mono text-xs font-black tabular-nums border ${
+                  balance > 0
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                    : 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                }`}
+              >
+                ₹{balance.toFixed(2)} {balance > 0 ? '· API READY' : '· INSUFFICIENT BALANCE'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -487,10 +515,10 @@ export const ResellerApiPage: React.FC = () => {
             </div>
             <div>
               <h3 className="font-display font-bold text-base text-white">
-                Product Reference & Wholesale Pricing Table
+                Product Reference &amp; API Pricing Table
               </h3>
               <p className="text-xs text-slate-400">
-                Click any numeric Product PID or Duration tier to copy and auto-configure code snippets.
+                Click any numeric Product PID or Duration tier to copy and auto-configure code snippets. Exact price shown is deducted per key.
               </p>
             </div>
           </div>
@@ -513,7 +541,7 @@ export const ResellerApiPage: React.FC = () => {
               <tr>
                 <th className="py-3 px-4">Product Name</th>
                 <th className="py-3 px-4">Numeric PID</th>
-                <th className="py-3 px-4">Available Durations & Wholesale Rates</th>
+                <th className="py-3 px-4">Available Durations &amp; API Price Deducted</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
@@ -564,7 +592,7 @@ export const ResellerApiPage: React.FC = () => {
                           >
                             <span className="text-white font-medium">{v.durationLabel}</span>
                             <span aria-hidden="true" className="text-slate-600">·</span>
-                            <span className="font-mono font-bold text-emerald-400 tabular-nums">₹{v.resellerPrice ?? v.price}</span>
+                            <span className="font-mono font-bold text-emerald-400 tabular-nums">₹{v.price ?? v.resellerPrice}</span>
                             <span aria-hidden="true" className="text-slate-600">·</span>
                             <span className="font-mono text-cyan-300 tabular-nums">{v.stockCount ?? 999} stock</span>
                           </button>

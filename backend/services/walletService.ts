@@ -1,26 +1,12 @@
 import crypto from 'crypto';
 import { db } from '../db/database';
 import { User, Transaction } from '../models/types';
-
-function syncUserBalanceToFirestore(userId: string, balance: number): void {
-  try {
-    const url = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(userId)}?updateMask.fieldPaths=balance&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
-    fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fields: {
-          balance: { doubleValue: Number(balance) }
-        }
-      })
-    }).catch(() => {});
-  } catch {}
-}
+import { FirestoreSyncService } from './firestoreSync';
 
 export class WalletService {
   public static getBalance(userId: string): number {
-    const user = db.users.find(u => u.id === userId);
-    return user ? user.balance : 0;
+    const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
+    return user ? Math.max(0, Math.round((user.balance || 0) * 100) / 100) : 0;
   }
 
   public static addFunds(
@@ -34,7 +20,7 @@ export class WalletService {
       throw new Error('Credit amount must be greater than zero.');
     }
 
-    const user = db.users.find(u => u.id === userId);
+    const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
     if (!user) throw new Error('User not found.');
 
     user.balance = Math.round((user.balance + amount) * 100) / 100;
@@ -42,7 +28,9 @@ export class WalletService {
 
     const transaction: Transaction = {
       id: `TXN-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
-      userId,
+      userId: user.id,
+      userEmail: user.email.toLowerCase(),
+      apiKey: user.apiKey,
       type,
       amount: Math.round(amount * 100) / 100,
       description,
@@ -53,7 +41,8 @@ export class WalletService {
 
     db.transactions.unshift(transaction);
     db.saveSync();
-    syncUserBalanceToFirestore(user.id, user.balance);
+    FirestoreSyncService.syncUserBalance(user.id, user.balance).catch(() => {});
+    FirestoreSyncService.syncTransaction(transaction).catch(() => {});
 
     return { user, transaction };
   }
@@ -68,7 +57,7 @@ export class WalletService {
       throw new Error('Debit amount must be greater than zero.');
     }
 
-    const user = db.users.find(u => u.id === userId);
+    const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
     if (!user) throw new Error('User not found.');
 
     if (user.balance < amount) {
@@ -80,7 +69,9 @@ export class WalletService {
 
     const transaction: Transaction = {
       id: `TXN-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
-      userId,
+      userId: user.id,
+      userEmail: user.email.toLowerCase(),
+      apiKey: user.apiKey,
       type: 'PURCHASE',
       amount: -Math.round(amount * 100) / 100,
       description,
@@ -91,7 +82,8 @@ export class WalletService {
 
     db.transactions.unshift(transaction);
     db.saveSync();
-    syncUserBalanceToFirestore(user.id, user.balance);
+    FirestoreSyncService.syncUserBalance(user.id, user.balance).catch(() => {});
+    FirestoreSyncService.syncTransaction(transaction).catch(() => {});
 
     return { user, transaction };
   }
@@ -114,7 +106,7 @@ export class WalletService {
     remainingBalance: number;
     error?: string;
   }> {
-    const user = db.users.find(u => u.id === userId);
+    const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
     if (!user) {
       return {
         success: false,
@@ -126,24 +118,13 @@ export class WalletService {
 
     // Refresh balance from Firestore if possible for real-time accuracy
     try {
-      const url = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(userId)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const docData: any = await res.json();
-        if (docData?.fields?.balance) {
-          const fsBal = typeof docData.fields.balance.doubleValue === 'number'
-            ? docData.fields.balance.doubleValue
-            : typeof docData.fields.balance.integerValue === 'string'
-            ? parseInt(docData.fields.balance.integerValue, 10)
-            : Number(docData.fields.balance.doubleValue || 0);
-          if (typeof fsBal === 'number') {
-            user.balance = fsBal;
-          }
-        }
+      const liveBalance = await FirestoreSyncService.getAuthoritativeBalance(user);
+      if (typeof liveBalance === 'number' && !Number.isNaN(liveBalance)) {
+        user.balance = liveBalance;
       }
     } catch {}
 
-    const currentBalance = user.balance;
+    const currentBalance = Math.max(0, Math.round((user.balance || 0) * 100) / 100);
 
     if (currentBalance < totalPrice) {
       return {
@@ -157,7 +138,7 @@ export class WalletService {
 
     // Atomic deduction
     try {
-      const { user: updatedUser, transaction } = this.deductFunds(userId, totalPrice, description, referenceId);
+      const { user: updatedUser, transaction } = this.deductFunds(user.id, totalPrice, description, referenceId);
       return {
         success: true,
         user: updatedUser,

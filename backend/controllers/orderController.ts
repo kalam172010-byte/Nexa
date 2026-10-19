@@ -55,33 +55,34 @@ export class OrderController {
         return;
       }
 
-      // 3. Server-side price calculation
-      const isReseller = user.role === 'RESELLER';
-      const singlePrice = isReseller ? variant.resellerPrice : variant.price;
-      const authoritativePrice = singlePrice * qty;
-
-      // 4. Wallet balance verification
-      const currentBalance = WalletService.getBalance(user.id);
-      if (currentBalance < authoritativePrice) {
-        res.status(400).json({
-          error: `Insufficient wallet balance. You have ₹${currentBalance.toFixed(2)}, but this requires ₹${authoritativePrice.toFixed(2)}. Please deposit funds.`,
-          requiredAmount: authoritativePrice,
-          currentBalance,
-        });
-        return;
-      }
+      // 3. Server-side price calculation (exact variant price)
+      const singlePrice = Math.max(1, Number(variant.price || variant.resellerPrice || 50));
+      const authoritativePrice = Math.round(singlePrice * qty * 100) / 100;
 
       const orderId = `ORD-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
-      // 5. Deduct balance from wallet
-      WalletService.deductFunds(
+      // 4. Server-side wallet balance validation & atomic deduction
+      const verification = await WalletService.verifyAndDeductApiKeyPurchase(
         user.id,
         authoritativePrice,
         `Purchased ${qty > 1 ? `${qty}x ` : ''}${product.name} (${variant.durationLabel})`,
         orderId
       );
 
-      // 6. Key generation via External Reseller API or Local Pool
+      if (!verification.success) {
+        res.status(400).json({
+          error: verification.error,
+          requiredAmount: authoritativePrice,
+          currentBalance: verification.currentBalance,
+        });
+        return;
+      }
+
+      const dbUser = verification.user || user;
+      const userEmail = (dbUser.email || user.email || '').toLowerCase();
+      const userApiKey = dbUser.apiKey || user.apiKey || '';
+
+      // 5. Key generation via External Reseller API or Local Pool
       const deliveredKeys: DigitalKey[] = [];
       const effectivePid = variant.externalPid?.trim() || product.externalPid?.trim();
       const effectiveDuration = variant.externalDuration?.trim() || variant.durationLabel.trim();
@@ -107,7 +108,9 @@ export class OrderController {
               durationLabel: variant.durationLabel,
               keyCode: apiResult.keyCode,
               isUsed: false,
-              assignedUserId: user.id,
+              assignedUserId: dbUser.id,
+              assignedUserEmail: userEmail,
+              assignedApiKey: userApiKey,
               assignedOrderId: subOrderId,
               assignedAt: new Date().toISOString(),
               expiresAt: expiryDate.toISOString(),
@@ -122,18 +125,22 @@ export class OrderController {
           } else {
             // Check local inventory first
             const availableKey = db.digitalKeys.find(
-              k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE'
+              k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
             );
 
             if (availableKey) {
-              const localKey = KeyService.allocateKey(user.id, variant, subOrderId, 'WEB');
+              const localKey = KeyService.allocateKey(dbUser.id, variant, subOrderId, 'WEB');
+              localKey.assignedUserEmail = userEmail;
+              localKey.assignedApiKey = userApiKey;
               deliveredKeys.push(localKey);
             } else {
               // Auto-generate high entropy fallback key if upstream fails / out of stock
-              const fallbackKey = KeyService.generateFallbackKey(user.id, product, variant, subOrderId, 'WEB');
+              const fallbackKey = KeyService.generateFallbackKey(dbUser.id, product, variant, subOrderId, 'WEB');
+              fallbackKey.assignedUserEmail = userEmail;
+              fallbackKey.assignedApiKey = userApiKey;
               db.logActivity(
-                user.id,
-                user.username,
+                dbUser.id,
+                dbUser.username,
                 'ORDER_KEY_FALLBACK_ISSUED',
                 `Delivered instant digital key for ${product.name} (${variant.durationLabel}). Upstream notice: ${apiResult.message || 'Out of stock'}`
               );
@@ -143,25 +150,31 @@ export class OrderController {
         } else {
           // Local inventory allocation or fallback auto-generation
           const availableKey = db.digitalKeys.find(
-            k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE'
+            k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
           );
           if (availableKey) {
-            const localKey = KeyService.allocateKey(user.id, variant, subOrderId, 'WEB');
+            const localKey = KeyService.allocateKey(dbUser.id, variant, subOrderId, 'WEB');
+            localKey.assignedUserEmail = userEmail;
+            localKey.assignedApiKey = userApiKey;
             deliveredKeys.push(localKey);
           } else {
-            const fallbackKey = KeyService.generateFallbackKey(user.id, product, variant, subOrderId, 'WEB');
+            const fallbackKey = KeyService.generateFallbackKey(dbUser.id, product, variant, subOrderId, 'WEB');
+            fallbackKey.assignedUserEmail = userEmail;
+            fallbackKey.assignedApiKey = userApiKey;
             deliveredKeys.push(fallbackKey);
           }
         }
       }
 
-      // 7. Create Order records
+      // 6. Create Order records
       for (let i = 0; i < deliveredKeys.length; i++) {
         const k = deliveredKeys[i];
         const subOrderId = qty > 1 ? `${orderId}-${i + 1}` : orderId;
         const order: Order = {
           id: subOrderId,
-          userId: user.id,
+          userId: dbUser.id,
+          userEmail,
+          apiKey: userApiKey,
           productId: product.id,
           variantId: variant.id,
           productName: product.name,
@@ -180,25 +193,27 @@ export class OrderController {
       }
       db.saveSync();
 
-      const newBalance = WalletService.getBalance(user.id);
-      FirestoreSyncService.syncUserBalance(user.id, newBalance).catch(() => {});
+      const newBalance = verification.remainingBalance;
+      FirestoreSyncService.syncUserBalance(dbUser.id, newBalance).catch(() => {});
 
       const latestTx = db.transactions.find(t => t.referenceId === orderId);
       if (latestTx) {
         latestTx.purchaseSource = 'WEB';
         latestTx.purchaseSourceLabel = 'Buy from Website';
+        latestTx.userEmail = userEmail;
+        latestTx.apiKey = userApiKey;
         FirestoreSyncService.syncTransaction(latestTx).catch(() => {});
       }
 
-      // 8. Process referral commission if applicable
-      WalletService.processReferralReward(user.id, authoritativePrice);
+      // 7. Process referral commission if applicable
+      WalletService.processReferralReward(dbUser.id, authoritativePrice);
 
       const deliveredKey = deliveredKeys[0];
 
-      // 9. Audit log
+      // 8. Audit log
       db.logActivity(
-        user.id,
-        user.username,
+        dbUser.id,
+        dbUser.username,
         'KEY_PURCHASE_WEB',
         `[This Key Buyed by Web] Purchased ${product.name} [${variant.durationLabel}] for ₹${authoritativePrice}. Key: ${deliveredKey.keyCode}`
       );
@@ -227,7 +242,7 @@ export class OrderController {
           purchaseSource: 'WEB',
           purchaseSourceLabel: 'This Key Buyed by Web',
         },
-        newBalance: WalletService.getBalance(user.id),
+        newBalance,
       });
     } catch (err: any) {
       console.error('Order creation error:', err);
@@ -243,10 +258,30 @@ export class OrderController {
         return;
       }
 
+      const userAltIds = new Set<string>([user.id]);
+      if ((user as any).firebaseUid) userAltIds.add((user as any).firebaseUid);
+      const dbUser = db.users.find(
+        u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+      );
+      if (dbUser) {
+        userAltIds.add(dbUser.id);
+        if (dbUser.firebaseUid) userAltIds.add(dbUser.firebaseUid);
+      }
+      const userEmail = (dbUser?.email || user.email || '').toLowerCase().trim();
+      const userApiKey = (dbUser?.apiKey || user.apiKey || '').trim();
+
       const orders = db.orders
-        .filter(o => o.userId === user.id)
+        .filter(
+          o =>
+            userAltIds.has(o.userId) ||
+            (userEmail && o.userEmail && o.userEmail.toLowerCase().trim() === userEmail) ||
+            (userApiKey && o.apiKey && o.apiKey.trim() === userApiKey)
+        )
         .map(o => {
-          const isApi = o.purchaseSource === 'API' || String(o.id || '').startsWith('API-ORD-');
+          const isApi =
+            o.purchaseSource === 'API' ||
+            String(o.id || '').startsWith('API-ORD-') ||
+            String(o.id || '').startsWith('ORD-EXT-');
           return {
             ...o,
             purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
