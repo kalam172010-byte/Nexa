@@ -441,18 +441,42 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
   }
 
   // 1C. Auth Sync & Current User (/api/auth/firebase-sync, /api/auth/me, /api/auth/token-refresh)
-  if (path === '/api/auth/firebase-sync' || path === '/api/auth/token-refresh') {
+  if (path === '/api/auth/firebase-sync' || path === '/api/auth/token-refresh' || path === '/api/auth/me') {
     const user = resolveUserFromRequest(request, bodyData);
+    try {
+      const linkedIds =
+        user.email.toLowerCase() === 'kalam172010@gmail.com'
+          ? ['USR-KALAM-172010', 'tnqy7LYfgwgzYpoQGqljC4H6bKc2']
+          : [user.id];
+      const bals: number[] = [];
+      for (const lid of linkedIds) {
+        const uDocUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(lid)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+        const uRes = await fetch(uDocUrl);
+        if (uRes.ok) {
+          const uData: any = await uRes.json();
+          if (uData?.fields?.balance) {
+            const fsBal =
+              typeof uData.fields.balance.doubleValue === 'number'
+                ? uData.fields.balance.doubleValue
+                : typeof uData.fields.balance.integerValue === 'string'
+                ? parseInt(uData.fields.balance.integerValue, 10)
+                : Number(uData.fields.balance.doubleValue || 0);
+            if (!Number.isNaN(fsBal)) bals.push(fsBal);
+          }
+        }
+      }
+      if (bals.length > 0) {
+        user.balance = Math.min(...bals);
+      }
+    } catch {}
+    if (path === '/api/auth/me') {
+      return jsonResponse({ user });
+    }
     return jsonResponse({
       success: true,
       token: `edge_jwt_${user.id}_${Date.now()}`,
       user,
     });
-  }
-
-  if (path === '/api/auth/me') {
-    const user = resolveUserFromRequest(request, bodyData);
-    return jsonResponse({ user });
   }
 
   // 2. Regenerate Outbound Reseller API Key
@@ -722,22 +746,33 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     const { product, variant } = findProductAndVariant(String(rawPid || '155'), String(rawDuration || '1 Day'));
     const unitPrice = Math.max(1, Number(variant.price || variant.resellerPrice || 50));
     const totalPrice = Number((unitPrice * quantity).toFixed(2));
-    // Fetch latest balance from Firestore for 100% up-to-date real-time accuracy
+    // Fetch latest balance from Firestore across all linked user IDs for 100% up-to-date real-time accuracy
+    const linkedUserIds =
+      user.email.toLowerCase() === 'kalam172010@gmail.com'
+        ? Array.from(new Set([user.id, 'USR-KALAM-172010', 'tnqy7LYfgwgzYpoQGqljC4H6bKc2']))
+        : [user.id];
+
     try {
-      const uDocUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(user.id)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
-      const uRes = await fetch(uDocUrl);
-      if (uRes.ok) {
-        const uData: any = await uRes.json();
-        if (uData && uData.fields && uData.fields.balance) {
-          const fsBal = typeof uData.fields.balance.doubleValue === 'number'
-            ? uData.fields.balance.doubleValue
-            : typeof uData.fields.balance.integerValue === 'string'
-            ? parseInt(uData.fields.balance.integerValue, 10)
-            : Number(uData.fields.balance.doubleValue || 0);
-          if (typeof fsBal === 'number') {
-            user.balance = fsBal;
+      const fsBalances: number[] = [];
+      for (const lid of linkedUserIds) {
+        const uDocUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(lid)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+        const uRes = await fetch(uDocUrl);
+        if (uRes.ok) {
+          const uData: any = await uRes.json();
+          if (uData && uData.fields && uData.fields.balance) {
+            const fsBal = typeof uData.fields.balance.doubleValue === 'number'
+              ? uData.fields.balance.doubleValue
+              : typeof uData.fields.balance.integerValue === 'string'
+              ? parseInt(uData.fields.balance.integerValue, 10)
+              : Number(uData.fields.balance.doubleValue || 0);
+            if (typeof fsBal === 'number' && !Number.isNaN(fsBal)) {
+              fsBalances.push(fsBal);
+            }
           }
         }
+      }
+      if (fsBalances.length > 0) {
+        user.balance = Math.min(...fsBalances);
       }
     } catch {}
 
@@ -764,14 +799,23 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     user.balance = Number((currentBalance - totalPrice).toFixed(2));
     user.updatedAt = new Date().toISOString();
 
-    // Sync user balance directly to Firestore document in real-time
+    // Sync user balance directly to all linked Firestore user documents in real-time
     try {
-      const fsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(user.id)}?updateMask.fieldPaths=balance&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
-      fetch(fsUrl, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: { balance: { doubleValue: Number(user.balance) } } })
-      }).catch(() => {});
+      await Promise.all(
+        linkedUserIds.map(lid => {
+          const fsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(lid)}?updateMask.fieldPaths=balance&updateMask.fieldPaths=updatedAt&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+          return fetch(fsUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: {
+                balance: { doubleValue: Number(user.balance) },
+                updatedAt: { stringValue: user.updatedAt },
+              },
+            }),
+          }).catch(() => {});
+        })
+      );
     } catch {}
 
     const batchOrderId = `API-ORD-${Date.now()}-${generateRandomHex(4).toUpperCase()}`;
@@ -910,14 +954,16 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
 
     // Sync order into Firestore
     try {
-      const ordUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/orders?documentId=${encodeURIComponent(batchOrderId)}&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
-      fetch(ordUrl, {
-        method: 'POST',
+      const ordUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/orders/${encodeURIComponent(batchOrderId)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      await fetch(ordUrl, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
             id: { stringValue: batchOrderId },
             userId: { stringValue: user.id },
+            userEmail: { stringValue: (user.email || '').toLowerCase() },
+            apiKey: { stringValue: apiKey.trim() },
             productId: { stringValue: product.id },
             variantId: { stringValue: variant.id },
             productName: { stringValue: product.name },
@@ -936,14 +982,16 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
 
     // Sync transaction into Firestore
     try {
-      const txUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/transactions?documentId=${encodeURIComponent(tx.id)}&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
-      fetch(txUrl, {
-        method: 'POST',
+      const txUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/transactions/${encodeURIComponent(tx.id)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      await fetch(txUrl, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
             id: { stringValue: tx.id },
             userId: { stringValue: user.id },
+            userEmail: { stringValue: (user.email || '').toLowerCase() },
+            apiKey: { stringValue: apiKey.trim() },
             type: { stringValue: tx.type },
             amount: { doubleValue: Number(tx.amount) },
             description: { stringValue: tx.description },
@@ -1140,8 +1188,54 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     const statusFilter = url.searchParams.get('status');
     const searchFilter = (url.searchParams.get('search') || '').toLowerCase().trim();
 
+    try {
+      const fsKeysUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents:runQuery?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      const fsRes = await fetch(fsKeysUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: 'digitalKeys' }],
+            limit: 200,
+          },
+        }),
+      });
+      if (fsRes.ok) {
+        const fsData: any = await fsRes.json();
+        const docs = Array.isArray(fsData) ? fsData.map((item: any) => item?.document).filter(Boolean) : [];
+        for (const d of docs) {
+          const f = d.fields || {};
+          const kid = f.id?.stringValue || (d.name || '').split('/').pop() || '';
+          const kCode = f.keyCode?.stringValue || '';
+          if (kid && kCode && !edgeDb.digitalKeys.some(ek => ek.id === kid || ek.keyCode === kCode)) {
+            edgeDb.digitalKeys.unshift({
+              id: kid,
+              productId: f.productId?.stringValue || 'PROD-499177',
+              variantId: f.variantId?.stringValue || 'VAR-499189',
+              keyCode: kCode,
+              isUsed: Boolean(f.isUsed?.booleanValue),
+              assignedUserId: f.assignedUserId?.stringValue || user.id,
+              assignedOrderId: f.assignedOrderId?.stringValue || '',
+              assignedAt: f.assignedAt?.stringValue || f.createdAt?.stringValue || new Date().toISOString(),
+              expiresAt: f.expiresAt?.stringValue || '',
+              status: (f.status?.stringValue as any) || 'ACTIVE',
+              purchaseSource: f.purchaseSource?.stringValue === 'API' ? 'API' : 'WEB',
+              purchaseSourceLabel: f.purchaseSource?.stringValue === 'API' ? 'Buy from API' : 'Buy from Website',
+              createdAt: f.createdAt?.stringValue || new Date().toISOString(),
+            });
+          }
+        }
+      }
+    } catch {}
+
+    const linkedIds = new Set<string>([user.id]);
+    if (user.email.toLowerCase() === 'kalam172010@gmail.com') {
+      linkedIds.add('USR-KALAM-172010');
+      linkedIds.add('tnqy7LYfgwgzYpoQGqljC4H6bKc2');
+    }
+
     let keys = edgeDb.digitalKeys
-      .filter(k => k.assignedUserId === user.id)
+      .filter(k => linkedIds.has(k.assignedUserId || ''))
       .map(k => {
         const prod = edgeDb.products.find(p => p.id === k.productId);
         const variant = prod?.variants?.find((v: any) => v.id === k.variantId);

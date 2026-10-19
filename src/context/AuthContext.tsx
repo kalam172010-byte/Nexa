@@ -10,7 +10,7 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, collection } from 'firebase/firestore';
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../firebase.js';
 import { User, UserRole } from '../types/index.js';
 import { api } from '../services/api.js';
@@ -80,6 +80,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('nexa_user_outbound_api_key', (userData as any).apiKey);
       } catch {}
     }
+    try {
+      const rawCached = localStorage.getItem('nexa_cached_users');
+      if (rawCached) {
+        const parsedCached = JSON.parse(rawCached);
+        if (Array.isArray(parsedCached)) {
+          const updatedCached = parsedCached.map((u: any) =>
+            u.id === userData.id || (u.email && userData.email && u.email.toLowerCase() === userData.email.toLowerCase())
+              ? { ...u, balance: userData.balance, apiKey: (userData as any).apiKey || u.apiKey }
+              : u
+          );
+          localStorage.setItem('nexa_cached_users', JSON.stringify(updatedCached));
+        }
+      }
+    } catch {}
     localStorage.setItem('nexa_auth_token', userToken);
     localStorage.setItem('nexa_user_data', JSON.stringify(userData));
     setToken(userToken);
@@ -133,10 +147,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (res?.token && res?.user) {
-          saveUserSession(res.user, res.token);
-
-          // Sync user profile document in Firestore
+          // Check Firestore linked documents first so we never overwrite a freshly deducted API balance
           try {
+            const candidateIds = new Set<string>([res.user.id]);
+            if (firebaseUser.uid) candidateIds.add(firebaseUser.uid);
+            if ((res.user.email || '').toLowerCase() === 'kalam172010@gmail.com') {
+              candidateIds.add('USR-KALAM-172010');
+              candidateIds.add('tnqy7LYfgwgzYpoQGqljC4H6bKc2');
+            }
+            const fsBalances: number[] = [];
+            for (const cid of candidateIds) {
+              const snap = await getDoc(doc(db, 'users', cid)).catch(() => null);
+              if (snap && snap.exists()) {
+                const d = snap.data();
+                if (typeof d.balance === 'number' && !Number.isNaN(d.balance)) {
+                  fsBalances.push(Number(d.balance));
+                }
+                if (d.apiKey && !res.user.apiKey) {
+                  res.user.apiKey = d.apiKey;
+                }
+              }
+            }
+            if (fsBalances.length > 0) {
+              const minFsBal = Math.min(...fsBalances);
+              if (minFsBal < Number(res.user.balance || 0)) {
+                res.user.balance = minFsBal;
+              }
+            }
+
             const profilePayload = {
               id: res.user.id,
               username: res.user.username,
@@ -156,6 +194,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (firestoreErr) {
             console.warn('Firestore user profile sync non-critical warning:', firestoreErr);
           }
+
+          saveUserSession(res.user, res.token);
         }
       } catch (err: any) {
         console.warn('Backend sync API failed, using client-side Firestore auth state fallback:', err);
@@ -298,42 +338,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [syncUserWithBackend, saveUserSession, clearUserSession]);
 
-  // Instant real-time Firestore listener for live wallet balance and role updates
+  // Instant real-time Firestore listener for live wallet balance and role updates across all linked user documents
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id && !user?.email) return;
+    const myId = (user?.id || '').trim();
+    const myEmail = (user?.email || '').trim().toLowerCase();
+    const myApiKey = (user?.apiKey || localStorage.getItem(`nexa_user_api_key_${myId}`) || localStorage.getItem('nexa_user_outbound_api_key') || '').trim();
+
     try {
-      const userDocRef = doc(db, 'users', user.id);
+      const usersColRef = collection(db, 'users');
       const unsubscribe = onSnapshot(
-        userDocRef,
-        snap => {
-          if (snap.exists()) {
-            const data = snap.data();
-            if (typeof data.balance === 'number' || data.apiKey) {
-              setUser(prev => {
-                if (!prev) return prev;
-                const newBalance = typeof data.balance === 'number' ? Number(data.balance) : prev.balance;
-                if (
-                  prev.balance !== newBalance ||
-                  prev.role !== data.role ||
-                  prev.isBanned !== data.isBanned ||
-                  (data.apiKey && prev.apiKey !== data.apiKey)
-                ) {
-                  const updated = {
-                    ...prev,
-                    balance: newBalance,
-                    role: data.role || prev.role,
-                    isBanned: Boolean(data.isBanned),
-                    apiKey: data.apiKey || prev.apiKey,
-                  };
-                  localStorage.setItem('nexa_user_data', JSON.stringify(updated));
-                  if (data.apiKey) {
-                    localStorage.setItem(`nexa_user_api_key_${prev.id}`, data.apiKey);
-                  }
-                  return updated;
-                }
-                return prev;
-              });
+        usersColRef,
+        snapshot => {
+          const matchingDocs: any[] = [];
+          let modifiedBalance: number | null = null;
+
+          snapshot.docChanges().forEach(change => {
+            const data = change.doc.data();
+            const docId = change.doc.id;
+            const docEmail = String(data.email || '').trim().toLowerCase();
+            const docApiKey = String(data.apiKey || '').trim();
+            const isMatch =
+              (myId && docId === myId) ||
+              (myEmail && docEmail === myEmail) ||
+              (myApiKey && docApiKey && docApiKey === myApiKey) ||
+              (myEmail === 'kalam172010@gmail.com' && (docId === 'USR-KALAM-172010' || docId === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2'));
+
+            if (isMatch && change.type === 'modified' && typeof data.balance === 'number') {
+              modifiedBalance = Number(data.balance);
             }
+          });
+
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const docId = docSnap.id;
+            const docEmail = String(data.email || '').trim().toLowerCase();
+            const docApiKey = String(data.apiKey || '').trim();
+            const isMatch =
+              (myId && docId === myId) ||
+              (myEmail && docEmail === myEmail) ||
+              (myApiKey && docApiKey && docApiKey === myApiKey) ||
+              (myEmail === 'kalam172010@gmail.com' && (docId === 'USR-KALAM-172010' || docId === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2'));
+
+            if (isMatch) {
+              matchingDocs.push({ id: docId, ...data });
+            }
+          });
+
+          if (matchingDocs.length > 0) {
+            const validBalances = matchingDocs
+              .map(d => (typeof d.balance === 'number' ? Number(d.balance) : NaN))
+              .filter(b => !Number.isNaN(b));
+
+            const authoritativeBalance =
+              modifiedBalance !== null
+                ? modifiedBalance
+                : validBalances.length > 0
+                ? Math.min(...validBalances)
+                : null;
+
+            const primaryDoc = matchingDocs.find(d => d.id === myId) || matchingDocs[0];
+
+            setUser(prev => {
+              if (!prev) return prev;
+              const newBalance = authoritativeBalance !== null ? authoritativeBalance : prev.balance;
+              const newApiKey = primaryDoc.apiKey || prev.apiKey;
+              if (
+                prev.balance !== newBalance ||
+                (primaryDoc.role && prev.role !== primaryDoc.role) ||
+                prev.isBanned !== Boolean(primaryDoc.isBanned) ||
+                (newApiKey && prev.apiKey !== newApiKey)
+              ) {
+                const updated = {
+                  ...prev,
+                  balance: newBalance,
+                  role: primaryDoc.role || prev.role,
+                  isBanned: Boolean(primaryDoc.isBanned),
+                  apiKey: newApiKey,
+                };
+                localStorage.setItem('nexa_user_data', JSON.stringify(updated));
+                if (newApiKey) {
+                  localStorage.setItem(`nexa_user_api_key_${prev.id}`, newApiKey);
+                  localStorage.setItem('nexa_user_outbound_api_key', newApiKey);
+                }
+                return updated;
+              }
+              return prev;
+            });
           }
         },
         err => {
@@ -344,7 +435,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.warn('[AuthContext] Failed to attach Firestore real-time listener:', err);
     }
-  }, [user?.id]);
+  }, [user?.id, user?.email, user?.apiKey]);
 
   // Real-time balance and user state background polling (Every 3 seconds + on focus)
   useEffect(() => {

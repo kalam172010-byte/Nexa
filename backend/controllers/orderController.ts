@@ -258,15 +258,12 @@ export class OrderController {
         return;
       }
 
-      const userAltIds = new Set<string>([user.id]);
-      if ((user as any).firebaseUid) userAltIds.add((user as any).firebaseUid);
+      await FirestoreSyncService.pullAndMergeExternalState(false);
+
       const dbUser = db.users.find(
         u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
       );
-      if (dbUser) {
-        userAltIds.add(dbUser.id);
-        if (dbUser.firebaseUid) userAltIds.add(dbUser.firebaseUid);
-      }
+      const userAltIds = new Set<string>(FirestoreSyncService.getLinkedUserIds(dbUser || user, user.id));
       const userEmail = (dbUser?.email || user.email || '').toLowerCase().trim();
       const userApiKey = (dbUser?.apiKey || user.apiKey || '').trim();
 

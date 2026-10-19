@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { db } from '../db/database';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { FirestoreSyncService } from '../services/firestoreSync';
 
 export class KeyController {
   public static async getUserKeys(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -11,20 +12,15 @@ export class KeyController {
         return;
       }
 
-      const { status, search } = req.query;
+      // Pull any newly generated keys from Firestore and Edge Worker in real time
+      await FirestoreSyncService.pullAndMergeExternalState(false);
 
-      const userAltIds = new Set<string>([user.id]);
-      if ((user as any).firebaseUid) {
-        userAltIds.add((user as any).firebaseUid);
-      }
+      const { status, search } = req.query;
 
       const dbUser = db.users.find(
         u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
       );
-      if (dbUser) {
-        userAltIds.add(dbUser.id);
-        if (dbUser.firebaseUid) userAltIds.add(dbUser.firebaseUid);
-      }
+      const userAltIds = new Set<string>(FirestoreSyncService.getLinkedUserIds(dbUser || user, user.id));
       const userEmail = (dbUser?.email || user.email || '').toLowerCase().trim();
       const userApiKey = (dbUser?.apiKey || user.apiKey || '').trim();
 

@@ -97,7 +97,9 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
             const belongsToUser =
               (myId && docUserId === myId) ||
               (myEmail && docEmail && docEmail === myEmail) ||
-              (myApiKey && docApiKey && docApiKey === myApiKey);
+              (myApiKey && docApiKey && docApiKey === myApiKey) ||
+              (myEmail === 'kalam172010@gmail.com' &&
+                (docUserId === 'USR-KALAM-172010' || docUserId === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2'));
 
             if (!belongsToUser) return;
 

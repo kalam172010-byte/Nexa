@@ -7,12 +7,412 @@ const DATABASE_ID = firebaseConfig.firestoreDatabaseId || 'ai-studio-nexagamingp
 const API_KEY = firebaseConfig.apiKey || 'AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As';
 
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
+const EDGE_SYNC_URL = 'https://kalamffpanel.kalamff.workers.dev/api/sync/state';
 
 /**
- * Robust server-side Firestore REST client for two-way synchronization.
- * Works seamlessly in Node.js, Express, and cloud containers.
+ * Robust server-side Firestore + Edge Worker two-way synchronization service.
+ * Ensures that any key purchased or balance deducted via external Outbound API
+ * (whether hitting Cloudflare Worker or Express backend) is immediately reflected
+ * in user wallet balances, My Keys, Orders, and Transaction Ledger.
  */
 export class FirestoreSyncService {
+  private static lastPullTime = 0;
+  private static isPulling = false;
+  private static autoSyncStarted = false;
+
+  /**
+   * Return all linked user document IDs for a given user account
+   */
+  public static getLinkedUserIds(user?: Partial<User> | null, extraId?: string): string[] {
+    const ids = new Set<string>();
+    if (extraId && extraId.trim()) ids.add(extraId.trim());
+    if (user?.id) ids.add(user.id.trim());
+    if (user?.firebaseUid) ids.add(user.firebaseUid.trim());
+
+    const email = (user?.email || '').trim().toLowerCase();
+    const apiKey = (user?.apiKey || '').trim();
+
+    if (
+      email === 'kalam172010@gmail.com' ||
+      apiKey === 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7' ||
+      ids.has('USR-KALAM-172010') ||
+      ids.has('tnqy7LYfgwgzYpoQGqljC4H6bKc2')
+    ) {
+      ids.add('USR-KALAM-172010');
+      ids.add('tnqy7LYfgwgzYpoQGqljC4H6bKc2');
+    }
+
+    for (const u of db.users) {
+      if (
+        (email && u.email.toLowerCase() === email) ||
+        (apiKey && u.apiKey && u.apiKey.trim() === apiKey)
+      ) {
+        ids.add(u.id);
+        if (u.firebaseUid) ids.add(u.firebaseUid);
+      }
+    }
+
+    return Array.from(ids).filter(Boolean);
+  }
+
+  /**
+   * Start background 2.5s auto-sync loop
+   */
+  public static startAutoSync(): void {
+    if (this.autoSyncStarted) return;
+    this.autoSyncStarted = true;
+
+    this.pullAndMergeExternalState(true).catch(() => {});
+    setInterval(() => {
+      this.pullAndMergeExternalState(false).catch(() => {});
+    }, 2500);
+  }
+
+  /**
+   * Pulls and merges keys, orders, transactions, and user balances from both
+   * Firestore and the Edge Worker (/api/sync/state).
+   */
+  public static async pullAndMergeExternalState(force = false): Promise<void> {
+    const now = Date.now();
+    if (!force && (this.isPulling || now - this.lastPullTime < 800)) {
+      return;
+    }
+    this.isPulling = true;
+    this.lastPullTime = now;
+
+    let dbChanged = false;
+    const newlyDiscoveredOrderIds = new Set<string>();
+
+    try {
+      // 1. Pull state from Edge Worker (https://kalamffpanel.kalamff.workers.dev/api/sync/state)
+      let edgeState: any = null;
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 2500);
+        const edgeRes = await fetch(EDGE_SYNC_URL, { signal: controller.signal });
+        clearTimeout(timer);
+        if (edgeRes.ok) {
+          edgeState = await edgeRes.json();
+        }
+      } catch {}
+
+      // 2. Pull documents from Firestore (users, digitalKeys, orders) via structuredQuery (:runQuery)
+      const runColQuery = async (colName: string, limit = 200): Promise<any[]> => {
+        try {
+          const r = await fetch(`${FIRESTORE_BASE}:runQuery?key=${API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              structuredQuery: {
+                from: [{ collectionId: colName }],
+                limit,
+              },
+            }),
+          });
+          if (!r.ok) return [];
+          const arr = (await r.json()) as any[];
+          return Array.isArray(arr) ? arr.map(item => item?.document).filter(Boolean) : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const [fsUsersDocs, fsKeysDocs, fsOrdersDocs] = await Promise.all([
+        runColQuery('users', 100),
+        runColQuery('digitalKeys', 200),
+        runColQuery('orders', 200),
+      ]);
+
+      // Parse Firestore users
+      const parsedFsUsers: User[] = [];
+      for (const doc of fsUsersDocs) {
+        const u = this.parseFirestoreUserDoc(doc);
+        if (u) parsedFsUsers.push(u);
+      }
+
+      // Sync user profiles & balances
+      for (const localUser of db.users) {
+        const linkedIds = new Set(this.getLinkedUserIds(localUser));
+        const matchingFsUsers = parsedFsUsers.filter(
+          fu =>
+            linkedIds.has(fu.id) ||
+            (fu.firebaseUid && linkedIds.has(fu.firebaseUid)) ||
+            (fu.email && fu.email.toLowerCase() === localUser.email.toLowerCase()) ||
+            (fu.apiKey && localUser.apiKey && fu.apiKey.trim() === localUser.apiKey.trim())
+        );
+
+        const matchingEdgeUsers = Array.isArray(edgeState?.users)
+          ? edgeState.users.filter(
+              (eu: any) =>
+                linkedIds.has(eu.id) ||
+                (eu.email && String(eu.email).toLowerCase() === localUser.email.toLowerCase()) ||
+                (eu.apiKey && localUser.apiKey && String(eu.apiKey).trim() === localUser.apiKey.trim())
+            )
+          : [];
+
+        // Ensure primary admin account uses the unified active API key from Firestore/Edge
+        if (localUser.email.toLowerCase() === 'kalam172010@gmail.com') {
+          const activeKey =
+            matchingEdgeUsers.find((u: any) => u.apiKey && String(u.apiKey).startsWith('nexa_live_89f4e2a1'))?.apiKey ||
+            matchingFsUsers.find(u => u.apiKey && u.apiKey.startsWith('nexa_live_89f4e2a1'))?.apiKey ||
+            'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7';
+          if (localUser.apiKey !== activeKey) {
+            localUser.apiKey = activeKey;
+            dbChanged = true;
+          }
+        } else if (!localUser.apiKey) {
+          const anyWithKey = matchingFsUsers.find(u => u.apiKey) || matchingEdgeUsers.find((u: any) => u.apiKey);
+          if (anyWithKey?.apiKey) {
+            localUser.apiKey = anyWithKey.apiKey;
+            dbChanged = true;
+          }
+        }
+
+        // Determine authoritative balance across Firestore & Edge
+        const candidateBalances: number[] = [];
+        for (const fu of matchingFsUsers) {
+          if (typeof fu.balance === 'number' && !Number.isNaN(fu.balance)) {
+            candidateBalances.push(Math.max(0, Math.round(fu.balance * 100) / 100));
+          }
+        }
+        for (const eu of matchingEdgeUsers) {
+          if (typeof eu.balance === 'number' && !Number.isNaN(eu.balance)) {
+            candidateBalances.push(Math.max(0, Math.round(eu.balance * 100) / 100));
+          }
+        }
+
+        if (candidateBalances.length > 0) {
+          // If one of the linked documents (e.g. USR-KALAM-172010 on Edge/Firestore) was deducted below the others,
+          // take the minimum positive/deducted balance among the active synced records.
+          const minExternalBal = Math.min(...candidateBalances);
+          const maxExternalBal = Math.max(...candidateBalances);
+
+          // If localUser had a stale default (like 500) while Firestore had 5000 / 4850, adopt minExternalBal (4850)
+          const targetBal = candidateBalances.length > 1 ? minExternalBal : maxExternalBal;
+          if (Math.abs((localUser.balance || 0) - targetBal) > 0.001) {
+            localUser.balance = targetBal;
+            localUser.updatedAt = new Date().toISOString();
+            dbChanged = true;
+          }
+
+          // If Firestore linked docs disagree with each other (e.g. tnqy7LYfgwgzYpoQGqljC4H6bKc2=5000 vs USR-KALAM-172010=4850),
+          // unify all linked Firestore docs to targetBal so client listeners see the exact deducted balance
+          if (matchingFsUsers.some(fu => Math.abs(fu.balance - targetBal) > 0.001)) {
+            for (const lid of linkedIds) {
+              const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(lid)}?key=${API_KEY}`;
+              fetch(patchUrl, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  fields: this.buildFullUserFields(lid, localUser, targetBal, localUser.apiKey),
+                }),
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+
+      // 3. Merge Digital Keys from Firestore
+      for (const doc of fsKeysDocs) {
+        const k = this.parseFirestoreKeyDoc(doc);
+        if (!k || !k.keyCode) continue;
+        const existing = db.digitalKeys.find(ek => ek.id === k.id || ek.keyCode === k.keyCode);
+        if (!existing) {
+          db.digitalKeys.unshift(k);
+          dbChanged = true;
+          if (k.assignedOrderId) newlyDiscoveredOrderIds.add(k.assignedOrderId);
+        } else {
+          if (!existing.assignedUserEmail && k.assignedUserEmail) {
+            existing.assignedUserEmail = k.assignedUserEmail;
+            dbChanged = true;
+          }
+          if (!existing.assignedApiKey && k.assignedApiKey) {
+            existing.assignedApiKey = k.assignedApiKey;
+            dbChanged = true;
+          }
+        }
+      }
+
+      // 4. Merge Digital Keys from Edge Worker
+      if (Array.isArray(edgeState?.keys)) {
+        for (const ek of edgeState.keys) {
+          if (!ek || !ek.keyCode) continue;
+          const existing = db.digitalKeys.find(k => k.id === ek.id || k.keyCode === ek.keyCode);
+          if (!existing) {
+            const owner = this.findLocalOwner(ek.assignedUserId, ek.assignedUserEmail, ek.assignedApiKey);
+            const prod = db.products.find(p => p.id === ek.productId);
+            const variant = db.productVariants.find(v => v.id === ek.variantId);
+            const isApi = ek.purchaseSource === 'API' || String(ek.id || '').includes('API') || String(ek.assignedOrderId || '').startsWith('API-ORD-');
+            const newKey: DigitalKey = {
+              id: ek.id,
+              productId: ek.productId || prod?.id || 'PROD-499177',
+              variantId: ek.variantId || variant?.id || 'VAR-499189',
+              productName: ek.productName || prod?.name || (ek.productId?.includes('BGMI') ? 'BGMI LOADER PRO V2' : 'KALAM VIP AIMBOT FF OB55'),
+              gameName: ek.gameName || prod?.game || (ek.productId?.includes('BGMI') ? 'BGMI' : 'FREEFIRE'),
+              durationLabel: ek.durationLabel || variant?.durationLabel || '1 Day',
+              keyCode: ek.keyCode,
+              isUsed: Boolean(ek.isUsed),
+              status: ek.status || 'ACTIVE',
+              assignedUserId: owner?.id || ek.assignedUserId,
+              assignedUserEmail: (owner?.email || ek.assignedUserEmail || '').toLowerCase(),
+              assignedApiKey: owner?.apiKey || ek.assignedApiKey || '',
+              assignedOrderId: ek.assignedOrderId,
+              assignedAt: ek.assignedAt || ek.createdAt || new Date().toISOString(),
+              expiresAt: ek.expiresAt,
+              purchaseSource: isApi ? 'API' : 'WEB',
+              purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+              createdAt: ek.createdAt || new Date().toISOString(),
+            };
+            db.digitalKeys.unshift(newKey);
+            dbChanged = true;
+            if (newKey.assignedOrderId) newlyDiscoveredOrderIds.add(newKey.assignedOrderId);
+            this.syncDigitalKey(newKey).catch(() => {});
+          }
+        }
+      }
+
+      // 5. Merge Orders from Firestore & Edge Worker
+      for (const doc of fsOrdersDocs) {
+        const ord = this.parseFirestoreOrderDoc(doc);
+        if (!ord) continue;
+        if (!db.orders.some(o => o.id === ord.id)) {
+          db.orders.unshift(ord);
+          dbChanged = true;
+        }
+      }
+
+      if (Array.isArray(edgeState?.orders)) {
+        for (const eo of edgeState.orders) {
+          if (!eo || !eo.id) continue;
+          if (!db.orders.some(o => o.id === eo.id)) {
+            const owner = this.findLocalOwner(eo.userId, eo.userEmail, eo.apiKey);
+            const isApi = eo.purchaseSource === 'API' || String(eo.id).startsWith('API-ORD-') || String(eo.id).startsWith('ORD-EXT-');
+            const newOrder: Order = {
+              id: eo.id,
+              userId: owner?.id || eo.userId,
+              userEmail: (owner?.email || eo.userEmail || '').toLowerCase(),
+              apiKey: owner?.apiKey || eo.apiKey || '',
+              productId: eo.productId || 'PROD-499177',
+              variantId: eo.variantId || 'VAR-499189',
+              productName: eo.productName || 'BGMI LOADER PRO V2',
+              durationLabel: eo.durationLabel || '1 Day',
+              pricePaid: Number(eo.pricePaid) || 50,
+              deliveredKeyId: eo.deliveredKeyId || eo.id,
+              deliveredKeyCode: eo.deliveredKeyCode || '',
+              status: eo.status || 'COMPLETED',
+              purchaseSource: isApi ? 'API' : 'WEB',
+              purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+              createdAt: eo.createdAt || new Date().toISOString(),
+            };
+            db.orders.unshift(newOrder);
+            dbChanged = true;
+            this.syncOrder(newOrder).catch(() => {});
+          }
+        }
+      }
+
+      // 6. Ensure every assigned key in db.digitalKeys has a corresponding Order & Transaction
+      for (const k of db.digitalKeys) {
+        if (!k.assignedOrderId || !k.assignedUserId) continue;
+        const owner = this.findLocalOwner(k.assignedUserId, k.assignedUserEmail, k.assignedApiKey);
+        const resolvedUserId = owner?.id || k.assignedUserId;
+        const resolvedEmail = (owner?.email || k.assignedUserEmail || '').toLowerCase();
+        const resolvedApiKey = owner?.apiKey || k.assignedApiKey || '';
+
+        if (owner && k.assignedUserId !== owner.id) {
+          if (!k.assignedUserEmail) k.assignedUserEmail = resolvedEmail;
+          if (!k.assignedApiKey) k.assignedApiKey = resolvedApiKey;
+          dbChanged = true;
+        }
+
+        const hasOrder = db.orders.some(o => o.id === k.assignedOrderId || o.deliveredKeyId === k.id);
+        if (!hasOrder) {
+          const variant = db.productVariants.find(v => v.id === k.variantId);
+          const inferredPrice = Number(variant?.price || (k.productId?.includes('BGMI') ? 150 : 50));
+          const isApi = k.purchaseSource === 'API' || String(k.assignedOrderId).startsWith('API-ORD-') || String(k.id).includes('API');
+          const reconstructedOrder: Order = {
+            id: k.assignedOrderId,
+            userId: resolvedUserId,
+            userEmail: resolvedEmail,
+            apiKey: resolvedApiKey,
+            productId: k.productId,
+            variantId: k.variantId || 'VAR-499189',
+            productName: k.productName || 'VIP Gaming Panel',
+            durationLabel: k.durationLabel || '1 Day',
+            pricePaid: inferredPrice,
+            deliveredKeyId: k.id,
+            deliveredKeyCode: k.keyCode,
+            status: 'COMPLETED',
+            purchaseSource: isApi ? 'API' : 'WEB',
+            purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+            createdAt: k.assignedAt || k.createdAt || new Date().toISOString(),
+          };
+          db.orders.unshift(reconstructedOrder);
+          dbChanged = true;
+        }
+
+        const hasTx = db.transactions.some(t => t.referenceId === k.assignedOrderId);
+        if (!hasTx) {
+          const matchingOrder = db.orders.find(o => o.id === k.assignedOrderId);
+          const amt = Number(matchingOrder?.pricePaid || 50);
+          const isApi = k.purchaseSource === 'API' || String(k.assignedOrderId).startsWith('API-ORD-');
+          const reconstructedTx: Transaction = {
+            id: `TXN-${k.assignedOrderId}`,
+            userId: resolvedUserId,
+            userEmail: resolvedEmail,
+            apiKey: resolvedApiKey,
+            type: 'PURCHASE',
+            amount: -Math.abs(amt),
+            description: `[${isApi ? 'Buy from API' : 'Buy from Website'}] Key Purchase: ${k.productName || 'Gaming Key'} (${k.durationLabel || '1 Day'}) - Key: ${k.keyCode}`,
+            referenceId: k.assignedOrderId,
+            purchaseSource: isApi ? 'API' : 'WEB',
+            purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+            status: 'SUCCESS',
+            createdAt: k.assignedAt || k.createdAt || new Date().toISOString(),
+          };
+          db.transactions.unshift(reconstructedTx);
+          dbChanged = true;
+        }
+      }
+
+      if (dbChanged) {
+        db.saveSync();
+      }
+    } catch (err) {
+      console.warn('[FirestoreSync] pullAndMergeExternalState notice:', err);
+    } finally {
+      this.isPulling = false;
+    }
+  }
+
+  private static findLocalOwner(userId?: string, email?: string, apiKey?: string): User | undefined {
+    const cleanId = (userId || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanKey = (apiKey || '').trim();
+
+    if (
+      cleanId === 'USR-KALAM-172010' ||
+      cleanId === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2' ||
+      cleanEmail === 'kalam172010@gmail.com' ||
+      cleanKey === 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7'
+    ) {
+      const adminUser = db.users.find(
+        u =>
+          u.email.toLowerCase() === 'kalam172010@gmail.com' ||
+          u.id === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2' ||
+          u.id === 'USR-KALAM-172010'
+      );
+      if (adminUser) return adminUser;
+    }
+
+    return db.users.find(
+      u =>
+        (cleanId && (u.id === cleanId || u.firebaseUid === cleanId)) ||
+        (cleanEmail && u.email.toLowerCase() === cleanEmail) ||
+        (cleanKey && u.apiKey && u.apiKey.trim() === cleanKey)
+    );
+  }
+
   /**
    * Search Firestore for a user whose apiKey matches the provided key
    */
@@ -21,7 +421,6 @@ export class FirestoreSyncService {
     if (!cleanKey) return null;
 
     try {
-      // 1. Run structured query on users collection where apiKey == cleanKey
       const queryUrl = `${FIRESTORE_BASE}:runQuery?key=${API_KEY}`;
       const queryBody = {
         structuredQuery: {
@@ -33,7 +432,7 @@ export class FirestoreSyncService {
               value: { stringValue: cleanKey },
             },
           },
-          limit: 1,
+          limit: 5,
         },
       };
 
@@ -44,19 +443,30 @@ export class FirestoreSyncService {
       });
 
       if (!res.ok) {
-        // Fallback: list users and match
         return await this.fallbackScanUsersForApiKey(cleanKey);
       }
 
       const results = (await res.json()) as any[];
-      if (Array.isArray(results) && results.length > 0 && results[0].document) {
-        const doc = results[0].document;
-        return this.parseFirestoreUserDoc(doc);
+      const matchingUsers: User[] = [];
+      if (Array.isArray(results)) {
+        for (const item of results) {
+          if (item?.document) {
+            const parsed = this.parseFirestoreUserDoc(item.document);
+            if (parsed) matchingUsers.push(parsed);
+          }
+        }
+      }
+
+      if (matchingUsers.length > 0) {
+        // If multiple linked user docs exist for the same API key, use the minimum (most recently deducted) balance
+        const minBal = Math.min(...matchingUsers.map(u => u.balance));
+        const primary = matchingUsers[0];
+        primary.balance = minBal;
+        return primary;
       }
 
       return await this.fallbackScanUsersForApiKey(cleanKey);
     } catch (err) {
-      console.warn('[FirestoreSync] Error querying user by apiKey:', err);
       return await this.fallbackScanUsersForApiKey(cleanKey);
     }
   }
@@ -68,11 +478,17 @@ export class FirestoreSyncService {
       if (!res.ok) return null;
       const data = (await res.json()) as any;
       const docs = data.documents || [];
+      const matching: User[] = [];
       for (const d of docs) {
         const u = this.parseFirestoreUserDoc(d);
         if (u && u.apiKey && u.apiKey.trim() === cleanKey) {
-          return u;
+          matching.push(u);
         }
+      }
+      if (matching.length > 0) {
+        const minBal = Math.min(...matching.map(u => u.balance));
+        matching[0].balance = minBal;
+        return matching[0];
       }
     } catch {}
     return null;
@@ -115,32 +531,127 @@ export class FirestoreSyncService {
     };
   }
 
+  public static parseFirestoreKeyDoc(doc: any): DigitalKey | null {
+    if (!doc || !doc.fields) return null;
+    const f = doc.fields;
+    const docId = (doc.name || '').split('/').pop() || '';
+    const id = f.id?.stringValue || docId;
+    const keyCode = f.keyCode?.stringValue || '';
+    if (!keyCode) return null;
+
+    const assignedUserId = f.assignedUserId?.stringValue || '';
+    const assignedUserEmail = (f.assignedUserEmail?.stringValue || '').toLowerCase();
+    const assignedApiKey = f.assignedApiKey?.stringValue || '';
+    const owner = this.findLocalOwner(assignedUserId, assignedUserEmail, assignedApiKey);
+
+    const assignedOrderId = f.assignedOrderId?.stringValue || '';
+    const isApi =
+      f.purchaseSource?.stringValue === 'API' ||
+      assignedOrderId.startsWith('API-ORD-') ||
+      assignedOrderId.startsWith('ORD-EXT-') ||
+      id.includes('API') ||
+      id.includes('EXT');
+
+    return {
+      id,
+      productId: f.productId?.stringValue || 'PROD-499177',
+      variantId: f.variantId?.stringValue || 'VAR-499189',
+      productName: f.productName?.stringValue || 'Gaming Digital Key',
+      gameName: f.gameName?.stringValue || 'FREEFIRE',
+      durationLabel: f.durationLabel?.stringValue || '1 Day',
+      keyCode,
+      isUsed: Boolean(f.isUsed?.booleanValue),
+      status: (f.status?.stringValue as any) || 'ACTIVE',
+      assignedUserId: owner?.id || assignedUserId,
+      assignedUserEmail: owner?.email?.toLowerCase() || assignedUserEmail,
+      assignedApiKey: owner?.apiKey || assignedApiKey,
+      assignedOrderId,
+      assignedAt: f.assignedAt?.stringValue || f.createdAt?.stringValue || new Date().toISOString(),
+      expiresAt: f.expiresAt?.stringValue || undefined,
+      purchaseSource: isApi ? 'API' : 'WEB',
+      purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+      createdAt: f.createdAt?.stringValue || new Date().toISOString(),
+    };
+  }
+
+  public static parseFirestoreOrderDoc(doc: any): Order | null {
+    if (!doc || !doc.fields) return null;
+    const f = doc.fields;
+    const docId = (doc.name || '').split('/').pop() || '';
+    const id = f.id?.stringValue || docId;
+    if (!id) return null;
+
+    const rawUserId = f.userId?.stringValue || '';
+    const rawEmail = (f.userEmail?.stringValue || '').toLowerCase();
+    const rawApiKey = f.apiKey?.stringValue || '';
+    const owner = this.findLocalOwner(rawUserId, rawEmail, rawApiKey);
+
+    const pricePaid =
+      typeof f.pricePaid?.doubleValue === 'number'
+        ? f.pricePaid.doubleValue
+        : typeof f.pricePaid?.integerValue === 'string'
+        ? parseInt(f.pricePaid.integerValue, 10)
+        : Number(f.pricePaid?.doubleValue || 50);
+
+    const isApi =
+      f.purchaseSource?.stringValue === 'API' ||
+      id.startsWith('API-ORD-') ||
+      id.startsWith('ORD-EXT-');
+
+    return {
+      id,
+      userId: owner?.id || rawUserId,
+      userEmail: owner?.email?.toLowerCase() || rawEmail,
+      apiKey: owner?.apiKey || rawApiKey,
+      productId: f.productId?.stringValue || 'PROD-499177',
+      variantId: f.variantId?.stringValue || 'VAR-499189',
+      productName: f.productName?.stringValue || 'Gaming Digital Key',
+      durationLabel: f.durationLabel?.stringValue || '1 Day',
+      pricePaid,
+      deliveredKeyId: f.deliveredKeyId?.stringValue || id,
+      deliveredKeyCode: f.deliveredKeyCode?.stringValue || '',
+      status: (f.status?.stringValue as any) || 'COMPLETED',
+      purchaseSource: isApi ? 'API' : 'WEB',
+      purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+      createdAt: f.createdAt?.stringValue || new Date().toISOString(),
+    };
+  }
+
   /**
-   * Fetch the authoritative user balance from Firestore if a document exists for user.id, user.firebaseUid, or user.apiKey
+   * Fetch the authoritative user balance across all linked Firestore user documents
+   * (user.id, user.firebaseUid, USR-KALAM-172010, and matching apiKey).
    */
   public static async getAuthoritativeBalance(user: User): Promise<number> {
-    const candidateIds = new Set<string>([user.id]);
-    if (user.firebaseUid) candidateIds.add(user.firebaseUid);
+    await this.pullAndMergeExternalState(false);
 
-    for (const cid of candidateIds) {
-      try {
-        const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(cid)}?key=${API_KEY}`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const docData: any = await res.json();
-          if (docData?.fields?.balance !== undefined) {
-            const fsBal =
-              typeof docData.fields.balance.doubleValue === 'number'
-                ? docData.fields.balance.doubleValue
-                : typeof docData.fields.balance.integerValue === 'string'
-                ? parseInt(docData.fields.balance.integerValue, 10)
-                : Number(docData.fields.balance.doubleValue || 0);
-            if (!Number.isNaN(fsBal)) {
-              return Math.max(0, Math.round(fsBal * 100) / 100);
+    const candidateIds = this.getLinkedUserIds(user);
+    const balances: number[] = [];
+
+    await Promise.all(
+      candidateIds.map(async cid => {
+        try {
+          const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(cid)}?key=${API_KEY}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const docData: any = await res.json();
+            if (docData?.fields?.balance !== undefined) {
+              const fsBal =
+                typeof docData.fields.balance.doubleValue === 'number'
+                  ? docData.fields.balance.doubleValue
+                  : typeof docData.fields.balance.integerValue === 'string'
+                  ? parseInt(docData.fields.balance.integerValue, 10)
+                  : Number(docData.fields.balance.doubleValue || 0);
+              if (!Number.isNaN(fsBal)) {
+                balances.push(Math.max(0, Math.round(fsBal * 100) / 100));
+              }
             }
           }
-        }
-      } catch {}
+        } catch {}
+      })
+    );
+
+    if (balances.length > 0) {
+      return Math.min(...balances);
     }
 
     if (user.apiKey) {
@@ -175,34 +686,43 @@ export class FirestoreSyncService {
   }
 
   /**
-   * Sync user's deducted balance to Firestore in real-time across all linked user document IDs
+   * Sync user's balance to Firestore across ALL linked user document IDs AND push to Edge Worker
    */
   public static async syncUserBalance(userId: string, newBalance: number): Promise<void> {
     try {
       const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
-      const userIdsToSync = new Set<string>([userId]);
+      const userIdsToSync = new Set<string>(this.getLinkedUserIds(user, userId));
+
+      await Promise.all(
+        Array.from(userIdsToSync).map(async id => {
+          const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?key=${API_KEY}`;
+          await fetch(patchUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: this.buildFullUserFields(id, user, newBalance, user?.apiKey),
+            }),
+          }).catch(() => {});
+        })
+      );
+
+      // Push updated balance to Edge Worker (/api/sync/state) with forceBalanceSync: true
       if (user) {
-        userIdsToSync.add(user.id);
-        if (user.firebaseUid) userIdsToSync.add(user.firebaseUid);
-      }
-
-      // Also check if Firestore has another doc with this user's apiKey or email
-      if (user?.apiKey) {
-        const fsMatch = await this.findUserByApiKey(user.apiKey).catch(() => null);
-        if (fsMatch) {
-          userIdsToSync.add(fsMatch.id);
-          if (fsMatch.firebaseUid) userIdsToSync.add(fsMatch.firebaseUid);
-        }
-      }
-
-      for (const id of userIdsToSync) {
-        const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?key=${API_KEY}`;
-        await fetch(patchUrl, {
-          method: 'PATCH',
+        const payloadUsers = Array.from(userIdsToSync).map(id => ({
+          id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          balance: newBalance,
+          apiKey: user.apiKey,
+          referralCode: user.referralCode,
+          twoFactorEnabled: user.twoFactorEnabled,
+          isBanned: user.isBanned,
+        }));
+        fetch(EDGE_SYNC_URL, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: this.buildFullUserFields(id, user, newBalance, user?.apiKey),
-          }),
+          body: JSON.stringify({ users: payloadUsers, forceBalanceSync: true }),
         }).catch(() => {});
       }
     } catch (err) {
@@ -217,7 +737,7 @@ export class FirestoreSyncService {
     try {
       const product = db.products.find(p => p.id === key.productId);
       const variant = db.productVariants.find(v => v.id === key.variantId);
-      const owner = db.users.find(u => u.id === key.assignedUserId || u.firebaseUid === key.assignedUserId);
+      const owner = this.findLocalOwner(key.assignedUserId, key.assignedUserEmail, key.assignedApiKey);
       const productName = key.productName || product?.name || 'Gaming Digital Key';
       const gameName = key.gameName || product?.game || 'FREEFIRE';
       const durationLabel = key.durationLabel || variant?.durationLabel || '1 Day';
@@ -237,7 +757,7 @@ export class FirestoreSyncService {
             keyCode: { stringValue: key.keyCode },
             isUsed: { booleanValue: Boolean(key.isUsed) },
             status: { stringValue: key.status || 'ACTIVE' },
-            assignedUserId: { stringValue: key.assignedUserId || '' },
+            assignedUserId: { stringValue: owner?.id || key.assignedUserId || '' },
             assignedUserEmail: { stringValue: (key.assignedUserEmail || owner?.email || '').toLowerCase() },
             assignedApiKey: { stringValue: key.assignedApiKey || owner?.apiKey || '' },
             assignedOrderId: { stringValue: key.assignedOrderId || '' },
@@ -259,7 +779,7 @@ export class FirestoreSyncService {
    */
   public static async syncOrder(order: Order): Promise<void> {
     try {
-      const owner = db.users.find(u => u.id === order.userId || u.firebaseUid === order.userId);
+      const owner = this.findLocalOwner(order.userId, order.userEmail, order.apiKey);
       const patchUrl = `${FIRESTORE_BASE}/orders/${encodeURIComponent(order.id)}?key=${API_KEY}`;
       await fetch(patchUrl, {
         method: 'PATCH',
@@ -267,7 +787,7 @@ export class FirestoreSyncService {
         body: JSON.stringify({
           fields: {
             id: { stringValue: order.id },
-            userId: { stringValue: order.userId },
+            userId: { stringValue: owner?.id || order.userId },
             userEmail: { stringValue: (order.userEmail || owner?.email || '').toLowerCase() },
             apiKey: { stringValue: order.apiKey || owner?.apiKey || '' },
             productId: { stringValue: order.productId },
@@ -294,7 +814,7 @@ export class FirestoreSyncService {
    */
   public static async syncTransaction(tx: Transaction): Promise<void> {
     try {
-      const owner = db.users.find(u => u.id === tx.userId || u.firebaseUid === tx.userId);
+      const owner = this.findLocalOwner(tx.userId, tx.userEmail, tx.apiKey);
       const ruleCompatibleType = tx.type === 'PURCHASE' ? 'DEBIT' : (tx.type === 'DEPOSIT' ? 'CREDIT' : tx.type);
       const patchUrl = `${FIRESTORE_BASE}/transactions/${encodeURIComponent(tx.id)}?key=${API_KEY}`;
       await fetch(patchUrl, {
@@ -303,7 +823,7 @@ export class FirestoreSyncService {
         body: JSON.stringify({
           fields: {
             id: { stringValue: tx.id },
-            userId: { stringValue: tx.userId },
+            userId: { stringValue: owner?.id || tx.userId },
             userEmail: { stringValue: (tx.userEmail || owner?.email || '').toLowerCase() },
             apiKey: { stringValue: tx.apiKey || owner?.apiKey || '' },
             type: { stringValue: ruleCompatibleType },
@@ -322,25 +842,42 @@ export class FirestoreSyncService {
   }
 
   /**
-   * Update or ensure user document in Firestore has their current apiKey and full user profile
+   * Update or ensure user document in Firestore & Edge Worker has their current apiKey and full user profile
    */
   public static async syncUserApiKey(userId: string, apiKey: string): Promise<void> {
     try {
       const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
-      const userIdsToSync = new Set<string>([userId]);
-      if (user) {
-        userIdsToSync.add(user.id);
-        if (user.firebaseUid) userIdsToSync.add(user.firebaseUid);
-      }
+      const userIdsToSync = new Set<string>(this.getLinkedUserIds(user, userId));
 
-      for (const id of userIdsToSync) {
-        const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?key=${API_KEY}`;
-        await fetch(patchUrl, {
-          method: 'PATCH',
+      await Promise.all(
+        Array.from(userIdsToSync).map(async id => {
+          const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?key=${API_KEY}`;
+          await fetch(patchUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: this.buildFullUserFields(id, user, user?.balance, apiKey),
+            }),
+          }).catch(() => {});
+        })
+      );
+
+      if (user) {
+        const payloadUsers = Array.from(userIdsToSync).map(id => ({
+          id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          balance: user.balance,
+          apiKey,
+          referralCode: user.referralCode,
+          twoFactorEnabled: user.twoFactorEnabled,
+          isBanned: user.isBanned,
+        }));
+        fetch(EDGE_SYNC_URL, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: this.buildFullUserFields(id, user, user?.balance, apiKey),
-          }),
+          body: JSON.stringify({ users: payloadUsers, forceBalanceSync: true }),
         }).catch(() => {});
       }
     } catch (err) {
@@ -350,7 +887,7 @@ export class FirestoreSyncService {
 
   /**
    * Executes an ATOMIC Firestore transaction (:commit batch write) that simultaneously:
-   * 1. Deducts the product price from the specific user's balance
+   * 1. Deducts the product price from the specific user's balance across all linked IDs
    * 2. Writes the newly issued digital key document into digitalKeys
    * 3. Records the purchase order document in orders
    * 4. Records the purchase debit record in transactions
@@ -367,23 +904,8 @@ export class FirestoreSyncService {
 
     const writes: any[] = [];
 
-    // 1. Write user balance update across all linked IDs for this account
     const user = db.users.find(u => u.id === userId || u.firebaseUid === userId);
-    const userIdsToSync = new Set<string>([userId]);
-    if (user) {
-      userIdsToSync.add(user.id);
-      if (user.firebaseUid) {
-        userIdsToSync.add(user.firebaseUid);
-      }
-    }
-
-    if (user?.apiKey) {
-      const fsMatch = await this.findUserByApiKey(user.apiKey).catch(() => null);
-      if (fsMatch) {
-        userIdsToSync.add(fsMatch.id);
-        if (fsMatch.firebaseUid) userIdsToSync.add(fsMatch.firebaseUid);
-      }
-    }
+    const userIdsToSync = new Set<string>(this.getLinkedUserIds(user, userId));
 
     for (const uid of userIdsToSync) {
       writes.push({
@@ -397,7 +919,6 @@ export class FirestoreSyncService {
     const ownerEmail = (user?.email || order.userEmail || '').toLowerCase();
     const ownerApiKey = user?.apiKey || order.apiKey || '';
 
-    // 2. Write digital keys
     for (const key of keyObjects) {
       const product = db.products.find(p => p.id === key.productId);
       const variant = db.productVariants.find(v => v.id === key.variantId);
@@ -428,7 +949,6 @@ export class FirestoreSyncService {
       });
     }
 
-    // 3. Write order document
     writes.push({
       update: {
         name: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/orders/${encodeURIComponent(order.id)}`,
@@ -452,7 +972,6 @@ export class FirestoreSyncService {
       },
     });
 
-    // 4. Write transaction document
     const ruleType = transaction.type === 'PURCHASE' ? 'DEBIT' : (transaction.type === 'DEPOSIT' ? 'CREDIT' : transaction.type);
     writes.push({
       update: {
@@ -472,6 +991,26 @@ export class FirestoreSyncService {
         },
       },
     });
+
+    // Also push balance update to Edge Worker
+    if (user) {
+      const payloadUsers = Array.from(userIdsToSync).map(id => ({
+        id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        balance: newBalance,
+        apiKey: user.apiKey,
+        referralCode: user.referralCode,
+        twoFactorEnabled: user.twoFactorEnabled,
+        isBanned: user.isBanned,
+      }));
+      fetch(EDGE_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: payloadUsers, forceBalanceSync: true }),
+      }).catch(() => {});
+    }
 
     try {
       const res = await fetch(commitUrl, {

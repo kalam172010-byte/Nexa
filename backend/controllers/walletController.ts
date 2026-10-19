@@ -4,6 +4,7 @@ import { db } from '../db/database';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { PaymentGatewayAdapter } from '../services/paymentAdapter';
 import { WalletService } from '../services/walletService';
+import { FirestoreSyncService } from '../services/firestoreSync';
 
 export class WalletController {
   public static async getWalletSummary(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -14,10 +15,14 @@ export class WalletController {
         return;
       }
 
-      const userAltIds = new Set<string>([user.id]);
-      if ((user as any).firebaseUid) userAltIds.add((user as any).firebaseUid);
-      const userEmail = (user.email || '').trim().toLowerCase();
-      const userApiKey = (user.apiKey || '').trim();
+      await FirestoreSyncService.pullAndMergeExternalState(false);
+
+      const dbUser = db.users.find(
+        u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+      );
+      const userAltIds = new Set<string>(FirestoreSyncService.getLinkedUserIds(dbUser || user, user.id));
+      const userEmail = (dbUser?.email || user.email || '').trim().toLowerCase();
+      const userApiKey = (dbUser?.apiKey || user.apiKey || '').trim();
 
       // Calculate today deposit
       const startOfDay = new Date();
@@ -258,12 +263,16 @@ export class WalletController {
         return;
       }
 
+      await FirestoreSyncService.pullAndMergeExternalState(false);
+
       const { type, search, status } = req.query;
 
-      const userAltIds = new Set<string>([user.id]);
-      if ((user as any).firebaseUid) userAltIds.add((user as any).firebaseUid);
-      const userEmail = (user.email || '').trim().toLowerCase();
-      const userApiKey = (user.apiKey || '').trim();
+      const dbUser = db.users.find(
+        u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+      );
+      const userAltIds = new Set<string>(FirestoreSyncService.getLinkedUserIds(dbUser || user, user.id));
+      const userEmail = (dbUser?.email || user.email || '').trim().toLowerCase();
+      const userApiKey = (dbUser?.apiKey || user.apiKey || '').trim();
 
       let txList = db.transactions.filter(
         t =>

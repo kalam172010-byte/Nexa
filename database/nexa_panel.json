@@ -35,13 +35,13 @@
       "email": "kalam172010@gmail.com",
       "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
       "role": "ADMIN",
-      "balance": 500,
+      "balance": 4850,
       "referralCode": "NXC8A9FC",
       "twoFactorEnabled": false,
       "isBanned": false,
       "createdAt": "2026-10-03T07:23:04.943Z",
-      "updatedAt": "2026-10-17T15:59:59.657Z",
-      "apiKey": "nexa_live_f76153321930a25e336b9ec419584a2f"
+      "updatedAt": "2026-10-19T10:07:37.797Z",
+      "apiKey": "nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7"
     },
     {
       "id": "4mkBZjUVhYW59O8sxLFQwH5IcU33",
@@ -120,12 +120,12 @@
       "email": "kalamkalam1234kd@gmail.com",
       "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
       "role": "ADMIN",
-      "balance": 500,
+      "balance": 100,
       "referralCode": "NXE032E6",
       "twoFactorEnabled": false,
       "isBanned": false,
       "createdAt": "2026-10-18T05:35:45.726Z",
-      "updatedAt": "2026-10-18T05:35:45.726Z",
+      "updatedAt": "2026-10-19T10:07:30.361Z",
       "apiKey": "nexa_live_70717a36985c082bab77b1caa8c02d36"
     }
   ],
@@ -188,6 +188,46 @@
     }
   ],
   "digitalKeys": [
+    {
+      "id": "KEY-1792340009671-f6fd",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "gameName": "FREEFIRE",
+      "durationLabel": "60 Days",
+      "keyCode": "KALA-60D-4F8151-1141BB",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "assignedUserId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "assignedUserEmail": "kalam172010@gmail.com",
+      "assignedApiKey": "nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7",
+      "assignedOrderId": "ORD-1792340009014-F6C1",
+      "assignedAt": "2026-10-18T16:13:29.670Z",
+      "expiresAt": "2026-12-17T16:13:29.670Z",
+      "purchaseSource": "WEB",
+      "purchaseSourceLabel": "Buy from Website",
+      "createdAt": "2026-10-18T16:13:29.670Z"
+    },
+    {
+      "id": "KEY-API-1792401666594-0-23a4",
+      "productId": "PROD-BGMI-65",
+      "variantId": "VAR-65-1D",
+      "productName": "BGMI LOADER PRO V2",
+      "gameName": "BGMI",
+      "durationLabel": "1 Day",
+      "keyCode": "KALAM-65-F7F7-7DFE-6975",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "assignedUserId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "assignedUserEmail": "kalam172010@gmail.com",
+      "assignedApiKey": "nexa_live_f76153321930a25e336b9ec419584a2f",
+      "assignedOrderId": "API-ORD-1792401665997-F2A2",
+      "assignedAt": "2026-10-19T09:21:06.594Z",
+      "expiresAt": "2026-10-20T09:21:06.594Z",
+      "purchaseSource": "API",
+      "purchaseSourceLabel": "Buy from API",
+      "createdAt": "2026-10-19T09:21:06.594Z"
+    },
     {
       "id": "KEY-1791041517472-956b",
       "productId": "PROD-521953",
@@ -285,6 +325,40 @@
     }
   ],
   "orders": [
+    {
+      "id": "ORD-1792340009014-F6C1",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "userEmail": "kalam172010@gmail.com",
+      "apiKey": "nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7",
+      "productId": "PROD-499177",
+      "variantId": "VAR-499189",
+      "productName": "KALAM VIP AIMBOT FF OB55",
+      "durationLabel": "60 Days",
+      "pricePaid": 1100,
+      "deliveredKeyId": "KEY-1792340009671-f6fd",
+      "deliveredKeyCode": "KALA-60D-4F8151-1141BB",
+      "status": "COMPLETED",
+      "purchaseSource": "WEB",
+      "purchaseSourceLabel": "Buy from Website",
+      "createdAt": "2026-10-18T16:13:29.672Z"
+    },
+    {
+      "id": "API-ORD-1792401665997-F2A2",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "userEmail": "kalam172010@gmail.com",
+      "apiKey": "nexa_live_f76153321930a25e336b9ec419584a2f",
+      "productId": "PROD-BGMI-65",
+      "variantId": "VAR-65-1D",
+      "productName": "BGMI LOADER PRO V2",
+      "durationLabel": "1 Day",
+      "pricePaid": 150,
+      "deliveredKeyId": "KEY-API-1792401666594-0-23a4",
+      "deliveredKeyCode": "KALAM-65-F7F7-7DFE-6975",
+      "status": "COMPLETED",
+      "purchaseSource": "API",
+      "purchaseSourceLabel": "Buy from API",
+      "createdAt": "2026-10-19T09:21:06.594Z"
+    },
     {
       "id": "ORD-1791041516774-035E",
       "userId": "USR-101",
@@ -404,6 +478,34 @@
     }
   ],
   "transactions": [
+    {
+      "id": "TXN-ORD-1792340009014-F6C1",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "userEmail": "kalam172010@gmail.com",
+      "apiKey": "nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7",
+      "type": "PURCHASE",
+      "amount": -1100,
+      "description": "[Buy from Website] Key Purchase: KALAM VIP AIMBOT FF OB55 (60 Days) - Key: KALA-60D-4F8151-1141BB",
+      "referenceId": "ORD-1792340009014-F6C1",
+      "purchaseSource": "WEB",
+      "purchaseSourceLabel": "Buy from Website",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-18T16:13:29.670Z"
+    },
+    {
+      "id": "TXN-API-ORD-1792401665997-F2A2",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "userEmail": "kalam172010@gmail.com",
+      "apiKey": "nexa_live_f76153321930a25e336b9ec419584a2f",
+      "type": "PURCHASE",
+      "amount": -150,
+      "description": "[Buy from API] Key Purchase: BGMI LOADER PRO V2 (1 Day) - Key: KALAM-65-F7F7-7DFE-6975",
+      "referenceId": "API-ORD-1792401665997-F2A2",
+      "purchaseSource": "API",
+      "purchaseSourceLabel": "Buy from API",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-19T09:21:06.594Z"
+    },
     {
       "id": "TXN-1792307128553-933D4C",
       "userId": "USR-1792242683123",
@@ -1416,6 +1518,33 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1792404458317-a002c4",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "username": "kalam",
+      "action": "FIREBASE_AUTH_LOGIN",
+      "details": "Logged in via Firebase: kalam172010@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-19T10:07:38.317Z"
+    },
+    {
+      "id": "LOG-1792404335982-2db918",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "username": "kalam",
+      "action": "FIREBASE_AUTH_LOGIN",
+      "details": "Logged in via Firebase: kalam172010@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-19T10:05:35.982Z"
+    },
+    {
+      "id": "LOG-1792403382410-5f90d5",
+      "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
+      "username": "kalam",
+      "action": "FIREBASE_AUTH_LOGIN",
+      "details": "Logged in via Firebase: kalam172010@gmail.com",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-19T09:49:42.410Z"
+    },
     {
       "id": "LOG-1792327896604-624881",
       "userId": "USR-202",

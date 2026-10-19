@@ -419,8 +419,10 @@ export class AuthController {
       res.status(401).json({ error: 'Not authenticated.' });
       return;
     }
+    await FirestoreSyncService.pullAndMergeExternalState(false);
+
     // Return latest user object from db
-    const freshUser = db.users.find(u => u.id === req.user!.id);
+    const freshUser = db.users.find(u => u.id === req.user!.id || u.firebaseUid === req.user!.id);
     if (!freshUser) {
       res.status(404).json({ error: 'User not found.' });
       return;

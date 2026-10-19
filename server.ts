@@ -4,6 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import apiRouter from './backend/routes/api';
 import { seedDatabaseIfEmpty } from './backend/db/seed';
+import { FirestoreSyncService } from './backend/services/firestoreSync';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,8 +16,9 @@ async function startServer() {
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // Seed demo data on launch
+  // Seed demo data on launch and start real-time Firestore + Edge two-way sync
   seedDatabaseIfEmpty();
+  FirestoreSyncService.startAutoSync();
 
   // Basic CORS headers
   app.use((req, res, next) => {
