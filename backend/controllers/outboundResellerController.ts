@@ -129,8 +129,7 @@ export class OutboundResellerController {
       if (!user && (cleanApiKey === 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7' || cleanApiKey === 'nexa_master_admin_token')) {
         user =
           db.users.find(u => u.email.toLowerCase() === 'kalam172010@gmail.com' || u.email.toLowerCase() === 'kalamkalam1234kd@gmail.com') ||
-          db.users.find(u => u.role === 'ADMIN' || u.role === 'SUPER ADMIN') ||
-          db.users[0];
+          db.users.find(u => u.role === 'ADMIN' || u.role === 'SUPER ADMIN');
       }
 
       if (!user) {
