@@ -1,8 +1,8 @@
-import React from 'react';
 import {
   Menu,
   Wallet,
   User as UserIcon,
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useSite } from '../context/SiteContext.js';
@@ -27,7 +27,7 @@ const PAGE_LABELS: Record<string, string> = {
 };
 
 export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate, currentPage }) => {
-  const { user, balance } = useAuth();
+  const { user, balance, logout } = useAuth();
   const { siteConfig } = useSite();
 
   const activeLabel = PAGE_LABELS[currentPage] || 'Dashboard';
@@ -152,6 +152,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate, curren
           ) : (
             <UserIcon className="w-4 h-4 text-rose-300" />
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={logout}
+          className="w-9 h-9 rounded-xl bg-white/[0.04] hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 flex items-center justify-center text-slate-400 hover:text-rose-400 transition-colors shrink-0 cursor-pointer"
+          aria-label="Sign Out"
+          title="Sign Out of Account"
+        >
+          <LogOut className="w-4 h-4" />
         </button>
       </div>
     </header>

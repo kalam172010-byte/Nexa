@@ -45,7 +45,7 @@ router.get('/products/:id', ProductController.getProductById);
 // --- Orders & Purchasing ---
 router.post('/orders', authenticate as any, OrderController.createOrder as any);
 router.get('/orders', authenticate as any, OrderController.getUserOrders as any);
-router.get('/top-active-users', authenticate as any, OrderController.getTopActiveUsers as any);
+router.get('/top-active-users', OrderController.getTopActiveUsers as any);
 
 // --- User Digital Keys ---
 router.get('/keys', authenticate as any, KeyController.getUserKeys as any);

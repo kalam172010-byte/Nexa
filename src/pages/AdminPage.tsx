@@ -66,7 +66,7 @@ import { api, getEffectiveApiUrl, setCustomApiUrl } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
 import { useSite } from '../context/SiteContext.js';
 import { useAuth } from '../context/AuthContext.js';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase.js';
 import { AdminStats, Product, ProductVariant, SiteCustomizationConfig } from '../types/index.js';
 
@@ -546,6 +546,100 @@ export const AdminPage: React.FC = () => {
 
   useEffect(() => {
     loadAllAdminData();
+
+    // Attach real-time Firestore listener for live user sign-ins and updates
+    let unsubscribeUsers: (() => void) | undefined;
+    try {
+      const usersColRef = collection(db, 'users');
+      unsubscribeUsers = onSnapshot(
+        usersColRef,
+        snapshot => {
+          const liveFsUsers: any[] = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const docId = docSnap.id;
+            liveFsUsers.push({
+              id: data.id || docId,
+              username: data.username || data.displayName || 'user',
+              email: data.email || `${docId}@user.local`,
+              role: data.role || 'USER',
+              balance: typeof data.balance === 'number' ? data.balance : 0,
+              apiKey: data.apiKey || '',
+              referralCode: data.referralCode || `NX${docId.slice(0, 4)}`,
+              twoFactorEnabled: Boolean(data.twoFactorEnabled),
+              isBanned: Boolean(data.isBanned),
+              hasPassword: Boolean(data.passwordHash),
+              authProvider: data.authProvider || (data.passwordHash ? 'password' : 'google.com'),
+              providerDisplay: data.providerDisplay || (data.passwordHash ? 'Email & Password' : 'Google Account'),
+              createdAt: data.createdAt || new Date().toISOString(),
+              updatedAt: data.updatedAt || new Date().toISOString(),
+              keysCount: data.keysCount || 0,
+              totalSpent: data.totalSpent || 0,
+              totalDeposited: data.totalDeposited || 0,
+            });
+          });
+
+          if (liveFsUsers.length > 0) {
+            setUsers(prev => {
+              const existingMap = new Map<string, any>(prev.map(u => [u.id, u]));
+              for (const fu of liveFsUsers) {
+                const existing = existingMap.get(fu.id) || Array.from(existingMap.values()).find(u => u.email && fu.email && u.email.toLowerCase() === fu.email.toLowerCase());
+                if (existing) {
+                  existingMap.set(existing.id, {
+                    ...existing,
+                    ...fu,
+                    balance: typeof fu.balance === 'number' ? fu.balance : existing.balance,
+                    apiKey: fu.apiKey || existing.apiKey,
+                  });
+                } else {
+                  existingMap.set(fu.id, fu);
+                }
+              }
+              return Array.from(existingMap.values());
+            });
+
+            setStats(prev => ({
+              ...prev,
+              totalUsers: Math.max(prev.totalUsers, liveFsUsers.length),
+              activeUsers: Math.max(prev.activeUsers, liveFsUsers.filter(u => !u.isBanned).length),
+            }));
+          }
+        },
+        err => {
+          handleFirestoreError(err, OperationType.LIST, 'users');
+        }
+      );
+    } catch (e) {
+      console.warn('[AdminPage] Real-time users listener setup note:', e);
+    }
+
+    // Auto-poll admin data every 4 seconds so preview and deployed instances stay synchronized
+    const pollInterval = setInterval(() => {
+      api.getDashboardStats().then(statsRes => {
+        if (statsRes && typeof statsRes === 'object' && !('error' in statsRes)) {
+          setStats(prev => ({ ...prev, ...statsRes }));
+        }
+      }).catch(() => {});
+
+      api.getAdminUsers(userSearchQuery || undefined).then(usersRes => {
+        if (usersRes?.users) {
+          setUsers(prev => {
+            const map = new Map<string, any>(usersRes.users.map((u: any) => [u.id, u]));
+            for (const p of prev) {
+              if (!map.has(p.id) && !usersRes.users.some((u: any) => u.email && p.email && u.email.toLowerCase() === p.email.toLowerCase())) {
+                map.set(p.id, p);
+              }
+            }
+            return Array.from(map.values());
+          });
+        }
+      }).catch(() => {});
+    }, 4000);
+
+    return () => {
+      if (unsubscribeUsers) unsubscribeUsers();
+      clearInterval(pollInterval);
+    };
   }, []);
 
   useEffect(() => {

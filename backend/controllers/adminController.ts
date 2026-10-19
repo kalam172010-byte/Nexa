@@ -14,6 +14,9 @@ import { FirestoreSyncService } from '../services/firestoreSync';
 export class AdminController {
   public static async getDashboardStats(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      // Sync latest Firestore & Edge users, orders, and balances in real time
+      await FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
+
       const now = new Date();
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
@@ -83,6 +86,9 @@ export class AdminController {
   // User Management
   public static async getUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      // Sync latest Firestore & Edge users in real time
+      await FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
+
       const { search } = req.query;
       let users = db.users.map(({ passwordHash: _, ...safeUser }) => {
         const fullUser = db.users.find(u => u.id === safeUser.id);

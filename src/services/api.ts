@@ -1753,6 +1753,94 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       return { users: getCachedUsers() } as unknown as T;
     }
 
+    if (endpoint === '/top-active-users' || endpoint.includes('top-active-users')) {
+      const cachedUsers = getCachedUsers();
+      let rawOrders: any[] = [];
+      try {
+        const stored = localStorage.getItem('nexa_cached_orders');
+        if (stored) rawOrders = JSON.parse(stored);
+      } catch {}
+      const cachedKeys = getCachedKeys();
+
+      const userStatsMap: Record<string, any> = {};
+      for (const u of cachedUsers) {
+        userStatsMap[u.id] = {
+          rank: 0,
+          userId: u.id,
+          username: u.username || 'user',
+          role: u.role || 'USER',
+          keysCount: 0,
+          totalSpent: 0,
+        };
+      }
+      for (const k of cachedKeys) {
+        if (k.assignedUserId && userStatsMap[k.assignedUserId]) {
+          userStatsMap[k.assignedUserId].keysCount += 1;
+        }
+      }
+      for (const o of rawOrders) {
+        if (o.userId && userStatsMap[o.userId]) {
+          userStatsMap[o.userId].totalSpent += Number(o.pricePaid || 0);
+          if (!userStatsMap[o.userId].keysCount) {
+            userStatsMap[o.userId].keysCount += 1;
+          }
+        }
+      }
+      const sorted = Object.values(userStatsMap)
+        .sort((a: any, b: any) => b.keysCount - a.keysCount || b.totalSpent - a.totalSpent)
+        .slice(0, 5)
+        .map((u: any, i) => ({ ...u, rank: i + 1 }));
+
+      return {
+        success: true,
+        leaderboard: sorted,
+      } as unknown as T;
+    }
+
+    if (endpoint === '/top-active-users' || endpoint.includes('top-active-users')) {
+      const cachedUsers = getCachedUsers();
+      let rawOrders: any[] = [];
+      try {
+        const stored = localStorage.getItem('nexa_cached_orders');
+        if (stored) rawOrders = JSON.parse(stored);
+      } catch {}
+      const cachedKeys = getCachedKeys();
+
+      const userStatsMap: Record<string, any> = {};
+      for (const u of cachedUsers) {
+        userStatsMap[u.id] = {
+          rank: 0,
+          userId: u.id,
+          username: u.username || 'user',
+          role: u.role || 'USER',
+          keysCount: 0,
+          totalSpent: 0,
+        };
+      }
+      for (const k of cachedKeys) {
+        if (k.assignedUserId && userStatsMap[k.assignedUserId]) {
+          userStatsMap[k.assignedUserId].keysCount += 1;
+        }
+      }
+      for (const o of rawOrders) {
+        if (o.userId && userStatsMap[o.userId]) {
+          userStatsMap[o.userId].totalSpent += Number(o.pricePaid || 0);
+          if (!userStatsMap[o.userId].keysCount) {
+            userStatsMap[o.userId].keysCount += 1;
+          }
+        }
+      }
+      const sorted = Object.values(userStatsMap)
+        .sort((a: any, b: any) => b.keysCount - a.keysCount || b.totalSpent - a.totalSpent)
+        .slice(0, 5)
+        .map((u: any, i) => ({ ...u, rank: i + 1 }));
+
+      return {
+        success: true,
+        leaderboard: sorted,
+      } as unknown as T;
+    }
+
     if (endpoint.includes('/admin/deposits')) {
       const rawDeps = localStorage.getItem('nexa_cached_deposits');
       return { deposits: rawDeps ? JSON.parse(rawDeps) : [] } as unknown as T;

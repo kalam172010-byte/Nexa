@@ -1295,8 +1295,85 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     return jsonResponse({ transactions: txs });
   }
 
+  // 7B. Top Active Users Leaderboard (/api/top-active-users)
+  if ((path === '/api/top-active-users' || path === '/top-active-users') && method === 'GET') {
+    const userStatsMap: Record<string, { rank: number; userId: string; username: string; role: string; keysCount: number; totalSpent: number }> = {};
+    for (const u of edgeDb.users) {
+      userStatsMap[u.id] = {
+        rank: 0,
+        userId: u.id,
+        username: u.username || 'user',
+        role: u.role || 'USER',
+        keysCount: 0,
+        totalSpent: 0,
+      };
+    }
+    for (const k of edgeDb.digitalKeys) {
+      if (k.assignedUserId && userStatsMap[k.assignedUserId]) {
+        userStatsMap[k.assignedUserId].keysCount += 1;
+      }
+    }
+    for (const o of edgeDb.orders) {
+      if (o.userId && userStatsMap[o.userId]) {
+        userStatsMap[o.userId].totalSpent += Number(o.pricePaid || 0);
+        if (!userStatsMap[o.userId].keysCount) {
+          userStatsMap[o.userId].keysCount += 1;
+        }
+      }
+    }
+    const sorted = Object.values(userStatsMap)
+      .sort((a, b) => b.keysCount - a.keysCount || b.totalSpent - a.totalSpent)
+      .slice(0, 5)
+      .map((u, i) => ({ ...u, rank: i + 1 }));
+
+    return jsonResponse({
+      success: true,
+      leaderboard: sorted,
+    });
+  }
+
   // 8. Admin Users & Balance Adjustments (/api/admin/users, /api/admin/users/:id/adjust-balance)
   if (path === '/api/admin/users' && method === 'GET') {
+    // Sync any newly discovered users from Firestore in deploy/edge
+    try {
+      const fsQueryUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users?pageSize=100&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      const fsRes = await fetch(fsQueryUrl);
+      if (fsRes.ok) {
+        const fsData: any = await fsRes.json();
+        const docs = fsData.documents || [];
+        for (const d of docs) {
+          const f = d.fields || {};
+          const uId = f.id?.stringValue || d.name?.split('/').pop() || '';
+          const uEmail = (f.email?.stringValue || '').toLowerCase().trim();
+          if (!uId && !uEmail) continue;
+          const existing = edgeDb.users.find(u => u.id === uId || (uEmail && u.email.toLowerCase() === uEmail));
+          const uBal = typeof f.balance?.doubleValue === 'number'
+            ? f.balance.doubleValue
+            : typeof f.balance?.integerValue === 'string'
+            ? parseInt(f.balance.integerValue, 10)
+            : Number(f.balance?.doubleValue || 0);
+          if (!existing) {
+            edgeDb.users.push({
+              id: uId,
+              username: f.username?.stringValue || f.displayName?.stringValue || (uEmail ? uEmail.split('@')[0] : 'user'),
+              email: uEmail || `${uId}@user.local`,
+              role: (f.role?.stringValue as any) || 'USER',
+              balance: uBal,
+              apiKey: f.apiKey?.stringValue || '',
+              referralCode: f.referralCode?.stringValue || `NX${uId.slice(0, 4).toUpperCase()}`,
+              twoFactorEnabled: Boolean(f.twoFactorEnabled?.booleanValue),
+              isBanned: Boolean(f.isBanned?.booleanValue),
+              createdAt: f.createdAt?.stringValue || new Date().toISOString(),
+              updatedAt: f.updatedAt?.stringValue || new Date().toISOString(),
+            });
+          } else {
+            existing.balance = uBal;
+            if (f.role?.stringValue) existing.role = f.role.stringValue as any;
+          }
+        }
+      }
+    } catch {}
+
     const users = edgeDb.users.map(u => {
       const userOrders = edgeDb.orders.filter(o => o.userId === u.id);
       const userKeys = edgeDb.digitalKeys.filter(k => k.assignedUserId === u.id);

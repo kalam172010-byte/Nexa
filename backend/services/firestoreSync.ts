@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { User, DigitalKey, Order, Transaction } from '../models/types';
 import { db } from '../db/database';
@@ -128,6 +129,66 @@ export class FirestoreSyncService {
       for (const doc of fsUsersDocs) {
         const u = this.parseFirestoreUserDoc(doc);
         if (u) parsedFsUsers.push(u);
+      }
+
+      // Merge newly discovered Firestore users into db.users so they appear in real-time in the admin panel and leaderboard
+      for (const fu of parsedFsUsers) {
+        if (!fu.id && !fu.email) continue;
+        const linkedIds = new Set(this.getLinkedUserIds(fu));
+        const existing = db.users.find(
+          u =>
+            (fu.id && (u.id === fu.id || u.firebaseUid === fu.id)) ||
+            (fu.firebaseUid && (u.id === fu.firebaseUid || u.firebaseUid === fu.firebaseUid)) ||
+            (fu.email && u.email.toLowerCase() === fu.email.toLowerCase()) ||
+            linkedIds.has(u.id) ||
+            (u.firebaseUid && linkedIds.has(u.firebaseUid))
+        );
+        if (!existing) {
+          if (!fu.apiKey) {
+            fu.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+          }
+          db.users.push(fu);
+          dbChanged = true;
+        } else {
+          if (fu.firebaseUid && !existing.firebaseUid) {
+            existing.firebaseUid = fu.firebaseUid;
+            dbChanged = true;
+          }
+          if (fu.username && existing.username === 'user' && fu.username !== 'user') {
+            existing.username = fu.username;
+            dbChanged = true;
+          }
+        }
+      }
+
+      // Merge newly discovered Edge users into db.users
+      if (Array.isArray(edgeState?.users)) {
+        for (const eu of edgeState.users) {
+          if (!eu || (!eu.id && !eu.email)) continue;
+          const cleanEmail = (eu.email || '').toLowerCase().trim();
+          const existing = db.users.find(
+            u =>
+              (eu.id && (u.id === eu.id || u.firebaseUid === eu.id)) ||
+              (cleanEmail && u.email.toLowerCase() === cleanEmail)
+          );
+          if (!existing) {
+            db.users.push({
+              id: eu.id,
+              username: eu.username || 'user',
+              email: cleanEmail || `${eu.id}@user.local`,
+              passwordHash: '',
+              role: eu.role || 'USER',
+              balance: typeof eu.balance === 'number' ? eu.balance : 0,
+              apiKey: eu.apiKey || `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
+              referralCode: eu.referralCode || `NX${eu.id.slice(0, 4).toUpperCase()}`,
+              twoFactorEnabled: Boolean(eu.twoFactorEnabled),
+              isBanned: Boolean(eu.isBanned),
+              createdAt: eu.createdAt || new Date().toISOString(),
+              updatedAt: eu.updatedAt || new Date().toISOString(),
+            });
+            dbChanged = true;
+          }
+        }
       }
 
       // Sync user profiles & balances

@@ -17,6 +17,8 @@ import {
 import { useAuth } from '../context/AuthContext.js';
 import { useSite } from '../context/SiteContext.js';
 import { api } from '../services/api.js';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase.js';
 
 interface DashboardPageProps {
   onNavigate: (page: string) => void;
@@ -56,7 +58,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       ]);
 
       if (sumRes) setSummary(sumRes);
-      if (topUsersRes?.leaderboard) setLeaderboard(topUsersRes.leaderboard);
+      if (topUsersRes?.leaderboard && topUsersRes.leaderboard.length > 0) {
+        setLeaderboard(topUsersRes.leaderboard);
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     }
@@ -65,10 +69,61 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   useEffect(() => {
     loadDashboardData();
 
+    // Attach real-time Firestore listener so new users and key purchases update Top Active Members immediately
+    let unsubscribeUsers: (() => void) | undefined;
+    try {
+      const usersColRef = collection(db, 'users');
+      unsubscribeUsers = onSnapshot(
+        usersColRef,
+        snapshot => {
+          const liveUsers: any[] = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            liveUsers.push({
+              userId: docSnap.id,
+              username: data.username || data.displayName || 'user',
+              role: data.role || 'USER',
+              keysCount: Number(data.keysCount) || 0,
+              totalSpent: Number(data.totalSpent) || 0,
+              createdAt: data.createdAt || new Date().toISOString(),
+            });
+          });
+
+          if (liveUsers.length > 0) {
+            // Sort by keysCount desc, then totalSpent desc, then newest member
+            const sorted = liveUsers
+              .sort((a, b) => (b.keysCount - a.keysCount) || (b.totalSpent - a.totalSpent) || (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+              .slice(0, 5)
+              .map((u, i) => ({
+                rank: i + 1,
+                userId: u.userId,
+                username: u.username,
+                role: u.role,
+                keysCount: u.keysCount,
+                totalSpent: u.totalSpent,
+              }));
+
+            setLeaderboard(prev => {
+              // Only override if we have valid real-time users
+              if (sorted.length > 0) return sorted;
+              return prev;
+            });
+          }
+        },
+        err => {
+          handleFirestoreError(err, OperationType.LIST, 'users');
+        }
+      );
+    } catch (e) {
+      console.warn('[DashboardPage] Real-time leaderboard listener setup note:', e);
+    }
+
     const interval = setInterval(() => {
       api.getTopActiveUsers()
         .then(res => {
-          if (res?.leaderboard) setLeaderboard(res.leaderboard);
+          if (res?.leaderboard && res.leaderboard.length > 0) {
+            setLeaderboard(res.leaderboard);
+          }
         })
         .catch(() => {});
 
@@ -77,9 +132,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           if (res) setSummary(res);
         })
         .catch(() => {});
-    }, 5000);
+    }, 3500);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (unsubscribeUsers) unsubscribeUsers();
+      clearInterval(interval);
+    };
   }, []);
 
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';

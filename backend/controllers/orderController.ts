@@ -291,37 +291,56 @@ export class OrderController {
     }
   }
 
-  public static async getTopActiveUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
+  public static async getTopActiveUsers(req: any, res: Response): Promise<void> {
     try {
-      // Calculate top 5 real active users strictly from database
+      // Sync real-time Firestore & Edge users first
+      await FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
+
+      // Calculate top 5 real active users from database
       const userStatsMap: Record<
         string,
-        { userId: string; username: string; role: string; keysCount: number; totalSpent: number }
+        { userId: string; username: string; role: string; keysCount: number; totalSpent: number; createdAt: string }
       > = {};
 
       // Seed all real registered users from database
       db.users.forEach(u => {
         userStatsMap[u.id] = {
           userId: u.id,
-          username: u.username,
-          role: u.role,
+          username: u.username || 'user',
+          role: u.role || 'USER',
           keysCount: 0,
           totalSpent: 0,
+          createdAt: u.createdAt || new Date().toISOString(),
         };
       });
 
       // Aggregate completed orders for real users
       db.orders.forEach(o => {
-        if (o.status === 'COMPLETED' && userStatsMap[o.userId]) {
-          userStatsMap[o.userId].keysCount += 1;
-          userStatsMap[o.userId].totalSpent += o.pricePaid || 0;
+        if (o.status === 'COMPLETED') {
+          const targetUserId = o.userId || Object.keys(userStatsMap).find(
+            uid => userStatsMap[uid].userId === o.userId || userStatsMap[uid].username === o.userEmail
+          );
+          if (targetUserId && userStatsMap[targetUserId]) {
+            userStatsMap[targetUserId].keysCount += 1;
+            userStatsMap[targetUserId].totalSpent += o.pricePaid || 0;
+          }
         }
       });
 
-      // Sort strictly by keysCount descending, then totalSpent descending
+      // Also verify keysCount against digitalKeys
+      db.digitalKeys.forEach(k => {
+        if (k.assignedUserId && userStatsMap[k.assignedUserId]) {
+          const directCount = db.digitalKeys.filter(dk => dk.assignedUserId === k.assignedUserId).length;
+          if (directCount > userStatsMap[k.assignedUserId].keysCount) {
+            userStatsMap[k.assignedUserId].keysCount = directCount;
+          }
+        }
+      });
+
+      // Sort by keysCount descending, then totalSpent descending, then newest members
       const topRealUsers = Object.values(userStatsMap)
-        .sort((a, b) => b.keysCount - a.keysCount || b.totalSpent - a.totalSpent)
-        .slice(0, 5); // Strictly Top 5 real users
+        .sort((a, b) => b.keysCount - a.keysCount || b.totalSpent - a.totalSpent || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 5);
 
       // Format Top 5 real users with rank
       const leaderboard = topRealUsers.map((u, index) => ({

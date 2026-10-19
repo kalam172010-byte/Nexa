@@ -71,6 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const saveUserSession = useCallback((userData: User, userToken: string) => {
+    localStorage.removeItem('nexa_logged_out');
     if (checkIsAdmin(userData.email, userData.username)) {
       userData.role = 'ADMIN';
     }
@@ -101,8 +102,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const clearUserSession = useCallback(() => {
-    localStorage.removeItem('nexa_auth_token');
-    localStorage.removeItem('nexa_user_data');
+    try {
+      localStorage.removeItem('nexa_auth_token');
+      localStorage.removeItem('nexa_user_data');
+      localStorage.removeItem('nexa_current_user');
+      localStorage.removeItem('nexa_user_outbound_api_key');
+      sessionStorage.clear();
+    } catch {}
     setToken(null);
     setUser(null);
   }, []);
@@ -272,6 +278,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Listen to Firebase auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async firebaseUser => {
+      const isExplicitlyLoggedOut = localStorage.getItem('nexa_logged_out') === 'true';
+      if (isExplicitlyLoggedOut) {
+        clearUserSession();
+        setIsLoading(false);
+        return;
+      }
+
       console.log(
         '[AuthContext] onAuthStateChanged listener triggered. Firebase User:',
         firebaseUser ? `${firebaseUser.uid} (${firebaseUser.email || 'no-email'})` : 'null'
@@ -300,6 +313,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If no Firebase user, check if we have a valid cached session (e.g., username/password or static host)
         const storedToken = localStorage.getItem('nexa_auth_token');
         const storedUserData = localStorage.getItem('nexa_user_data');
+        if (!storedToken || isExplicitlyLoggedOut) {
+          clearUserSession();
+          setIsLoading(false);
+          return;
+        }
+
         console.log(
           '[AuthContext] No Firebase user present. Local session check:',
           storedToken ? 'Token present' : 'No token'
@@ -700,11 +719,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      localStorage.setItem('nexa_logged_out', 'true');
+    } catch {}
+    clearUserSession();
+    try {
       await signOut(auth);
     } catch (e) {
       console.warn('Firebase signout warning:', e);
     }
-    clearUserSession();
+    if (typeof window !== 'undefined') {
+      try {
+        if (window.location.hash) {
+          window.location.hash = '';
+        }
+      } catch {}
+    }
   };
 
   const updateBalanceLocally = (newBalance: number) => {
