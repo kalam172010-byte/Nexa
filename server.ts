@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import apiRouter from './backend/routes/api';
 import { seedDatabaseIfEmpty } from './backend/db/seed';
 import { FirestoreSyncService } from './backend/services/firestoreSync';
+import { emailService } from './backend/services/emailService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,6 +20,14 @@ async function startServer() {
   // Seed demo data on launch and start real-time Firestore + Edge two-way sync
   seedDatabaseIfEmpty();
   FirestoreSyncService.startAutoSync();
+
+  // Start 24/7 continuous IMAP auto-deposit listener
+  try {
+    emailService.start24x7ImapWatcher();
+    console.log('⚡ 24/7 Background IMAP Auto-Deposit Watcher launched successfully');
+  } catch (err: any) {
+    console.warn('Notice: IMAP 24/7 background listener deferred:', err.message);
+  }
 
   // Basic CORS headers
   app.use((req, res, next) => {

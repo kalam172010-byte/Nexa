@@ -275,3 +275,58 @@ export interface ResellerApiConfig {
   isLiveApiEnabled: boolean;
   defaultAndroidId: string;
 }
+
+export interface EmailConfig {
+  enabled: boolean;
+  protocol: 'smtp' | 'imap_smtp' | 'gmail';
+  senderEmail: string;
+  senderName: string;
+  smtpHost: string;
+  smtpPort: number;
+  secure: boolean;
+  smtpUser: string;
+  smtpPass: string;
+  hasSmtpPass?: boolean;
+  imapHost?: string;
+  imapPort?: number;
+  imapUser?: string;
+  imapPass?: string;
+  hasImapPass?: boolean;
+  imapSecure?: boolean;
+  otpExpiryMinutes: number;
+  allowOtpSignup: boolean;
+  imap24x7Enabled?: boolean;
+  imapPollIntervalSeconds?: number;
+  autoApproveDeposits?: boolean;
+  simulationMode?: boolean;
+}
+
+export interface DiscoveredTransaction {
+  id: string;
+  utr: string;
+  amount: number;
+  sender: string;
+  subject: string;
+  date: string;
+  status: 'AUTO_CREDITED' | 'UNMATCHED' | 'ALREADY_CREDITED' | 'SIMULATED';
+  depositId?: string;
+  matchedUserId?: string;
+}
+
+export interface Imap24x7Status {
+  isRunning: boolean;
+  status: 'IDLE' | 'ACTIVE_24_7' | 'SCANNING' | 'CONNECTED' | 'AWAITING_CREDENTIALS' | 'ERROR';
+  lastScanTime: string | null;
+  lastSuccessTime: string | null;
+  lastError: string | null;
+  emailsScannedTotal: number;
+  utrsDetectedTotal: number;
+  depositsAutoApprovedTotal: number;
+  pollIntervalSeconds: number;
+  host: string;
+  port: number;
+  user: string;
+  recentScannedDeposits: DiscoveredTransaction[];
+  diagnosticHint?: string;
+}
+

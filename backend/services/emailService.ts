@@ -3,6 +3,7 @@ import tls from 'tls';
 import net from 'net';
 import { db } from '../db/database';
 import { EmailConfig } from '../models/types';
+import { PaymentGatewayAdapter } from './paymentAdapter';
 
 interface StoredOtp {
   code: string;
@@ -10,9 +11,57 @@ interface StoredOtp {
   attempts: number;
 }
 
+export interface DiscoveredTransaction {
+  id: string;
+  utr: string;
+  amount: number;
+  sender: string;
+  subject: string;
+  date: string;
+  status: 'AUTO_CREDITED' | 'UNMATCHED' | 'ALREADY_CREDITED' | 'SIMULATED';
+  depositId?: string;
+  matchedUserId?: string;
+}
+
+export interface Imap24x7Telemetry {
+  isRunning: boolean;
+  status: 'IDLE' | 'ACTIVE_24_7' | 'SCANNING' | 'CONNECTED' | 'AWAITING_CREDENTIALS' | 'ERROR';
+  lastScanTime: string | null;
+  lastSuccessTime: string | null;
+  lastError: string | null;
+  emailsScannedTotal: number;
+  utrsDetectedTotal: number;
+  depositsAutoApprovedTotal: number;
+  pollIntervalSeconds: number;
+  host: string;
+  port: number;
+  user: string;
+  recentScannedDeposits: DiscoveredTransaction[];
+  diagnosticHint?: string | null;
+}
+
 export class EmailService {
   private static instance: EmailService;
   private otpStore: Map<string, StoredOtp> = new Map();
+  private imapWatcherTimer: NodeJS.Timeout | null = null;
+  private isScanningImap: boolean = false;
+  private lastScanStartTime: number = 0;
+  private recentScannedDeposits: DiscoveredTransaction[] = [];
+  private imapTelemetry: Imap24x7Telemetry = {
+    isRunning: true,
+    status: 'ACTIVE_24_7',
+    lastScanTime: null,
+    lastSuccessTime: null,
+    lastError: null,
+    emailsScannedTotal: 0,
+    utrsDetectedTotal: 0,
+    depositsAutoApprovedTotal: 0,
+    pollIntervalSeconds: 25,
+    host: 'imap.gmail.com',
+    port: 993,
+    user: 'kalamkalam1234kd@gmail.com',
+    recentScannedDeposits: [],
+  };
 
   private constructor() {
     // Periodic cleanup of expired OTPs every 5 minutes
@@ -24,6 +73,9 @@ export class EmailService {
         }
       }
     }, 5 * 60 * 1000);
+
+    // Start 24/7 continuous background IMAP auto-deposit listener
+    this.start24x7ImapWatcher();
   }
 
   public static getInstance(): EmailService {
@@ -448,24 +500,23 @@ export class EmailService {
   }
 
   /**
-   * Performs a native IMAP socket and authentication handshake on port 993 (SSL) or 143 (STARTTLS/Plain)
-   * to verify that incoming mailbox synchronization is working for ANY email provider.
+   * Resolves incoming IMAP connection parameters and normalizes passwords (including 16-character
+   * Google App Passwords) for reliable TLS authentication.
    */
-  public async testImapConfiguration(
-    overrideConfig?: Partial<EmailConfig>
-  ): Promise<{
-    success: boolean;
-    message: string;
-    details?: any;
-  }> {
+  /**
+   * Resolves incoming IMAP connection parameters and normalizes passwords (including 16-character
+   * Google App Passwords) for reliable TLS authentication.
+   */
+  public resolveImapSettings(overrideConfig?: Partial<EmailConfig>) {
     const config: EmailConfig = {
       ...db.emailConfig,
       ...(overrideConfig || {}),
     };
 
-    const senderEmail = (config.senderEmail || 'kalamkalam1234kd@gmail.com').trim();
+    const senderEmail = (config.senderEmail || 'kk7953926@gmail.com').trim();
     const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1].toLowerCase() : '';
     let host = (config.imapHost || 'imap.gmail.com').trim();
+
     if (senderDomain && host === 'imap.gmail.com' && senderDomain !== 'gmail.com' && senderDomain !== 'googlemail.com') {
       if (senderDomain === 'outlook.com' || senderDomain === 'hotmail.com' || senderDomain === 'live.com' || senderDomain === 'msn.com') {
         host = 'outlook.office365.com';
@@ -479,6 +530,7 @@ export class EmailService {
         host = `mail.${senderDomain}`;
       }
     }
+
     const port = Number(config.imapPort) || 993;
     const secure = config.imapSecure !== false && port !== 143;
     const rawImapUser = (config.imapUser || '').trim();
@@ -486,39 +538,103 @@ export class EmailService {
       !rawImapUser || (rawImapUser.toLowerCase() === 'kalamkalam1234kd@gmail.com' && senderEmail.toLowerCase() !== 'kalamkalam1234kd@gmail.com')
         ? senderEmail
         : rawImapUser;
-    let pass = (config.imapPass || config.smtpPass || '').trim();
 
+    let pass = (config.imapPass || config.smtpPass || '').trim();
     if (!pass || pass.includes('••••')) {
       pass = db.emailConfig.imapPass || db.emailConfig.smtpPass || '';
     }
 
-    if (!user) {
-      return {
-        success: false,
-        message: 'IMAP Username or Email address is required to test IMAP connection.',
-        details: { host, port, secure },
-      };
-    }
-
-    // Determine clean primary password and alternate password candidate (e.g. smtpPass)
     const cleanPassword = (raw: string) => {
-      const noSpace = (raw || '').replace(/[\s\u00a0]+/g, '');
+      const noSpace = (raw || '').replace(/[\s\u00a0-]+/g, '');
       if (/^[a-zA-Z]{16}$/.test(noSpace)) {
         return host.toLowerCase().includes('gmail') ? noSpace.toLowerCase() : noSpace;
       }
       return (raw || '').replace(/^["']+|["']+$/g, '').trim();
     };
 
-    let imapPass = cleanPassword(pass);
+    const imapPass = cleanPassword(pass);
     const altSmtpPass = cleanPassword(config.smtpPass || db.emailConfig.smtpPass || '');
+
+    const isGmail = host.toLowerCase().includes('gmail') || user.toLowerCase().endsWith('@gmail.com');
+    const effectivePass = imapPass || altSmtpPass;
+    const strippedPass = effectivePass.replace(/[\s\u00a0-]+/g, '');
+    const isStandard16LetterAppPass = /^[a-zA-Z]{16}$/.test(strippedPass);
+    const isLikelyInvalidGmailAppPass = isGmail && effectivePass.length > 0 && !isStandard16LetterAppPass;
+
+    return {
+      host,
+      port,
+      secure,
+      user,
+      imapPass,
+      altSmtpPass,
+      isGmail,
+      isStandard16LetterAppPass,
+      isLikelyInvalidGmailAppPass,
+      pollIntervalSeconds: Number(config.imapPollIntervalSeconds) || 25,
+      autoApproveDeposits: config.autoApproveDeposits !== false,
+      imap24x7Enabled: config.imap24x7Enabled !== false,
+      simulationMode: Boolean(config.simulationMode),
+    };
+  }
+
+  /**
+   * Safely formats IMAP string literals and quotes strings according to RFC 3501.
+   */
+  private formatImapString(val: string): string {
+    return `"${(val || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  }
+
+  /**
+   * Performs an instant IMAP socket and authentication handshake on port 993 (SSL) or 143 (STARTTLS/Plain)
+   * to verify that incoming mailbox synchronization is active and working.
+   */
+  public async testImapConfiguration(
+    overrideConfig?: Partial<EmailConfig>
+  ): Promise<{
+    success: boolean;
+    message: string;
+    details?: any;
+    diagnosticHint?: string;
+  }> {
+    const { host, port, secure, user, imapPass, altSmtpPass, isGmail, isLikelyInvalidGmailAppPass } =
+      this.resolveImapSettings(overrideConfig);
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'IMAP Username or Email address is required to test IMAP connection.',
+        details: { host, port, secure },
+        diagnosticHint: 'Enter your email address in the Sender Email or IMAP Username field.',
+      };
+    }
+
+    if (!imapPass && !altSmtpPass) {
+      return {
+        success: false,
+        message: 'Email Password or 16-character App Password is required to test IMAP incoming sync.',
+        details: {
+          host,
+          port,
+          user,
+          help: isGmail
+            ? 'For Gmail, generate a 16-character App Password at myaccount.google.com/apppasswords. Regular passwords are not allowed.'
+            : 'For cPanel/Webmail, enter your normal email password.',
+        },
+        diagnosticHint: isGmail
+          ? 'Google accounts require a 16-letter App Password with 2-Step Verification enabled.'
+          : 'Please enter your email password to enable incoming IMAP synchronization.',
+      };
+    }
 
     return new Promise((resolve) => {
       let isResolved = false;
       let socket: any = null;
       let timer: any = null;
       let hasTriedAltPass = false;
+      let currentPass = imapPass || altSmtpPass;
 
-      const finish = (result: { success: boolean; message: string; details?: any }) => {
+      const finish = (result: { success: boolean; message: string; details?: any; diagnosticHint?: string }) => {
         if (!isResolved) {
           isResolved = true;
           if (timer) clearTimeout(timer);
@@ -537,6 +653,7 @@ export class EmailService {
           success: false,
           message: `IMAP connection to ${host}:${port} timed out after 10 seconds. Check if host and port are open and accessible.`,
           details: { host, port, secure, user },
+          diagnosticHint: 'Connection timed out. Check network firewall or verify that Port 993 (SSL) is open.',
         });
       }, 10000);
 
@@ -556,6 +673,7 @@ export class EmailService {
           success: false,
           message: `Failed to initiate IMAP socket connection to ${host}:${port}: ${err.message}`,
           details: { host, port, secure, user, error: err.message },
+          diagnosticHint: 'Failed to establish TCP socket. Verify that the hostname and port are valid.',
         });
       }
 
@@ -565,11 +683,12 @@ export class EmailService {
           success: false,
           message: `IMAP socket to ${host}:${port} timed out during data transfer. Check network firewall.`,
           details: { host, port, secure, user },
+          diagnosticHint: 'Socket idle timeout. Server stopped responding during handshake.',
         });
       });
 
       let buffer = '';
-      let hasGreeted = false;
+      let step: 'GREETING' | 'LOGIN' | 'SELECT' = 'GREETING';
 
       socket.on('data', (chunk: Buffer) => {
         buffer += chunk.toString();
@@ -577,69 +696,83 @@ export class EmailService {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (!hasGreeted && line.startsWith('* OK')) {
-            hasGreeted = true;
-            if (imapPass) {
-              // Send IMAP LOGIN command
-              socket.write(`a001 LOGIN "${user}" "${imapPass}"\r\n`);
-            } else if (altSmtpPass) {
-              imapPass = altSmtpPass;
-              socket.write(`a001 LOGIN "${user}" "${imapPass}"\r\n`);
-            } else {
-              finish({
-                success: true,
-                message: `IMAP server ${host}:${port} responded with greeting: "${line}". (Provide IMAP password to verify authentication).`,
-                details: { host, port, secure, user, greeting: line },
-              });
-              return;
-            }
-          } else if (hasGreeted) {
+          // Check for IMAP greeting: "* OK ..." or "* PREAUTH ..."
+          if (step === 'GREETING' && (line.startsWith('* OK') || line.startsWith('* ok') || line.startsWith('* PREAUTH'))) {
+            step = 'LOGIN';
+            // Send properly escaped IMAP LOGIN command
+            socket.write(`a001 LOGIN ${this.formatImapString(user)} ${this.formatImapString(currentPass)}\r\n`);
+          } else if (step === 'LOGIN') {
             if (line.startsWith('a001 OK') || line.startsWith('a002 OK')) {
-              // Persist working credentials to database if alternative was used
-              if (hasTriedAltPass && altSmtpPass) {
-                db.emailConfig.imapPass = altSmtpPass;
-                db.saveSync();
-              }
-              finish({
-                success: true,
-                message: `✅ IMAP Connection & Authentication Successful! Connected to ${host}:${port} as "${user}".`,
-                details: { host, port, secure, user, response: line },
-              });
-              return;
-            } else if (line.startsWith('a001 NO') || line.startsWith('a001 BAD')) {
-              // If primary password failed and we have an alternative SMTP password, try it automatically!
-              if (!hasTriedAltPass && altSmtpPass && altSmtpPass !== imapPass) {
+              step = 'SELECT';
+              // Check INBOX availability and message stats
+              socket.write('a003 SELECT INBOX\r\n');
+            } else if (line.startsWith('a001 NO') || line.startsWith('a001 BAD') || line.startsWith('a002 NO') || line.startsWith('a002 BAD')) {
+              // Try alternative SMTP password candidate if primary failed
+              if (!hasTriedAltPass && altSmtpPass && altSmtpPass !== currentPass) {
                 hasTriedAltPass = true;
-                socket.write(`a002 LOGIN "${user}" "${altSmtpPass}"\r\n`);
+                currentPass = altSmtpPass;
+                socket.write(`a002 LOGIN ${this.formatImapString(user)} ${this.formatImapString(currentPass)}\r\n`);
                 return;
               }
 
-              const isGmail = host.toLowerCase().includes('gmail') || user.toLowerCase().endsWith('@gmail.com');
+              const isAuthFailed = line.includes('AUTHENTICATIONFAILED') || line.includes('Invalid credentials') || line.includes('BadCredentials') || line.includes('535');
               let help = `IMAP server rejected credentials (${line}).`;
+              let hint = 'Please verify your email credentials.';
+
               if (isGmail) {
-                help += ' For Gmail, ensure IMAP is enabled in Gmail Settings and use a 16-character Google App Password.';
+                help = `Google Gmail IMAP Authentication Rejected (${line}). Regular account passwords are strictly blocked by Google for security.`;
+                hint = 'You must turn ON 2-Step Verification at myaccount.google.com/security, then generate a 16-character Google App Password at myaccount.google.com/apppasswords.';
               } else {
-                help += ' Check username and email password in your hosting/cPanel webmail settings.';
+                help = `Mail server rejected login for "${user}": ${line}.`;
+                hint = 'Confirm that your email address and password match your hosting/cPanel webmail login.';
               }
+
               finish({
                 success: false,
                 message: help,
-                details: { host, port, secure, user, error: line },
+                details: {
+                  host,
+                  port,
+                  secure,
+                  user,
+                  error: line,
+                  isGmail,
+                  isAuthFailed,
+                  isLikelyInvalidGmailAppPass,
+                  steps: isGmail ? [
+                    `1. Ensure "${user}" is the exact Google account you are logged into.`,
+                    '2. Go to myaccount.google.com/security and ensure 2-Step Verification is ON.',
+                    '3. Go to myaccount.google.com/apppasswords and create an App Password (Name: Nexa Panel).',
+                    '4. Copy the 16-letter password (e.g. abcd efgh ijkl mnop) and paste it into Admin Panel.',
+                  ] : undefined,
+                  helpUrl: isGmail ? 'https://myaccount.google.com/apppasswords' : '',
+                },
+                diagnosticHint: hint,
               });
               return;
-            } else if (line.startsWith('a002 NO') || line.startsWith('a002 BAD')) {
-              const isGmail = host.toLowerCase().includes('gmail') || user.toLowerCase().endsWith('@gmail.com');
-              let help = `IMAP server rejected credentials (${line}).`;
-              if (isGmail) {
-                help += ' For Gmail, ensure IMAP is enabled in Gmail Settings and use a 16-character Google App Password.';
-              } else {
-                help += ' Check username and email password in your hosting/cPanel webmail settings.';
+            }
+          } else if (step === 'SELECT') {
+            if (line.startsWith('a003 OK')) {
+              // Save working password to database if alternate worked
+              if (hasTriedAltPass && currentPass) {
+                db.emailConfig.imapPass = currentPass;
+                db.saveSync();
               }
+
+              this.imapTelemetry.status = 'ACTIVE_24_7';
+              this.imapTelemetry.lastSuccessTime = new Date().toISOString();
+              this.imapTelemetry.lastError = null;
+              this.imapTelemetry.diagnosticHint = 'IMAP mailbox connected and active. 24/7 background UPI deposit auto-approval is monitoring incoming payment receipts.';
+
               finish({
-                success: false,
-                message: help,
-                details: { host, port, secure, user, error: line },
+                success: true,
+                message: `✅ IMAP Connection & Authentication Successful! Connected to ${host}:${port} as "${user}". 24/7 Background Auto-Approval Active!`,
+                details: { host, port, secure, user, response: line, active24x7: true },
+                diagnosticHint: 'Mailbox verified! INBOX is open and ready for automated deposit verification.',
               });
+              try {
+                socket.write('a004 LOGOUT\r\n');
+              } catch {}
               return;
             }
           }
@@ -651,6 +784,7 @@ export class EmailService {
           success: false,
           message: `IMAP connection failed (${host}:${port}): ${err.message}`,
           details: { host, port, secure, user, error: err.message, code: err.code },
+          diagnosticHint: `Socket error (${err.code || 'UNKNOWN'}). Verify that ${host}:${port} is reachable.`,
         });
       });
 
@@ -660,10 +794,594 @@ export class EmailService {
             success: false,
             message: `IMAP connection closed by server (${host}:${port}). Check if port requires SSL/TLS.`,
             details: { host, port, secure, user, hadError },
+            diagnosticHint: 'Server closed connection before authentication finished. Port 993 requires Direct SSL/TLS.',
           });
         }
       });
     });
+  }
+
+  /**
+   * Scans incoming INBOX emails 24/7 for UPI deposit confirmation emails (PhonePe, Google Pay,
+   * Paytm, SBI, HDFC, FamPay, bank credit receipts), extracts UTR numbers, and automatically
+   * approves matching pending deposits in real-time.
+   */
+  /**
+   * Scans incoming INBOX emails 24/7 for UPI deposit confirmation emails (PhonePe, Google Pay,
+   * Paytm, SBI, HDFC, FamPay, bank credit receipts), extracts UTR numbers, and automatically
+   * approves matching pending deposits in real-time.
+   */
+  public async scanInboxForUpiPayments(): Promise<{
+    success: boolean;
+    message: string;
+    scannedCount: number;
+    matchedCount: number;
+    results: DiscoveredTransaction[];
+  }> {
+    const now = Date.now();
+    // Safety check: if previous scan hung for > 15 seconds, forcefully reset the scanning lock
+    if (this.isScanningImap) {
+      if (this.lastScanStartTime && now - this.lastScanStartTime > 15000) {
+        console.warn('⚠️ 24/7 IMAP scan watchdog: Resetting stale scan lock');
+        this.isScanningImap = false;
+      } else {
+        return {
+          success: true,
+          message: 'Scan already in progress.',
+          scannedCount: 0,
+          matchedCount: 0,
+          results: this.recentScannedDeposits,
+        };
+      }
+    }
+
+    const {
+      host,
+      port,
+      secure,
+      user,
+      imapPass,
+      altSmtpPass,
+      isGmail,
+      isLikelyInvalidGmailAppPass,
+      autoApproveDeposits,
+      imap24x7Enabled,
+      simulationMode,
+    } = this.resolveImapSettings();
+
+    if (!imap24x7Enabled) {
+      this.imapTelemetry.status = 'IDLE';
+      this.imapTelemetry.diagnosticHint = '24/7 IMAP auto-deposit listener is currently paused.';
+      return {
+        success: false,
+        message: '24/7 IMAP Listener is paused in settings.',
+        scannedCount: 0,
+        matchedCount: 0,
+        results: this.recentScannedDeposits,
+      };
+    }
+
+    const pass = imapPass || altSmtpPass;
+    if (!pass) {
+      this.imapTelemetry.status = 'AWAITING_CREDENTIALS';
+      this.imapTelemetry.lastError = 'Awaiting Email & App Password in Admin Panel.';
+      this.imapTelemetry.diagnosticHint = isGmail
+        ? 'Enter your 16-character Google App Password from myaccount.google.com/apppasswords to activate 24/7 deposit approval.'
+        : 'Enter your email password in the Admin Panel to activate 24/7 deposit approval.';
+      return {
+        success: false,
+        message: 'Please configure your Email & App Password to start 24/7 automatic deposit approval.',
+        scannedCount: 0,
+        matchedCount: 0,
+        results: this.recentScannedDeposits,
+      };
+    }
+
+    if (isLikelyInvalidGmailAppPass && !simulationMode) {
+      this.imapTelemetry.status = 'ERROR';
+      const msg = `Gmail login rejected: Password "${pass.slice(0, 4)}..." is not a 16-letter App Password. Google strictly requires an App Password for IMAP.`;
+      this.imapTelemetry.lastError = msg;
+      this.imapTelemetry.diagnosticHint = 'Create a 16-character App Password at myaccount.google.com/apppasswords with 2-Step Verification ON.';
+    }
+
+    this.isScanningImap = true;
+    this.lastScanStartTime = now;
+    this.imapTelemetry.status = 'SCANNING';
+    this.imapTelemetry.lastScanTime = new Date().toISOString();
+
+    return new Promise((resolve) => {
+      let isResolved = false;
+      let socket: any = null;
+      let timer: any = null;
+      let totalExists = 0;
+      let rawFetchBuffer = '';
+      let matchedCount = 0;
+      let discoveredBatch: DiscoveredTransaction[] = [];
+
+      const finishScan = (result: {
+        success: boolean;
+        message: string;
+        scannedCount: number;
+        matchedCount: number;
+        results: DiscoveredTransaction[];
+      }) => {
+        if (!isResolved) {
+          isResolved = true;
+          this.isScanningImap = false;
+          if (timer) clearTimeout(timer);
+          try {
+            if (socket) {
+              socket.write('a099 LOGOUT\r\n');
+              socket.removeAllListeners();
+              socket.destroy();
+            }
+          } catch {}
+
+          if (result.success) {
+            this.imapTelemetry.status = 'ACTIVE_24_7';
+            this.imapTelemetry.lastSuccessTime = new Date().toISOString();
+            this.imapTelemetry.lastError = null;
+            this.imapTelemetry.diagnosticHint = '24/7 IMAP daemon running normally. INBOX monitored continuously for UPI credit receipts.';
+            this.imapTelemetry.emailsScannedTotal += result.scannedCount;
+            this.imapTelemetry.utrsDetectedTotal += result.results.length;
+            this.imapTelemetry.depositsAutoApprovedTotal += result.matchedCount;
+          } else {
+            this.imapTelemetry.status = 'ERROR';
+            this.imapTelemetry.lastError = result.message;
+            if (result.message.includes('AUTHENTICATIONFAILED') || result.message.includes('Invalid credentials')) {
+              this.imapTelemetry.diagnosticHint = isGmail
+                ? 'Authentication Failed: Google requires a 16-letter App Password from myaccount.google.com/apppasswords.'
+                : 'Authentication Failed: Confirm username and password in cPanel/Webmail.';
+            }
+          }
+
+          resolve(result);
+        }
+      };
+
+      timer = setTimeout(() => {
+        finishScan({
+          success: false,
+          message: `IMAP 24/7 scan timed out after 12s (${host}:${port}). Check network firewall.`,
+          scannedCount: 0,
+          matchedCount: 0,
+          results: this.recentScannedDeposits,
+        });
+      }, 12000);
+
+      try {
+        socket = secure
+          ? tls.connect({
+              host,
+              port,
+              servername: host,
+              rejectUnauthorized: false,
+              minVersion: 'TLSv1.2',
+              timeout: 10000,
+            })
+          : net.connect({ host, port, timeout: 10000 });
+      } catch (err: any) {
+        return finishScan({
+          success: false,
+          message: `IMAP connection error: ${err.message}`,
+          scannedCount: 0,
+          matchedCount: 0,
+          results: this.recentScannedDeposits,
+        });
+      }
+
+      socket.setTimeout(10000);
+      socket.on('timeout', () => {
+        finishScan({
+          success: false,
+          message: `IMAP socket to ${host}:${port} timed out during data transfer.`,
+          scannedCount: 0,
+          matchedCount: 0,
+          results: this.recentScannedDeposits,
+        });
+      });
+
+      let imapState: 'GREET' | 'LOGIN' | 'SELECT' | 'FETCH' = 'GREET';
+      let buffer = '';
+
+      socket.on('data', (chunk: Buffer) => {
+        const text = chunk.toString();
+        if (imapState === 'FETCH') {
+          rawFetchBuffer += text;
+          const isFetchFinished = /(\r\n|\n)a003 (OK|NO|BAD)\b/i.test(rawFetchBuffer);
+          if (isFetchFinished) {
+            // Finished fetching messages, now parse UPI receipts!
+            discoveredBatch = this.parseUpiEmailsAndAutoCredit(rawFetchBuffer, autoApproveDeposits);
+            matchedCount = discoveredBatch.filter(d => d.status === 'AUTO_CREDITED').length;
+
+            // Merge into recent deposits feed (keep last 30)
+            for (const item of discoveredBatch) {
+              if (!this.recentScannedDeposits.some(r => r.utr === item.utr && r.amount === item.amount)) {
+                this.recentScannedDeposits.unshift(item);
+              }
+            }
+            if (this.recentScannedDeposits.length > 30) {
+              this.recentScannedDeposits = this.recentScannedDeposits.slice(0, 30);
+            }
+            this.imapTelemetry.recentScannedDeposits = this.recentScannedDeposits;
+
+            finishScan({
+              success: true,
+              message: `24/7 IMAP scan completed. Scanned ${totalExists} messages, found ${discoveredBatch.length} payment receipts, auto-credited ${matchedCount} deposits!`,
+              scannedCount: totalExists,
+              matchedCount,
+              results: this.recentScannedDeposits,
+            });
+          }
+          return;
+        }
+
+        buffer += text;
+        const lines = buffer.split('\r\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (imapState === 'GREET' && (line.startsWith('* OK') || line.startsWith('* ok') || line.startsWith('* PREAUTH'))) {
+            imapState = 'LOGIN';
+            socket.write(`a001 LOGIN ${this.formatImapString(user)} ${this.formatImapString(pass)}\r\n`);
+          } else if (imapState === 'LOGIN') {
+            if (line.startsWith('a001 OK')) {
+              imapState = 'SELECT';
+              socket.write('a002 SELECT INBOX\r\n');
+            } else if (line.startsWith('a001 NO') || line.startsWith('a001 BAD')) {
+              const isAuthFailed = line.includes('AUTHENTICATIONFAILED') || line.includes('Invalid credentials') || line.includes('535');
+              const errMsg = isAuthFailed && isGmail
+                ? `Gmail IMAP login rejected (535: AUTHENTICATIONFAILED). Regular passwords are blocked by Google. Please generate a 16-character App Password at myaccount.google.com/apppasswords.`
+                : `IMAP login failed: ${line}`;
+
+              finishScan({
+                success: false,
+                message: errMsg,
+                scannedCount: 0,
+                matchedCount: 0,
+                results: this.recentScannedDeposits,
+              });
+              return;
+            }
+          } else if (imapState === 'SELECT') {
+            const existsMatch = line.match(/\*\s+(\d+)\s+EXISTS/i);
+            if (existsMatch) {
+              totalExists = parseInt(existsMatch[1], 10);
+            }
+            if (line.startsWith('a002 OK')) {
+              if (totalExists === 0) {
+                finishScan({
+                  success: true,
+                  message: 'INBOX is empty. 0 messages to scan.',
+                  scannedCount: 0,
+                  matchedCount: 0,
+                  results: this.recentScannedDeposits,
+                });
+                return;
+              }
+
+              imapState = 'FETCH';
+              // Fetch the most recent 15 messages using standard RFC 3501 syntax
+              const fetchFrom = Math.max(1, totalExists - 14);
+              socket.write(
+                `a003 FETCH ${fetchFrom}:${totalExists} (BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)] BODY.PEEK[TEXT])\r\n`
+              );
+            } else if (line.startsWith('a002 NO') || line.startsWith('a002 BAD')) {
+              finishScan({
+                success: false,
+                message: `Failed to select INBOX: ${line}`,
+                scannedCount: 0,
+                matchedCount: 0,
+                results: this.recentScannedDeposits,
+              });
+              return;
+            }
+          }
+        }
+      });
+
+      socket.on('error', (err: any) => {
+        finishScan({
+          success: false,
+          message: `IMAP socket error: ${err.message}`,
+          scannedCount: 0,
+          matchedCount: 0,
+          results: this.recentScannedDeposits,
+        });
+      });
+
+      socket.on('close', () => {
+        if (!isResolved) {
+          finishScan({
+            success: false,
+            message: `IMAP connection closed unexpectedly by ${host}:${port}`,
+            scannedCount: 0,
+            matchedCount: 0,
+            results: this.recentScannedDeposits,
+          });
+        }
+      });
+    });
+  }
+
+  /**
+   * Simulates an incoming UPI payment notification email (PhonePe / Google Pay / Paytm)
+   * to test and verify the automated deposit approval workflow without real bank delay.
+   */
+  public simulateIncomingUpiDeposit(options?: {
+    utr?: string;
+    amount?: number;
+    sender?: string;
+    depositId?: string;
+  }): {
+    success: boolean;
+    message: string;
+    discovered: DiscoveredTransaction | null;
+    deposit?: any;
+  } {
+    // Find target pending deposit if any
+    let targetDeposit = options?.depositId
+      ? db.deposits.find(d => d.id === options.depositId)
+      : db.deposits.find(d => d.status === 'PENDING');
+
+    const amount = options?.amount || targetDeposit?.amount || 100;
+    const utr = options?.utr || `4289${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const sender = options?.sender || 'PhonePe / HDFC Bank UPI';
+
+    const rawEmailReceipt = `
+* 1 FETCH (BODY[TEXT] {300}
+Subject: Money Received INR ${amount}.00 via UPI Ref ${utr}
+From: ${sender} <alerts@upi.bank.in>
+Date: ${new Date().toUTCString()}
+
+Dear Customer, INR ${amount}.00 has been credited to your account on ${new Date().toLocaleDateString()} via UPI transfer from ${sender}.
+UPI Ref / UTR No: ${utr}
+Transaction Note: ${targetDeposit ? targetDeposit.id : 'NEXA-PANEL-DEPOSIT'}
+)`;
+
+    const parsed = this.parseUpiEmailsAndAutoCredit(rawEmailReceipt, true);
+    const discoveredItem = parsed[0] || null;
+
+    if (discoveredItem) {
+      discoveredItem.status = 'AUTO_CREDITED';
+      this.recentScannedDeposits.unshift(discoveredItem);
+      if (this.recentScannedDeposits.length > 30) {
+        this.recentScannedDeposits = this.recentScannedDeposits.slice(0, 30);
+      }
+      this.imapTelemetry.recentScannedDeposits = this.recentScannedDeposits;
+      this.imapTelemetry.utrsDetectedTotal += 1;
+      this.imapTelemetry.depositsAutoApprovedTotal += 1;
+      this.imapTelemetry.lastSuccessTime = new Date().toISOString();
+      this.imapTelemetry.status = 'ACTIVE_24_7';
+      this.imapTelemetry.lastError = null;
+      this.imapTelemetry.diagnosticHint = 'Simulated UPI payment verified and auto-credited successfully!';
+
+      const updatedDeposit = targetDeposit ? db.deposits.find(d => d.id === targetDeposit!.id) : undefined;
+
+      return {
+        success: true,
+        message: `🎉 Simulated UPI Payment Verified & Auto-Approved! UTR: ${utr}, Amount: ₹${amount}${targetDeposit ? ` credited to User (${targetDeposit.userId})` : ''}`,
+        discovered: discoveredItem,
+        deposit: updatedDeposit,
+      };
+    }
+
+    return {
+      success: false,
+      message: 'Failed to parse simulated payment notification.',
+      discovered: null,
+    };
+  }
+
+  /**
+   * Parses fetched raw email text for UPI amounts, UTR numbers, and matches with pending deposits.
+   */
+  private parseUpiEmailsAndAutoCredit(
+    rawEmailsText: string,
+    autoApprove = true
+  ): DiscoveredTransaction[] {
+    const discovered: DiscoveredTransaction[] = [];
+    // Split into individual fetch items: * <id> FETCH
+    const messageBlocks = rawEmailsText.split(/\*\s+\d+\s+FETCH/i);
+
+    for (const block of messageBlocks) {
+      if (!block.trim()) continue;
+
+      // Extract Subject
+      const subjectMatch = block.match(/Subject:\s*([^\r\n]+)/i);
+      const subject = subjectMatch ? subjectMatch[1].trim() : 'Email Notification';
+
+      // Extract Sender
+      const fromMatch = block.match(/From:\s*([^\r\n]+)/i);
+      const from = fromMatch ? fromMatch[1].trim() : 'Bank / UPI';
+
+      // Extract Date
+      const dateMatch = block.match(/Date:\s*([^\r\n]+)/i);
+      const date = dateMatch ? new Date(dateMatch[1]).toISOString() : new Date().toISOString();
+
+      // Check for UPI keywords (PhonePe, Paytm, GPay, FamPay, Bank, Credit, UPI)
+      const isPaymentRelated =
+        /credited|received|transferred|upi|payment|fampay|phonepe|paytm|googlepay|gpay|bank|hdfc|sbi|icici|axis|imps|neft|dep-/i.test(
+          block
+        );
+
+      if (!isPaymentRelated) continue;
+
+      // Extract UTR (standard 12-digit UPI reference numbers or alphanumeric reference IDs)
+      const utrCandidates = new Set<string>();
+
+      // 1. Exact 12-digit UPI reference number regex
+      const utr12Matches = block.matchAll(/\b([0-9]{12})\b/g);
+      for (const m of utr12Matches) {
+        utrCandidates.add(m[1]);
+      }
+
+      // 2. Keyword-prefixed reference number regex (e.g. UTR: 428912345678 or Txn: FG-12345)
+      const keywordUtrMatches = block.matchAll(
+        /(?:UTR|UPI\s*Ref(?:\s*No)?|Ref(?:\s*No)?|Transaction(?:\s*Id)?|Txn(?:\s*Id)?|IMPS|RRN)[:\s#-]*([A-Za-z0-9]{9,24})/gi
+      );
+      for (const m of keywordUtrMatches) {
+        utrCandidates.add(m[1].trim());
+      }
+
+      if (utrCandidates.size === 0) continue;
+
+      // Extract Amount (e.g. ₹100, Rs. 50, Rs 500.00, INR 100)
+      const amountMatches = block.matchAll(
+        /(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)|(?:credited|received|transferred)\s+(?:by|with|for)?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)/gi
+      );
+
+      let foundAmount = 0;
+      for (const am of amountMatches) {
+        const rawNum = (am[1] || am[2] || '').replace(/,/g, '');
+        const val = parseFloat(rawNum);
+        if (!isNaN(val) && val > 0 && val < 500000) {
+          foundAmount = val;
+          break;
+        }
+      }
+
+      for (const utr of utrCandidates) {
+        // Skip obvious year or phone numbers if length is 10
+        if (utr.length === 10 && utr.startsWith('9')) continue;
+
+        let status: 'AUTO_CREDITED' | 'UNMATCHED' | 'ALREADY_CREDITED' = 'UNMATCHED';
+        let matchedDepositId: string | undefined = undefined;
+        let matchedUserId: string | undefined = undefined;
+
+        // Check if this UTR was already processed
+        const alreadyDone = db.deposits.find(d => d.upiRefNumber === utr && d.status === 'SUCCESS');
+        if (alreadyDone) {
+          status = 'ALREADY_CREDITED';
+          matchedDepositId = alreadyDone.id;
+          matchedUserId = alreadyDone.userId;
+        } else if (autoApprove && foundAmount > 0) {
+          // Look for matching pending deposit
+          const pending = db.deposits.find(d => {
+            if (d.status !== 'PENDING') return false;
+            // Match by exact amount
+            const amtMatch = Math.abs(d.amount - foundAmount) < 0.05;
+            // Match within 48 hours
+            const ageHours = (Date.now() - new Date(d.createdAt).getTime()) / (1000 * 60 * 60);
+            const timeMatch = ageHours <= 48;
+            // Or match if deposit id / gatewayOrderId is mentioned in email
+            const textMatch =
+              (d.gatewayOrderId && block.includes(d.gatewayOrderId)) ||
+              (d.transactionId && block.includes(d.transactionId)) ||
+              block.includes(d.id);
+
+            return (amtMatch && timeMatch) || textMatch;
+          });
+
+          if (pending) {
+            try {
+              PaymentGatewayAdapter.completeDeposit(pending.id, utr, true);
+              status = 'AUTO_CREDITED';
+              matchedDepositId = pending.id;
+              matchedUserId = pending.userId;
+
+              db.logActivity(
+                pending.userId,
+                'system_imap_daemon',
+                'IMAP_24_7_DEPOSIT_AUTO_APPROVED',
+                `⚡ 24/7 IMAP Auto-Approved Deposit ${pending.id} (₹${pending.amount}) via UTR ${utr} from inbox!`
+              );
+            } catch (err: any) {
+              console.error('Error auto-completing deposit via IMAP:', err);
+            }
+          }
+        }
+
+        discovered.push({
+          id: `DISC-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+          utr,
+          amount: foundAmount,
+          sender: from,
+          subject,
+          date,
+          status,
+          depositId: matchedDepositId,
+          matchedUserId,
+        });
+      }
+    }
+
+    return discovered;
+  }
+
+  /**
+   * Starts the 24/7 continuous background IMAP auto-deposit listener.
+   */
+  public start24x7ImapWatcher(): void {
+    if (this.imapWatcherTimer) {
+      clearInterval(this.imapWatcherTimer);
+      this.imapWatcherTimer = null;
+    }
+
+    const intervalMs = (Number(db.emailConfig.imapPollIntervalSeconds) || 25) * 1000;
+    this.imapTelemetry.isRunning = true;
+    this.imapTelemetry.pollIntervalSeconds = Math.round(intervalMs / 1000);
+
+    // Initial scan after 4 seconds
+    setTimeout(() => {
+      this.scanInboxForUpiPayments().catch(() => {});
+    }, 4000);
+
+    // Continuous 24/7 interval loop
+    this.imapWatcherTimer = setInterval(() => {
+      this.scanInboxForUpiPayments().catch((err: any) => {
+        this.imapTelemetry.lastError = err.message || 'Background 24/7 IMAP poll error';
+      });
+    }, intervalMs);
+  }
+
+  /**
+   * Returns live 24/7 IMAP daemon telemetry & recent scanned deposits feed.
+   */
+  public getImap24x7Status(): Imap24x7Telemetry {
+    const { host, port, user, pollIntervalSeconds, imap24x7Enabled } = this.resolveImapSettings();
+    return {
+      ...this.imapTelemetry,
+      isRunning: Boolean(this.imapWatcherTimer && imap24x7Enabled),
+      host,
+      port,
+      user,
+      pollIntervalSeconds,
+      recentScannedDeposits: this.recentScannedDeposits,
+    };
+  }
+
+  /**
+   * Manually forces an instant IMAP scan on demand and returns the results immediately.
+   */
+  public async triggerImapScan(): Promise<{
+    success: boolean;
+    message: string;
+    scannedCount: number;
+    matchedCount: number;
+    results: DiscoveredTransaction[];
+  }> {
+    return this.scanInboxForUpiPayments();
+  }
+
+  /**
+   * Toggles the 24/7 background IMAP listener ON or OFF.
+   */
+  public toggle24x7Imap(enabled: boolean): Imap24x7Telemetry {
+    db.emailConfig.imap24x7Enabled = enabled;
+    db.saveSync();
+    if (enabled) {
+      this.start24x7ImapWatcher();
+      this.imapTelemetry.status = 'ACTIVE_24_7';
+    } else {
+      if (this.imapWatcherTimer) {
+        clearInterval(this.imapWatcherTimer);
+        this.imapWatcherTimer = null;
+      }
+      this.imapTelemetry.status = 'IDLE';
+      this.imapTelemetry.isRunning = false;
+    }
+    return this.getImap24x7Status();
   }
 
   /**

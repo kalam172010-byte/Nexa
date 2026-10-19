@@ -134,6 +134,10 @@ router.patch('/admin/settings/site', ...adminGuard, AdminController.updateSiteSe
 router.get('/admin/settings/email', ...adminGuard, AdminController.getEmailSettings as any);
 router.patch('/admin/settings/email', ...adminGuard, AdminController.updateEmailSettings as any);
 router.post('/admin/settings/email/test', ...adminGuard, AdminController.testEmailConnection as any);
+router.get('/admin/settings/email/imap-24-7-status', ...adminGuard, AdminController.getImap24x7Status as any);
+router.post('/admin/settings/email/imap-trigger-scan', ...adminGuard, AdminController.triggerImapScan as any);
+router.post('/admin/settings/email/imap-toggle-24-7', ...adminGuard, AdminController.toggle24x7Imap as any);
+router.post('/admin/settings/email/imap-simulate-deposit', ...adminGuard, AdminController.simulateUpiDeposit as any);
 
 router.get('/admin/logs', ...adminGuard, AdminController.getActivityLogs as any);
 

@@ -276,4 +276,38 @@ export interface EmailConfig {
   imapSecure?: boolean;       // IMAP SSL
   otpExpiryMinutes: number;   // default 10
   allowOtpSignup: boolean;    // auto-create user on OTP verification if not exists
+  imap24x7Enabled?: boolean;  // Enable 24/7 continuous background IMAP auto-deposit listener
+  imapPollIntervalSeconds?: number; // Background polling interval (e.g. 20s)
+  autoApproveDeposits?: boolean; // Automatically credit wallet when matching UTR found in inbox
+  simulationMode?: boolean;   // Enable simulated UPI deposits testing when credentials pending
 }
+
+export interface DiscoveredTransaction {
+  id: string;
+  utr: string;
+  amount: number;
+  sender: string;
+  subject: string;
+  date: string;
+  status: 'AUTO_CREDITED' | 'UNMATCHED' | 'ALREADY_CREDITED' | 'SIMULATED';
+  depositId?: string;
+  matchedUserId?: string;
+}
+
+export interface Imap24x7Telemetry {
+  isRunning: boolean;
+  status: 'ACTIVE_24_7' | 'SCANNING' | 'IDLE' | 'AWAITING_CREDENTIALS' | 'ERROR';
+  host: string;
+  port: number;
+  user: string;
+  pollIntervalSeconds: number;
+  lastScanTime?: string | null;
+  lastSuccessTime?: string | null;
+  lastError?: string | null;
+  emailsScannedTotal: number;
+  utrsDetectedTotal: number;
+  depositsAutoApprovedTotal: number;
+  recentScannedDeposits: DiscoveredTransaction[];
+  diagnosticHint?: string;
+}
+

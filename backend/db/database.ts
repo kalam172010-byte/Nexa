@@ -224,6 +224,9 @@ export class Database {
       imapSecure: true,
       otpExpiryMinutes: 10,
       allowOtpSignup: true,
+      imap24x7Enabled: true,
+      imapPollIntervalSeconds: 25,
+      autoApproveDeposits: true,
     };
   }
 

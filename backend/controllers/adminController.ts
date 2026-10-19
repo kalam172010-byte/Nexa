@@ -1346,6 +1346,58 @@ export class AdminController {
     }
   }
 
+  public static async getImap24x7Status(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const status = emailService.getImap24x7Status();
+      res.json({ success: true, status });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  public static async triggerImapScan(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const result = await emailService.triggerImapScan();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  public static async toggle24x7Imap(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const enabled = Boolean(req.body.enabled);
+      const status = emailService.toggle24x7Imap(enabled);
+      db.logActivity(
+        req.user?.id,
+        req.user?.username,
+        enabled ? 'IMAP_24_7_ENABLED' : 'IMAP_24_7_DISABLED',
+        `Admin ${enabled ? 'started' : 'paused'} 24/7 background IMAP auto-deposit listener.`
+      );
+      res.json({ success: true, status });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  public static async simulateUpiDeposit(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { depositId, utr, amount, sender } = req.body;
+      const result = emailService.simulateIncomingUpiDeposit({ depositId, utr, amount, sender });
+      if (result.success) {
+        db.logActivity(
+          req.user?.id,
+          req.user?.username,
+          'SIMULATED_UPI_DEPOSIT',
+          `Admin simulated UPI payment receipt: UTR=${result.discovered?.utr}, Amount=₹${result.discovered?.amount}`
+        );
+      }
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
   public static async exportDatabase(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const data = db.getRawData();

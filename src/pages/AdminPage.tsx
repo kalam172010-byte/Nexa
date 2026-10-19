@@ -230,6 +230,17 @@ export const AdminPage: React.FC = () => {
   const [isApplyingFix, setIsApplyingFix] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 24/7 IMAP Live Auto-Deposit Engine States
+  const [imap24x7Status, setImap24x7Status] = useState<any>(null);
+  const [isScanningImapNow, setIsScanningImapNow] = useState(false);
+  const [isTogglingImap24x7, setIsTogglingImap24x7] = useState(false);
+  const [isSimulatingDeposit, setIsSimulatingDeposit] = useState(false);
+  const [showSimulateModal, setShowSimulateModal] = useState(false);
+  const [simulateAmount, setSimulateAmount] = useState('100');
+  const [simulateUtr, setSimulateUtr] = useState('');
+  const [simulateDepositId, setSimulateDepositId] = useState('');
+  const [showAdvancedEmailSettings, setShowAdvancedEmailSettings] = useState(false);
+
   // IMAP Configuration Detailed Logging & Serialization Utility States
   const [imapLogs, setImapLogs] = useState<Array<{
     id: string;
@@ -239,7 +250,7 @@ export const AdminPage: React.FC = () => {
     message: string;
     data?: any;
   }>>([]);
-  const [showImapLogs, setShowImapLogs] = useState<boolean>(true);
+  const [showImapLogs, setShowImapLogs] = useState<boolean>(false);
   const [serializedPayloadPreview, setSerializedPayloadPreview] = useState<any | null>(null);
   const [showSerializedModal, setShowSerializedModal] = useState<boolean>(false);
 
@@ -519,6 +530,7 @@ export const AdminPage: React.FC = () => {
         }
       }
       if (logsRes?.logs) setLogs(logsRes.logs);
+      fetchImap24x7Status();
     } catch (err: any) {
       showToastError('Failed to load admin data', err.message);
     } finally {
@@ -529,6 +541,12 @@ export const AdminPage: React.FC = () => {
   useEffect(() => {
     loadAllAdminData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'email' || activeTab === 'deposits') {
+      fetchImap24x7Status();
+    }
+  }, [activeTab]);
 
   // Save Website & Admin Panel Customizations
   const handleSaveSiteSettings = async (e?: React.FormEvent) => {
@@ -1019,6 +1037,90 @@ export const AdminPage: React.FC = () => {
       showToastError('Quick Fix Failed', err.message);
     } finally {
       setIsApplyingFix(false);
+    }
+  };
+
+  // 24/7 IMAP Live Auto-Deposit Engine Handlers
+  const fetchImap24x7Status = async () => {
+    try {
+      const res = await api.getImap24x7Status();
+      if (res?.status) {
+        setImap24x7Status(res.status);
+      }
+    } catch {}
+  };
+
+  const handleTriggerImapScan = async () => {
+    setIsScanningImapNow(true);
+    try {
+      const res = await api.triggerImapScan();
+      if (res.success) {
+        showToastSuccess('24/7 IMAP Scan Complete', res.message);
+        await fetchImap24x7Status();
+        // Refresh deposits list to reflect any auto-approved deposits immediately
+        const depRes = await api.getAdminDeposits().catch(() => null);
+        if (depRes?.deposits) setDeposits(depRes.deposits);
+        const statsRes = await api.getAdminStats().catch(() => null);
+        if (statsRes && !('error' in statsRes)) {
+          setStats(prev => ({ ...prev, ...statsRes }));
+        }
+      } else {
+        showToastError('IMAP Scan Alert', res.message);
+      }
+    } catch (err: any) {
+      showToastError('IMAP Scan Failed', err.message);
+    } finally {
+      setIsScanningImapNow(false);
+    }
+  };
+
+  const handleToggle24x7Imap = async (enable: boolean) => {
+    setIsTogglingImap24x7(true);
+    try {
+      const res = await api.toggle24x7Imap(enable);
+      if (res?.status) {
+        setImap24x7Status(res.status);
+      }
+      setEmailConfig((prev: any) => ({ ...prev, imap24x7Enabled: enable }));
+      showToastSuccess(
+        enable ? '24/7 IMAP Listener Activated!' : '24/7 IMAP Paused',
+        enable ? 'Mailbox is continuously polled every 25s for auto-approving UPI deposits!' : 'Background inbox polling paused.'
+      );
+    } catch (err: any) {
+      showToastError('Toggle Failed', err.message);
+    } finally {
+      setIsTogglingImap24x7(false);
+    }
+  };
+
+  const handleSimulateUpiDeposit = async (opts?: { depositId?: string; amount?: number; utr?: string }) => {
+    setIsSimulatingDeposit(true);
+    try {
+      const res = await api.simulateUpiDeposit({
+        depositId: opts?.depositId || simulateDepositId || undefined,
+        amount: opts?.amount || (simulateAmount ? parseFloat(simulateAmount) : undefined),
+        utr: opts?.utr || simulateUtr.trim() || undefined,
+      });
+
+      if (res.success) {
+        showToastSuccess('Deposit Simulated & Auto-Approved!', res.message);
+        await fetchImap24x7Status();
+        setShowSimulateModal(false);
+        setSimulateUtr('');
+        // Reload deposits and stats
+        const depRes = await api.getAdminDeposits().catch(() => null);
+        if (depRes?.deposits) setDeposits(depRes.deposits);
+        const statsRes = await api.getAdminStats().catch(() => null);
+        if (statsRes && !('error' in statsRes)) {
+          setStats(prev => ({ ...prev, ...statsRes }));
+        }
+      } else {
+        showToastError('Simulation Alert', res.message);
+      }
+    } catch (err: any) {
+      showToastError('Simulation Failed', err.message);
+    } finally {
+      setIsSimulatingDeposit(false);
     }
   };
 
@@ -2477,7 +2579,7 @@ export const AdminPage: React.FC = () => {
     { id: 'orders', label: 'Orders', icon: FileText },
     { id: 'gateway', label: 'Payment Gateway', icon: Sliders },
     { id: 'email', label: 'Email & IMAP/SMTP Setup', icon: Mail },
-    { id: 'reseller', label: 'Upstream Provider (Banti Bhaiya)', icon: Radio },
+    { id: 'reseller', label: 'Upstream Provider (Banti API)', icon: Radio },
     { id: 'logs', label: 'Logs', icon: Clock },
   ];
 
@@ -4266,12 +4368,12 @@ export const AdminPage: React.FC = () => {
                           )}
                         </div>
 
-                        {/* SECTION 2: INLINE "ADD DURATION" FORM (கீழே ஆட் டுரேஷன்) */}
+                        {/* SECTION 2: INLINE "ADD DURATION" FORM */}
                         <div className="p-3.5 rounded-xl bg-gradient-to-b from-emerald-950/20 to-black/60 border border-emerald-500/25 space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
                               <Plus className="w-3.5 h-3.5" />
-                              <span>Add Duration to {p.name} (ஆட் டுரேஷன்)</span>
+                              <span>Add Duration to {p.name}</span>
                             </div>
                             <span className="text-[10px] font-mono text-slate-400">
                               Instant Sync
@@ -4281,7 +4383,7 @@ export const AdminPage: React.FC = () => {
                           {/* Quick Preset Buttons */}
                           <div>
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                              Quick Presets (கிளிக் செய்து ஆட் பண்ணு):
+                              Quick Presets:
                             </span>
                             <div className="flex flex-wrap gap-1">
                               {[
@@ -4413,7 +4515,7 @@ export const AdminPage: React.FC = () => {
                           >
                             <Plus className="w-4 h-4" />
                             <span>
-                              {isSaving ? 'Adding Duration...' : `+ Add Duration to ${p.name} / டுரேஷன் சேர்க்க`}
+                              {isSaving ? 'Adding Duration...' : `+ Add Duration to ${p.name}`}
                             </span>
                           </button>
                         </div>
@@ -5374,11 +5476,91 @@ export const AdminPage: React.FC = () => {
       {/* TAB CONTENT: 6. DEPOSITS MANAGEMENT */}
       {activeTab === 'deposits' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
-              UPI DEPOSITS LOG
-            </h3>
-            <span className="text-xs font-mono text-slate-400">{deposits.length} transactions</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-[#0d0d14] to-cyan-950/30 border border-emerald-500/30 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    UPI DEPOSITS &amp; 24/7 AUTO-APPROVAL LOG
+                  </h3>
+                  {(() => {
+                    const isRunning = Boolean(imap24x7Status?.isRunning && emailConfig.imap24x7Enabled !== false);
+                    const status = imap24x7Status?.status || (isRunning ? 'ACTIVE_24_7' : 'PAUSED');
+                    if (status === 'ACTIVE_24_7') {
+                      return (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono font-bold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                          24/7 IMAP Active (Auto-Credit ON)
+                        </span>
+                      );
+                    }
+                    if (status === 'SCANNING') {
+                      return (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono font-bold flex items-center gap-1">
+                          <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
+                          Scanning Inbox...
+                        </span>
+                      );
+                    }
+                    if (status === 'AWAITING_CREDENTIALS' || status === 'ERROR') {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('email')}
+                          className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <AlertTriangle className="w-3 h-3 text-amber-400" />
+                          IMAP Needs 16-Letter App Pass (Click to Fix)
+                        </button>
+                      );
+                    }
+                    return (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                        IMAP Listener Paused
+                      </span>
+                    );
+                  })()}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {deposits.length} total deposit requests · Auto-credits user wallets within 25 seconds of bank email arrival
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSimulateModal(true)}
+                disabled={isSimulatingDeposit}
+                className="px-3.5 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                title="Simulates a PhonePe / GPay credit receipt to test auto-deposit crediting in 1 click"
+              >
+                {isSimulatingDeposit ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                )}
+                <span>🧪 Test Simulate UPI</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTriggerImapScan}
+                disabled={isScanningImapNow}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer disabled:opacity-50"
+                title="Force scans Gmail / bank inbox now to auto-credit pending deposits"
+              >
+                {isScanningImapNow ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-200" />
+                ) : (
+                  <Zap className="w-3.5 h-3.5 text-amber-300" />
+                )}
+                <span>{isScanningImapNow ? 'Scanning Inbox...' : '⚡ Scan Inbox & Auto-Approve'}</span>
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-white/5 bg-[#0d0d14]">
@@ -7269,6 +7451,351 @@ export const AdminPage: React.FC = () => {
             </div>
           </div>
 
+          {/* ======================================================== */}
+          {/* ⚡ 24/7 IMAP ENGINE & REAL-TIME UPI DEPOSIT AUTO-APPROVAL */}
+          {/* ======================================================== */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#0c1017] via-[#090b10] to-[#120a14] border border-cyan-500/30 shadow-2xl space-y-5">
+            {/* Header & Status Indicator */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-500/40 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.25)]">
+                  <Inbox className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider flex items-center gap-2">
+                      <span>24/7 IMAP AUTO-DEPOSIT APPROVAL ENGINE</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+                        v2.4
+                      </span>
+                    </h3>
+                    {(() => {
+                      const isRunning = Boolean(imap24x7Status?.isRunning && emailConfig.imap24x7Enabled !== false);
+                      const status = imap24x7Status?.status || (isRunning ? 'ACTIVE_24_7' : 'PAUSED');
+                      if (status === 'ACTIVE_24_7') {
+                        return (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                            ● 24/7 ACTIVE &amp; RUNNING
+                          </span>
+                        );
+                      }
+                      if (status === 'SCANNING') {
+                        return (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 flex items-center gap-1.5">
+                            <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
+                            ● SCANNING INBOX NOW...
+                          </span>
+                        );
+                      }
+                      if (status === 'AWAITING_CREDENTIALS') {
+                        return (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5">
+                            <AlertTriangle className="w-3 h-3 text-amber-400" />
+                            ▲ AWAITING 16-CHAR APP PASSWORD
+                          </span>
+                        );
+                      }
+                      if (status === 'ERROR') {
+                        return (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5">
+                            <AlertTriangle className="w-3 h-3 text-rose-400" />
+                            ✕ AUTH ERROR (APP PASSWORD REQUIRED)
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                          ○ DAEMON PAUSED
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Continuous 24/7 IMAP listener automatically verifies bank deposit emails and credits user wallets within seconds.
+                    <span className="block text-slate-500 text-[11px] mt-0.5">
+                      Scans PhonePe, Google Pay, Paytm &amp; bank receipts 24/7 to auto-approve matching pending deposits in real-time.
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Master 24/7 Toggle Switch */}
+              <div className="flex items-center gap-3 bg-black/40 p-2.5 rounded-2xl border border-white/5 self-start sm:self-auto">
+                <div className="text-right">
+                  <span className="text-xs font-bold text-white block">24/7 Auto-Approval</span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {emailConfig.imap24x7Enabled !== false ? 'Polls every 25s' : 'Currently paused'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isTogglingImap24x7}
+                  onClick={() => handleToggle24x7Imap(emailConfig.imap24x7Enabled === false)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    emailConfig.imap24x7Enabled !== false ? 'bg-emerald-600' : 'bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      emailConfig.imap24x7Enabled !== false ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Live Telemetry Metric Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-2xl bg-black/50 border border-white/5 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-mono flex items-center gap-1">
+                  <Radio className="w-3 h-3 text-cyan-400" />
+                  IMAP Status
+                </span>
+                <div className="font-mono text-sm font-bold text-white truncate">
+                  {imap24x7Status?.status || (emailConfig.imap24x7Enabled !== false ? 'ACTIVE_24_7' : 'PAUSED')}
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono truncate">
+                  {imap24x7Status?.host || emailConfig.imapHost || 'imap.gmail.com'}:{imap24x7Status?.port || emailConfig.imapPort || 993}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-black/50 border border-white/5 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-mono flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-emerald-400" />
+                  Polling Rate
+                </span>
+                <div className="font-mono text-sm font-bold text-emerald-300">
+                  Every 25s
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono truncate">
+                  {imap24x7Status?.lastScanTime ? `Last: ${new Date(imap24x7Status.lastScanTime).toLocaleTimeString()}` : 'Continuous loop'}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-black/50 border border-white/5 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-mono flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-blue-400" />
+                  Emails Scanned
+                </span>
+                <div className="font-mono text-sm font-bold text-cyan-300">
+                  {imap24x7Status?.emailsScannedTotal || 0}
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono">
+                  {imap24x7Status?.utrsDetectedTotal || 0} UTRs detected
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-black/50 border border-white/5 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-mono flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  Auto-Approved
+                </span>
+                <div className="font-mono text-sm font-bold text-emerald-400">
+                  {imap24x7Status?.depositsAutoApprovedTotal || 0} Deposits
+                </div>
+                <div className="text-[10px] text-emerald-500/80 font-mono">
+                  Instant Wallet Credit
+                </div>
+              </div>
+            </div>
+
+            {/* DIAGNOSTIC CARD: WHY IS IMAP NOT WORKING? (EXACT PROBLEM & 1-CLICK FIX) */}
+            {(() => {
+              const sender = (emailConfig.senderEmail || '').trim().toLowerCase();
+              const isGmail = sender.endsWith('@gmail.com') || (emailConfig.imapHost || '').includes('gmail');
+              const currentPass = (emailConfig.smtpPass || emailConfig.imapPass || '').trim();
+              const strippedPass = currentPass.replace(/[\s\u00a0-]+/g, '');
+              const is16LetterAppPass = /^[a-zA-Z]{16}$/.test(strippedPass);
+              const hasRegularPass = currentPass.length > 0 && !is16LetterAppPass;
+              const hasError = Boolean(imap24x7Status?.status === 'ERROR' || imap24x7Status?.lastError);
+
+              if (isGmail && (hasRegularPass || hasError || !emailConfig.hasSmtpPass)) {
+                return (
+                  <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-red-950/30 to-black/60 border border-amber-500/40 space-y-3">
+                    <div className="flex items-center gap-2 text-amber-300 font-bold text-xs uppercase tracking-wider">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>WHY IMAP WAS NOT WORKING: ROOT CAUSE DETECTED &amp; SOLUTION</span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
+                      <p className="text-white font-medium">
+                        <strong className="text-amber-300">Problem:</strong> Your email is <code className="text-cyan-300 font-mono">{emailConfig.senderEmail}</code>. {hasRegularPass ? `The current password ("${currentPass.slice(0, 3)}••••") is a regular password. Google strictly blocks normal passwords on IMAP!` : 'Google requires an App Password with 2-Step Verification.'}
+                      </p>
+                      <p className="text-[11px] text-amber-200/90">
+                        <strong>Note:</strong> Per Google security policies, standard account passwords are not permitted on IMAP. A 16-character Google App Password must be generated.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+                      <div className="p-2.5 rounded-xl bg-black/50 border border-white/5 space-y-0.5">
+                        <span className="text-[10px] text-amber-400 font-mono font-bold block">STEP 1</span>
+                        <p className="text-[11px] text-slate-300">Turn 2-Step Verification ON in Google Security</p>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-black/50 border border-white/5 space-y-0.5">
+                        <span className="text-[10px] text-cyan-400 font-mono font-bold block">STEP 2</span>
+                        <p className="text-[11px] text-slate-300">Generate 16-letter App Password (e.g. abcd efgh ijkl mnop)</p>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-black/50 border border-white/5 space-y-0.5">
+                        <span className="text-[10px] text-emerald-400 font-mono font-bold block">STEP 3</span>
+                        <p className="text-[11px] text-slate-300">Paste below and click &quot;Save &amp; Fix 24/7 IMAP Now&quot;</p>
+                      </div>
+                    </div>
+
+                    {/* Quick 1-Click Fix Bar */}
+                    <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-white/10">
+                      <input
+                        type="text"
+                        value={quickAppPassInput}
+                        onChange={e => setQuickAppPassInput(e.target.value)}
+                        placeholder="Paste 16-character Google App Password here"
+                        className="flex-1 px-3.5 py-2.5 rounded-xl bg-black/60 border border-amber-500/30 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={isApplyingFix || !quickAppPassInput.trim()}
+                        onClick={() => handleQuickFixAppPass(undefined, quickAppPassInput)}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-400 hover:to-emerald-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shrink-0 shadow-lg"
+                      >
+                        {isApplyingFix ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                        <span>⚡ SAVE &amp; FIX 24/7 IMAP NOW</span>
+                      </button>
+                      <a
+                        href="https://myaccount.google.com/apppasswords"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shrink-0"
+                      >
+                        <span>Open Google App Passwords</span>
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                      </a>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Quick Action Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isTestingEmail}
+                  onClick={() => handleTestEmailConnection('imap')}
+                  className="px-4 py-2.5 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                  title="Pings IMAP server on port 993 to verify login and handshake"
+                >
+                  {isTestingEmail ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Inbox className="w-3.5 h-3.5" />}
+                  <span>⚡ TEST IMAP CONNECTION (PING 993)</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isScanningImapNow}
+                  onClick={handleTriggerImapScan}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                  title="Triggers an instant scan of recent INBOX emails for UPI receipts right now"
+                >
+                  {isScanningImapNow ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5 text-emerald-400" />}
+                  <span>{isScanningImapNow ? 'SCANNING INBOX...' : '🔍 RUN INSTANT INBOX SCAN'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSimulatingDeposit}
+                  onClick={() => setShowSimulateModal(true)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600/30 to-rose-600/30 hover:from-purple-600/50 hover:to-rose-600/50 text-purple-200 border border-purple-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                  title="Simulates a real PhonePe/Google Pay credit receipt to test auto-deposit crediting"
+                >
+                  {isSimulatingDeposit ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-amber-300" />}
+                  <span>🧪 TEST SIMULATE UPI DEPOSIT</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] text-slate-400 font-mono">
+                Auto-approves within 25 seconds of bank email
+              </div>
+            </div>
+
+            {/* Recent Scanned Payments Table */}
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono text-slate-400 uppercase font-bold flex items-center gap-1.5">
+                  <Activity className="w-3 h-3 text-cyan-400" />
+                  RECENT DETECTED INBOX UPI PAYMENTS &amp; AUTO-APPROVAL FEED
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  {(imap24x7Status?.recentScannedDeposits || []).length} receipts logged
+                </span>
+              </div>
+
+              {(!imap24x7Status?.recentScannedDeposits || imap24x7Status.recentScannedDeposits.length === 0) ? (
+                <div className="p-6 rounded-2xl bg-black/40 border border-white/5 text-center text-xs text-slate-500 font-mono space-y-1">
+                  <p>No recent payment notifications parsed yet.</p>
+                  <p className="text-[10px] text-slate-600">
+                    Click &quot;RUN INSTANT INBOX SCAN&quot; or &quot;TEST SIMULATE UPI DEPOSIT&quot; to test the auto-credit engine.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-white/5 bg-black/40">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-white/[0.02] border-b border-white/5 text-[10px] font-mono text-slate-400 uppercase">
+                      <tr>
+                        <th className="p-3">Time</th>
+                        <th className="p-3">UPI Ref / UTR</th>
+                        <th className="p-3">Amount</th>
+                        <th className="p-3">Sender / Bank</th>
+                        <th className="p-3">Deposit ID</th>
+                        <th className="p-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 font-mono text-[11px]">
+                      {imap24x7Status.recentScannedDeposits.map((item: any) => (
+                        <tr key={item.id} className="hover:bg-white/[0.02]">
+                          <td className="p-3 text-slate-400">
+                            {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="p-3 font-bold text-white tracking-wider">
+                            {item.utr}
+                          </td>
+                          <td className="p-3 text-emerald-400 font-bold">
+                            ₹{item.amount}
+                          </td>
+                          <td className="p-3 text-slate-300 font-sans text-xs">
+                            {item.sender}
+                          </td>
+                          <td className="p-3 text-cyan-300">
+                            {item.depositId || '—'}
+                          </td>
+                          <td className="p-3">
+                            {item.status === 'AUTO_CREDITED' ? (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                ⚡ AUTO CREDITED
+                              </span>
+                            ) : item.status === 'ALREADY_CREDITED' ? (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-500/20 text-slate-300 border border-slate-500/30">
+                                ALREADY CREDITED
+                              </span>
+                            ) : item.status === 'SIMULATED' ? (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                SIMULATED
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                UNMATCHED
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Quick Mail Provider Presets */}
           <div className="p-5 rounded-3xl bg-[#0d0d14] border border-white/5 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-white/5">
@@ -8158,6 +8685,105 @@ export const AdminPage: React.FC = () => {
                     className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs cursor-pointer"
                   >
                     Close Inspector
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SIMULATION MODAL: TEST AUTO-APPROVAL WITH ZERO BANK DELAY */}
+          {showSimulateModal && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-[#0f111a] border border-purple-500/30 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl relative">
+                <button
+                  type="button"
+                  onClick={() => setShowSimulateModal(false)}
+                  className="absolute top-4 right-4 p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
+                      Sandbox &amp; Test Simulator
+                    </span>
+                  </div>
+                  <h3 className="font-display font-bold text-base text-white">
+                    Simulate Incoming UPI Payment Receipt
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Test the entire 24/7 IMAP parsing, UTR matching, wallet crediting, and transaction ledger in 1 second without waiting for real bank delay.
+                  </p>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                      TARGET PENDING DEPOSIT (OPTIONAL)
+                    </label>
+                    <select
+                      value={simulateDepositId}
+                      onChange={e => setSimulateDepositId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white font-mono text-xs focus:border-purple-400 focus:outline-none"
+                    >
+                      <option value="">Auto-match first pending deposit</option>
+                      {deposits.filter(d => d.status === 'PENDING').map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.id} — ₹{d.amount} (User: {d.userId})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        AMOUNT (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={simulateAmount}
+                        onChange={e => setSimulateAmount(e.target.value)}
+                        placeholder="100"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white font-mono text-xs focus:border-purple-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        UTR / REF (OPTIONAL)
+                      </label>
+                      <input
+                        type="text"
+                        value={simulateUtr}
+                        onChange={e => setSimulateUtr(e.target.value)}
+                        placeholder="Auto-generate 12 digits"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white font-mono text-xs focus:border-purple-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-200">
+                    💡 This sends a mock PhonePe / Google Pay UPI credit receipt into the mailbox parser. The matching pending deposit will be immediately marked <strong>SUCCESS</strong> and the user&apos;s wallet will be credited!
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSimulateModal(false)}
+                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSimulatingDeposit}
+                    onClick={() => handleSimulateUpiDeposit()}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-500 hover:to-rose-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg disabled:opacity-50"
+                  >
+                    {isSimulatingDeposit ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    <span>⚡ RUN SIMULATION &amp; AUTO-APPROVE</span>
                   </button>
                 </div>
               </div>
@@ -9083,12 +9709,12 @@ export const AdminPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Duration Setup Option (ஆட் டுரேஷன் விருப்பம்) */}
+              {/* Duration Setup Option */}
               <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5" />
-                    <span>DURATION SETUP (ஆட் டுரேஷன் விருப்பம்)</span>
+                    <span>DURATION SETUP</span>
                   </label>
                   <span className="text-[10px] font-mono text-emerald-400 font-bold">100% Customizable</span>
                 </div>
@@ -9112,7 +9738,7 @@ export const AdminPage: React.FC = () => {
                       className="mt-0.5 accent-rose-500"
                     />
                     <div>
-                      <div className="font-bold text-xs text-white">Add Durations Manually (கீழே ஆட் பண்ணு)</div>
+                      <div className="font-bold text-xs text-white">Add Durations Manually</div>
                       <div className="text-[10px] text-slate-400 mt-0.5">
                         Starts clean. Directly add separate durations (1 Day, 7 Days, etc.) right below the product.
                       </div>
