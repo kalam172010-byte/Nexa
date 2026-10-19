@@ -14,7 +14,7 @@ async function startServer() {
   const app = express();
   // Enable trust proxy so Express correctly detects https, x-forwarded-host, and custom domains behind reverse proxies
   app.set('trust proxy', true);
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
   const isProduction = process.env.NODE_ENV === 'production';
 
   // Seed demo data on launch and start real-time Firestore + Edge two-way sync

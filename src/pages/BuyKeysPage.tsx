@@ -12,19 +12,15 @@ import {
   ExternalLink,
   ShieldCheck,
   X,
-  RefreshCw,
   Check,
+  RefreshCw,
   Sparkles,
-  Copy,
-  KeyRound,
 } from 'lucide-react';
-import { Product, ProductVariant, DigitalKey } from '../types/index.js';
+import { Product, ProductVariant } from '../types/index.js';
 import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { KeySuccessModal } from '../components/KeySuccessModal.js';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase.js';
 
 interface BuyKeysPageProps {
   onNavigateDeposit: () => void;
@@ -73,25 +69,14 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   // Track broken product images to render clean CSS/SVG fallback
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
-  // Purchased keys list shown directly on Buy Keys page ("This Key Buyed by Web" / "This Key Buyed by API")
-  const [purchasedKeys, setPurchasedKeys] = useState<DigitalKey[]>([]);
-  const [purchaseSourceFilter, setPurchaseSourceFilter] = useState<'ALL' | 'WEB' | 'API'>('ALL');
-  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
-
   const fetchProducts = async (isSilent = false) => {
     try {
       if (!isSilent) setIsLoading(true);
       else setIsRefreshing(true);
 
-      const [res, keysRes] = await Promise.all([
-        api.getProducts(),
-        api.getKeys('ALL').catch(() => ({ keys: [] as DigitalKey[] })),
-      ]);
+      const res = await api.getProducts();
       if (res?.products) {
         setProducts(res.products);
-      }
-      if (keysRes?.keys) {
-        setPurchasedKeys(keysRes.keys);
       }
     } catch (err: any) {
       if (!isSilent) {
@@ -117,96 +102,12 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
       fetchProducts(true);
     }, 2500);
 
-    let unsubscribeSnapshot: (() => void) | null = null;
-    if (user?.id || user?.email) {
-      const myId = (user?.id || '').trim();
-      const myEmail = (user?.email || '').trim().toLowerCase();
-      const myApiKey = (
-        user?.apiKey ||
-        localStorage.getItem(`nexa_user_api_key_${myId}`) ||
-        localStorage.getItem('nexa_user_outbound_api_key') ||
-        ''
-      ).trim();
-
-      try {
-        const colRef = collection(db, 'digitalKeys');
-        unsubscribeSnapshot = onSnapshot(
-          colRef,
-          snapshot => {
-            const fsKeys: DigitalKey[] = [];
-            snapshot.forEach(docSnap => {
-              const data = docSnap.data() as any;
-              const docUserId = String(data.assignedUserId || '').trim();
-              const docEmail = String(data.assignedUserEmail || '').trim().toLowerCase();
-              const docApiKey = String(data.assignedApiKey || '').trim();
-
-              const belongsToUser =
-                (myId && docUserId === myId) ||
-                (myEmail && docEmail && docEmail === myEmail) ||
-                (myApiKey && docApiKey && docApiKey === myApiKey);
-
-              if (!belongsToUser) return;
-
-              const isApi =
-                data.purchaseSource === 'API' ||
-                String(data.assignedOrderId || '').startsWith('API-ORD-') ||
-                String(docSnap.id).includes('EXT') ||
-                String(docSnap.id).includes('API');
-              fsKeys.push({
-                id: docSnap.id,
-                keyCode: data.keyCode || '',
-                productId: data.productId || '',
-                variantId: data.variantId || '',
-                productName: data.productName || 'Gaming Panel',
-                gameName: data.gameName || 'Free Fire',
-                durationLabel: data.durationLabel || '1 Day',
-                assignedUserId: data.assignedUserId,
-                assignedOrderId: data.assignedOrderId,
-                assignedAt: data.assignedAt || data.createdAt,
-                expiresAt: data.expiresAt,
-                status: data.status || 'ACTIVE',
-                isUsed: Boolean(data.isUsed),
-                purchaseSource: isApi ? 'API' : 'WEB',
-                purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
-                createdAt: data.createdAt,
-              });
-            });
-
-            if (fsKeys.length > 0) {
-              setPurchasedKeys(prev => {
-                const map = new Map<string, DigitalKey>();
-                for (const k of fsKeys) {
-                  map.set(k.id, k);
-                }
-                for (const k of prev) {
-                  if (!map.has(k.id)) {
-                    map.set(k.id, k);
-                  }
-                }
-                return Array.from(map.values()).sort((a, b) => {
-                  const timeA = new Date(a.assignedAt || a.createdAt || 0).getTime();
-                  const timeB = new Date(b.assignedAt || b.createdAt || 0).getTime();
-                  return timeB - timeA;
-                });
-              });
-            }
-          },
-          err => {
-            console.warn('[BuyKeysPage] Firestore keys snapshot notice:', err);
-          }
-        );
-      } catch (err) {
-        console.warn('[BuyKeysPage] Failed to attach keys snapshot:', err);
-      }
-    }
-
     return () => {
       window.removeEventListener('nexa_products_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
       clearInterval(interval);
-      if (unsubscribeSnapshot) unsubscribeSnapshot();
     };
-  }, [role, user?.id, user?.email, user?.apiKey]);
+  }, []);
 
   const toggleAccordion = (productId: string) => {
     setExpandedMap(prev => ({
@@ -685,123 +586,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
         </div>
       )}
 
-      {/* Your Purchased Keys Section (Shows "This Key Buyed by Web" vs "This Key Buyed by API") */}
-      <div className="rounded-2xl bg-[#11131d] border border-white/10 p-5 sm:p-6 space-y-4 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
-              <KeyRound className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-display font-bold text-base sm:text-lg text-white">
-                Your Purchased Keys (Web &amp; Outbound API)
-              </h3>
-              <p className="text-xs text-slate-400">
-                Keys bought on this website show <span className="text-emerald-400 font-semibold">This Key Buyed by Web</span>. Keys bought via your Outbound API show <span className="text-purple-400 font-semibold">This Key Buyed by API</span>.
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-1.5 p-1 bg-[#0a0b10] border border-white/[0.08] rounded-xl w-fit">
-            {(['ALL', 'WEB', 'API'] as const).map(src => (
-              <button
-                key={src}
-                type="button"
-                onClick={() => setPurchaseSourceFilter(src)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  purchaseSourceFilter === src
-                    ? src === 'API'
-                      ? 'bg-purple-600 text-white'
-                      : src === 'WEB'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-rose-600 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {src === 'ALL' ? 'All Keys' : src === 'API' ? 'Buy from API' : 'Buy from Website'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {(() => {
-          const displayedKeys = purchasedKeys.filter(k => {
-            const src = k.purchaseSource === 'API' ? 'API' : 'WEB';
-            if (purchaseSourceFilter !== 'ALL' && src !== purchaseSourceFilter) return false;
-            return true;
-          });
-
-          if (displayedKeys.length === 0) {
-            return (
-              <div className="text-center py-8 text-xs text-slate-400">
-                No purchased keys found for this filter yet. Buy a key above or generate via your Outbound Reseller API.
-              </div>
-            );
-          }
-
-          return (
-            <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-              {displayedKeys.slice(0, 25).map(k => {
-                const isApi = k.purchaseSource === 'API';
-                const label = k.purchaseSourceLabel || (isApi ? 'Buy from API' : 'Buy from Website');
-                return (
-                  <div
-                    key={k.id}
-                    className="p-3.5 rounded-xl bg-[#090a0f] border border-white/[0.07] hover:border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all"
-                  >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-xs text-white">{k.productName}</span>
-                        <span className="text-[11px] text-amber-300 font-semibold">({k.durationLabel})</span>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold tracking-wide border ${
-                            isApi
-                              ? 'bg-purple-500/15 text-purple-300 border-purple-500/35'
-                              : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
-                          }`}
-                        >
-                          {label}
-                        </span>
-                      </div>
-                      <div className="font-mono text-xs font-bold text-emerald-400 break-all select-all">
-                        {k.keyCode}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[11px] text-slate-500 font-mono hidden md:inline">
-                        {k.assignedAt ? new Date(k.assignedAt).toLocaleString() : ''}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(k.keyCode);
-                          setCopiedKeyId(k.id);
-                          showToastSuccess('Key copied to clipboard');
-                          setTimeout(() => setCopiedKeyId(null), 2000);
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold flex items-center gap-1.5 border border-white/10 cursor-pointer"
-                      >
-                        {copiedKeyId === k.id ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-      </div>
 
       {/* Modal: Update File & Loader */}
       {activeFileModal && (

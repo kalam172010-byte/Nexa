@@ -1295,6 +1295,13 @@ export class AdminController {
       if (body.imapPort) updatedData.imapPort = Number(body.imapPort);
       if (body.otpExpiryMinutes) updatedData.otpExpiryMinutes = Number(body.otpExpiryMinutes);
 
+      // Custom OTP email message templates
+      if (body.otpSubject !== undefined) updatedData.otpSubject = String(body.otpSubject);
+      if (body.otpHeader !== undefined) updatedData.otpHeader = String(body.otpHeader);
+      if (body.otpMessageBody !== undefined) updatedData.otpMessageBody = String(body.otpMessageBody);
+      if (body.otpSecurityNotice !== undefined) updatedData.otpSecurityNotice = String(body.otpSecurityNotice);
+      if (body.otpFooterText !== undefined) updatedData.otpFooterText = String(body.otpFooterText);
+
       const saved = db.updateEmailConfig(updatedData);
 
       db.logActivity(

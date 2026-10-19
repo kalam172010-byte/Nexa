@@ -149,6 +149,7 @@ export const AdminPage: React.FC = () => {
   const [adminSnippetLang, setAdminSnippetLang] = useState<'php' | 'curl' | 'nodejs'>('php');
 
   const { siteConfig: globalSiteConfig, updateSiteConfigLocally } = useSite();
+  const siteConfig = globalSiteConfig;
   const [siteForm, setSiteForm] = useState<SiteCustomizationConfig>(globalSiteConfig);
   const [isSavingSite, setIsSavingSite] = useState(false);
   const [customizationSubTab, setCustomizationSubTab] = useState<
@@ -202,27 +203,32 @@ export const AdminPage: React.FC = () => {
     return {
       enabled: true,
       protocol: 'smtp',
-      senderEmail: 'kalamkalam1234kd@gmail.com',
-      senderName: 'KALAM FF PANEL',
+      senderEmail: '',
+      senderName: 'NEXA Gaming Panel',
       smtpHost: 'smtp.gmail.com',
       smtpPort: 587,
       secure: false,
-      smtpUser: 'kalamkalam1234kd@gmail.com',
+      smtpUser: '',
       smtpPass: '',
       imapHost: 'imap.gmail.com',
       imapPort: 993,
-      imapUser: 'kalamkalam1234kd@gmail.com',
+      imapUser: '',
       imapPass: '',
       imapSecure: true,
       otpExpiryMinutes: 10,
       allowOtpSignup: true,
+      otpSubject: '🔐 Your {SITE_NAME} Login Verification Code: {OTP}',
+      otpHeader: 'Secure Email OTP Authentication',
+      otpMessageBody: 'Use the 6-digit verification code below to log in to your {SITE_NAME} account:',
+      otpSecurityNotice: '🔒 Security Notice: Never share this code with anyone, including staff. Our administrators will never ask for your OTP.',
+      otpFooterText: 'Automated Gaming Reseller Infrastructure · Secure OTP Delivery',
       hasSmtpPass: false,
       hasImapPass: false,
     };
   });
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isTestingEmail, setIsTestingEmail] = useState(false);
-  const [testRecipientEmail, setTestRecipientEmail] = useState('kalamkalam1234kd@gmail.com');
+  const [testRecipientEmail, setTestRecipientEmail] = useState('');
   const [emailTestResult, setEmailTestResult] = useState<any | null>(null);
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [showImapPass, setShowImapPass] = useState(false);
@@ -739,6 +745,11 @@ export const AdminPage: React.FC = () => {
       imapSecure: isImapSecure,
       otpExpiryMinutes: Number(config.otpExpiryMinutes) || 10,
       allowOtpSignup: Boolean(config.allowOtpSignup !== false),
+      otpSubject: String(config.otpSubject || '🔐 Your {SITE_NAME} Login Verification Code: {OTP}'),
+      otpHeader: String(config.otpHeader || 'Secure Email OTP Authentication'),
+      otpMessageBody: String(config.otpMessageBody || 'Use the 6-digit verification code below to log in to your {SITE_NAME} account:'),
+      otpSecurityNotice: String(config.otpSecurityNotice || '🔒 Security Notice: Never share this code with anyone, including staff. Our administrators will never ask for your OTP.'),
+      otpFooterText: String(config.otpFooterText || `Sent by ${config.senderName || 'Nexa Panel'} · Automated Gaming Reseller Infrastructure`),
       updatedAt: new Date().toISOString(),
     };
 
@@ -844,6 +855,11 @@ export const AdminPage: React.FC = () => {
           imapSecure: serializedPayload.imapSecure,
           otpExpiryMinutes: serializedPayload.otpExpiryMinutes,
           allowOtpSignup: serializedPayload.allowOtpSignup,
+          otpSubject: serializedPayload.otpSubject,
+          otpHeader: serializedPayload.otpHeader,
+          otpMessageBody: serializedPayload.otpMessageBody,
+          otpSecurityNotice: serializedPayload.otpSecurityNotice,
+          otpFooterText: serializedPayload.otpFooterText,
           hasSmtpPass: Boolean(serializedPayload.smtpPass || res?.config?.hasSmtpPass),
           hasImapPass: Boolean(serializedPayload.imapPass || res?.config?.hasImapPass),
           updatedAt: new Date().toISOString(),
@@ -7424,8 +7440,8 @@ export const AdminPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-white/5 text-xs">
               <div className="flex items-center gap-1.5 text-slate-300">
                 <AtSign className="w-3.5 h-3.5 text-rose-400" />
-                <span className="text-slate-400">Current Sender:</span>
-                <strong className="text-white font-mono">{emailConfig.senderEmail || 'Not set'}</strong>
+                <span className="text-slate-400">Gateway Sender:</span>
+                <strong className="text-white font-mono">{emailConfig.senderName || siteConfig.siteTitle || 'Official System Gateway'}</strong>
               </div>
               <div className="text-slate-600">•</div>
               <div className="flex items-center gap-1.5 text-slate-300">
@@ -7620,7 +7636,7 @@ export const AdminPage: React.FC = () => {
 
                     <div className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
                       <p className="text-white font-medium">
-                        <strong className="text-amber-300">Problem:</strong> Your email is <code className="text-cyan-300 font-mono">{emailConfig.senderEmail}</code>. {hasRegularPass ? `The current password ("${currentPass.slice(0, 3)}••••") is a regular password. Google strictly blocks normal passwords on IMAP!` : 'Google requires an App Password with 2-Step Verification.'}
+                        <strong className="text-amber-300">Notice:</strong> {hasRegularPass ? `The current password ("${currentPass.slice(0, 3)}••••") is a regular password. Mail providers require a dedicated 16-character App Password!` : 'Mail server requires a dedicated App Password with 2-Step Verification.'}
                       </p>
                       <p className="text-[11px] text-amber-200/90">
                         <strong>Note:</strong> Per Google security policies, standard account passwords are not permitted on IMAP. A 16-character Google App Password must be generated.
@@ -8420,7 +8436,7 @@ export const AdminPage: React.FC = () => {
                     onChange={e =>
                       setEmailConfig((prev: any) => ({ ...prev, imapUser: e.target.value }))
                     }
-                    placeholder={emailConfig.senderEmail || 'kalamkalam1234kd@gmail.com'}
+                    placeholder={emailConfig.senderEmail || 'yourname@gmail.com'}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
                   />
                 </div>
@@ -8502,6 +8518,211 @@ export const AdminPage: React.FC = () => {
                   <p className="text-[10px] text-slate-500 mt-1">
                     Enables friction-free 1-click registration for new visitors via Email OTP.
                   </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. OTP EMAIL MESSAGE TEMPLATE & LIVE INBOX PREVIEW (USER REQUESTED CUSTOMIZATION) */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#0c0f18] via-[#0b0c14] to-[#140b12] border border-rose-500/25 shadow-xl space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/5">
+                <div className="flex items-center gap-2.5">
+                  <Mail className="w-4 h-4 text-rose-400" />
+                  <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    5. OTP EMAIL MESSAGE TEMPLATE &amp; LIVE PREVIEW
+                  </h4>
+                </div>
+                <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-full border border-rose-500/20">
+                  Real-Time Template Customizer
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 text-xs text-slate-300 space-y-2">
+                <p className="text-white font-semibold">
+                  Personalize the exact message text and security notes sent in user verification emails:
+                </p>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                  <span className="text-slate-400">Supported variables:</span>
+                  <code className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                    &#123;OTP&#125;
+                  </code>
+                  <code className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                    &#123;SITE_NAME&#125;
+                  </code>
+                  <code className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                    &#123;MINUTES&#125;
+                  </code>
+                  <code className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                    &#123;EMAIL&#125;
+                  </code>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: Form Editors */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-300 block mb-1">
+                      EMAIL SUBJECT LINE
+                    </label>
+                    <input
+                      type="text"
+                      value={emailConfig.otpSubject || '🔐 Your {SITE_NAME} Login Verification Code: {OTP}'}
+                      onChange={e =>
+                        setEmailConfig((prev: any) => ({ ...prev, otpSubject: e.target.value }))
+                      }
+                      placeholder="🔐 Your {SITE_NAME} Login Verification Code: {OTP}"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-300 block mb-1">
+                      EMAIL CARD HEADER / BANNER TITLE
+                    </label>
+                    <input
+                      type="text"
+                      value={emailConfig.otpHeader || 'Secure Email OTP Authentication'}
+                      onChange={e =>
+                        setEmailConfig((prev: any) => ({ ...prev, otpHeader: e.target.value }))
+                      }
+                      placeholder="Secure Email OTP Authentication"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-300 block mb-1">
+                      MESSAGE BODY / GREETING INSTRUCTIONS
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={
+                        emailConfig.otpMessageBody ||
+                        'Use the 6-digit verification code below to log in to your {SITE_NAME} account:'
+                      }
+                      onChange={e =>
+                        setEmailConfig((prev: any) => ({ ...prev, otpMessageBody: e.target.value }))
+                      }
+                      placeholder="Use the 6-digit verification code below to log in to your {SITE_NAME} account:"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs focus:border-rose-500 focus:outline-none transition-colors resize-none leading-relaxed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-300 block mb-1">
+                      SECURITY DISCLAIMER NOTE
+                    </label>
+                    <input
+                      type="text"
+                      value={
+                        emailConfig.otpSecurityNotice ||
+                        '🔒 Security Notice: Never share this code with anyone, including staff. Our administrators will never ask for your OTP.'
+                      }
+                      onChange={e =>
+                        setEmailConfig((prev: any) => ({ ...prev, otpSecurityNotice: e.target.value }))
+                      }
+                      placeholder="🔒 Security Notice: Never share this code with anyone, including staff..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-300 block mb-1">
+                      FOOTER SIGNATURE LINE
+                    </label>
+                    <input
+                      type="text"
+                      value={
+                        emailConfig.otpFooterText ||
+                        `Sent by ${emailConfig.senderName || siteConfig.siteTitle || 'Nexa Panel'} · Automated Gaming Reseller Infrastructure`
+                      }
+                      onChange={e =>
+                        setEmailConfig((prev: any) => ({ ...prev, otpFooterText: e.target.value }))
+                      }
+                      placeholder="Sent by {SITE_NAME} · Automated Gaming Reseller Infrastructure"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs focus:border-rose-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEmailConfig((prev: any) => ({
+                          ...prev,
+                          otpSubject: '🔐 Your {SITE_NAME} Login Verification Code: {OTP}',
+                          otpHeader: 'Secure Email OTP Authentication',
+                          otpMessageBody: 'Use the 6-digit verification code below to log in to your {SITE_NAME} account:',
+                          otpSecurityNotice: '🔒 Security Notice: Never share this code with anyone, including staff. Our administrators will never ask for your OTP.',
+                          otpFooterText: `Sent by ${emailConfig.senderName || siteConfig.siteTitle || 'Nexa Panel'} · Automated Gaming Reseller Infrastructure`,
+                        }))
+                      }
+                      className="text-xs text-rose-400 hover:text-rose-300 underline font-medium transition-colors cursor-pointer"
+                    >
+                      Reset Template to Standard Defaults
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Column: Live Email Preview Box */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono text-slate-400 px-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      <span>LIVE EMAIL INBOX PREVIEW</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500">Preview: 6-Digit OTP</span>
+                  </div>
+
+                  {/* Rendered Email Card Container */}
+                  <div className="rounded-2xl bg-[#090b12] border border-white/10 overflow-hidden shadow-2xl text-left font-sans text-xs">
+                    {/* Top Email Gradient Header */}
+                    <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-red-700 p-4 text-center">
+                      <h5 className="text-white font-extrabold text-sm tracking-wider uppercase drop-shadow-sm">
+                        {siteConfig.siteTitle || 'KALAM FF PANEL'}
+                      </h5>
+                      <p className="text-rose-100 text-[11px] font-medium mt-0.5">
+                        {emailConfig.otpHeader || 'Secure Email OTP Authentication'}
+                      </p>
+                    </div>
+
+                    {/* Email Card Body Content */}
+                    <div className="p-5 space-y-4 text-slate-300">
+                      <p className="text-white font-medium text-xs">Hello,</p>
+                      <p className="text-slate-300 text-xs leading-relaxed whitespace-pre-line">
+                        {(emailConfig.otpMessageBody || 'Use the 6-digit verification code below to log in to your {SITE_NAME} account:')
+                          .replace(/\{SITE_NAME\}/g, siteConfig.siteTitle || 'Nexa Panel')
+                          .replace(/\{MINUTES\}/g, String(emailConfig.otpExpiryMinutes || 10))}
+                      </p>
+
+                      {/* 6-Digit Code Presentation Box */}
+                      <div className="p-4 rounded-xl bg-black/60 border-2 border-dashed border-rose-500/50 text-center my-3 space-y-1">
+                        <div className="font-mono font-black text-2xl sm:text-3xl tracking-[0.25em] text-rose-400 drop-shadow-md">
+                          849 201
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          ⏱️ Valid for <strong>{emailConfig.otpExpiryMinutes || 10} minutes</strong>
+                        </p>
+                      </div>
+
+                      {/* Security Notice Pill */}
+                      <div className="p-3 rounded-xl bg-indigo-950/40 border-l-4 border-indigo-500 text-[11px] text-indigo-200 leading-relaxed">
+                        {emailConfig.otpSecurityNotice ||
+                          '🔒 Security Notice: Never share this code with anyone, including staff. Our administrators will never ask for your OTP.'}
+                      </div>
+
+                      <p className="text-[11px] text-slate-500">
+                        If you did not request this login code, you can safely ignore this email.
+                      </p>
+                    </div>
+
+                    {/* Email Footer Notice */}
+                    <div className="p-3.5 bg-black/50 border-t border-white/5 text-center text-[10px] text-slate-500 font-mono">
+                      {(emailConfig.otpFooterText ||
+                        `Sent by ${emailConfig.senderName || siteConfig.siteTitle || 'Nexa Panel'} · Automated Gaming Reseller Infrastructure`)
+                        .replace(/\{SITE_NAME\}/g, siteConfig.siteTitle || 'Nexa Panel')}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

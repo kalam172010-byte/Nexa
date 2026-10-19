@@ -299,6 +299,11 @@ export interface EmailConfig {
   imapPollIntervalSeconds?: number;
   autoApproveDeposits?: boolean;
   simulationMode?: boolean;
+  otpSubject?: string;
+  otpHeader?: string;
+  otpMessageBody?: string;
+  otpSecurityNotice?: string;
+  otpFooterText?: string;
 }
 
 export interface DiscoveredTransaction {

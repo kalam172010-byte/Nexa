@@ -227,6 +227,11 @@ export class Database {
       imap24x7Enabled: true,
       imapPollIntervalSeconds: 25,
       autoApproveDeposits: true,
+      otpSubject: '🔐 Your {SITE_NAME} Login Verification Code: {OTP}',
+      otpHeader: 'Secure Email OTP Authentication',
+      otpMessageBody: 'Use the 6-digit verification code below to log in to your {SITE_NAME} account:',
+      otpSecurityNotice: '🔒 Security Notice: Never share this code with anyone, including staff. Our administrators will never ask for your OTP.',
+      otpFooterText: 'Automated Gaming Reseller Infrastructure · Secure OTP Delivery',
     };
   }
 

@@ -47,9 +47,25 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate, curren
         <div className="flex items-center gap-2.5 min-w-0 text-sm">
           <button
             onClick={() => onNavigate('dashboard')}
-            className="font-display font-bold tracking-tight bg-gradient-to-r from-white via-rose-200 to-amber-200 bg-clip-text text-transparent hover:opacity-90 transition-opacity whitespace-nowrap shrink-0 focus:outline-none cursor-pointer"
+            className="flex items-center gap-2 font-display font-bold tracking-tight hover:opacity-90 transition-opacity whitespace-nowrap shrink-0 focus:outline-none cursor-pointer"
           >
-            {siteConfig.siteTitle || 'Nexa Panel'}
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white overflow-hidden shadow-sm shadow-rose-950/60 shrink-0">
+              {siteConfig.logoUrl ? (
+                <img
+                  src={siteConfig.logoUrl}
+                  alt={siteConfig.siteTitle || 'Logo'}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="font-display font-bold text-[10px] tracking-tight">
+                  {siteConfig.siteTitle ? siteConfig.siteTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() : 'NX'}
+                </span>
+              )}
+            </div>
+            <span className="bg-gradient-to-r from-white via-rose-200 to-amber-200 bg-clip-text text-transparent">
+              {siteConfig.siteTitle || 'Nexa Panel'}
+            </span>
           </button>
           <span aria-hidden="true" className="text-slate-600 select-none">/</span>
           <span className="font-semibold text-rose-400 truncate whitespace-nowrap">

@@ -162,9 +162,13 @@ const MainLayout: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#090a0f] flex flex-col items-center justify-center space-y-3">
-        <div className="w-10 h-10 rounded-xl bg-[#10121a] border border-white/10 text-rose-500 flex items-center justify-center font-display font-bold text-base">
-          {siteConfig.siteTitle ? siteConfig.siteTitle.slice(0, 2).toUpperCase() : 'NX'}
+      <div className="min-h-screen bg-[#07080e] flex flex-col items-center justify-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center font-display font-black text-sm shadow-lg shadow-rose-950/60 overflow-hidden">
+          {siteConfig.logoUrl ? (
+            <img src={siteConfig.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+          ) : (
+            siteConfig.siteTitle ? siteConfig.siteTitle.slice(0, 2).toUpperCase() : 'NX'
+          )}
         </div>
         <div className="text-xs text-slate-400 font-medium tracking-wide">
           Loading workspace...

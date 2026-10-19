@@ -387,12 +387,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 const isFirst = u.rank === 1;
                 const isSecond = u.rank === 2;
                 const isThird = u.rank === 3;
-                const roleLabel =
-                  u.role === 'RESELLER'
-                    ? 'Wholesale Reseller'
-                    : u.role === 'ADMIN' || u.role === 'SUPER ADMIN'
-                    ? 'Administrator'
-                    : 'Member';
 
                 return (
                   <div
@@ -419,11 +413,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           @{u.username}
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                          <span className={u.role === 'RESELLER' ? 'text-amber-400 font-medium' : 'text-cyan-400'}>
-                            {roleLabel}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span>Verified Account</span>
+                          <span className="text-emerald-400 font-medium">Verified Member</span>
                         </div>
                       </div>
                     </div>
@@ -431,9 +421,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     <div className="text-right shrink-0">
                       <div className="font-mono text-xs sm:text-sm font-bold text-rose-300 tabular-nums">
                         {u.keysCount} Keys
-                      </div>
-                      <div className="text-[11px] text-emerald-400 font-mono font-semibold tabular-nums">
-                        {currency}{u.totalSpent.toFixed(2)}
                       </div>
                     </div>
                   </div>

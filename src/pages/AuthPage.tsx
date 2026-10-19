@@ -14,6 +14,10 @@ import {
   Clock,
   Send,
   BookOpen,
+  Zap,
+  Sparkles,
+  Gamepad2,
+  Flame,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
@@ -54,6 +58,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [resetCountdown, setResetCountdown] = useState(0);
   const [resetTargetEmail, setResetTargetEmail] = useState('');
   const [previewResetToken, setPreviewResetToken] = useState<string | null>(null);
+
+  const [logoImgError, setLogoImgError] = useState(false);
 
   // Countdown timer effects
   useEffect(() => {
@@ -221,22 +227,77 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     }
   };
 
+  const brandInitials = siteConfig.siteTitle
+    ? siteConfig.siteTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
+    : 'NX';
+
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center px-4 py-10 bg-[#090a0f] text-slate-100 font-sans">
-      <div className="w-full max-w-md space-y-5">
+    <div className="min-h-screen flex flex-col justify-center items-center px-4 py-10 bg-[#07080e] text-slate-100 font-sans relative overflow-hidden">
+      {/* Dynamic Background Cyber Gradients & Grids */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-900/15 via-[#07080e] to-[#07080e] pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none opacity-40" />
+
+      {/* ======================================================== */}
+      {/* 🌟 AMBIENT FLOATING GAMING BADGES (Smooth Floating Elements) */}
+      {/* ======================================================== */}
+      <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0e111a]/80 backdrop-blur-md border border-emerald-500/30 text-emerald-300 text-xs font-semibold shadow-[0_0_25px_rgba(16,185,129,0.15)] absolute top-8 left-6 md:left-14 lg:left-24 animate-float-1 z-10 pointer-events-none select-none">
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+        <Zap className="w-3.5 h-3.5 text-emerald-400" />
+        <span>Instant Auto-Key Delivery</span>
+      </div>
+
+      <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0e111a]/80 backdrop-blur-md border border-cyan-500/30 text-cyan-300 text-xs font-semibold shadow-[0_0_25px_rgba(6,182,212,0.15)] absolute top-12 right-6 md:right-14 lg:right-24 animate-float-2 z-10 pointer-events-none select-none">
+        <ShieldCheck className="w-4 h-4 text-cyan-400" />
+        <span>Anti-Ban Engine v4.2 Active</span>
+      </div>
+
+      <div className="hidden md:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0e111a]/80 backdrop-blur-md border border-pink-500/30 text-pink-300 text-xs font-semibold shadow-[0_0_25px_rgba(244,63,94,0.15)] absolute bottom-16 left-6 md:left-14 lg:left-28 animate-float-3 z-10 pointer-events-none select-none">
+        <Gamepad2 className="w-4 h-4 text-pink-400" />
+        <span>VIP Gaming Loader · PC &amp; Mobile</span>
+      </div>
+
+      <div className="hidden md:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0e111a]/80 backdrop-blur-md border border-amber-500/30 text-amber-300 text-xs font-semibold shadow-[0_0_25px_rgba(245,158,11,0.15)] absolute bottom-14 right-6 md:right-14 lg:right-24 animate-float-1 z-10 pointer-events-none select-none">
+        <Sparkles className="w-4 h-4 text-amber-400" />
+        <span>Zero-Fee UPI Fast Deposit</span>
+      </div>
+
+      <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0e111a]/70 backdrop-blur-md border border-rose-500/25 text-rose-300 text-[11px] font-mono shadow-lg absolute top-1/2 -translate-y-1/2 right-8 animate-float-2 z-10 pointer-events-none select-none">
+        <Flame className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+        <span>99.9% High Uptime Reseller Node</span>
+      </div>
+
+      <div className="w-full max-w-md space-y-5 relative z-20">
         {/* Main Auth Container */}
-        <div className="p-6 sm:p-8 rounded-2xl bg-[#10121a] border border-white/[0.07] space-y-6">
-          {/* Brand Header */}
-          <div className="text-center space-y-1.5">
-            <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-400 mb-1">
-              <ShieldCheck className="w-5 h-5" />
+        <div className="p-6 sm:p-8 rounded-3xl bg-[#10121a]/95 backdrop-blur-xl border border-white/[0.09] space-y-6 shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+          {/* Brand Header with Central Logo */}
+          <div className="text-center space-y-2">
+            <div className="relative inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#181a26] via-[#12141f] to-[#1f0f18] border-2 border-rose-500/40 text-rose-400 mb-1 shadow-[0_0_20px_rgba(244,63,94,0.3)] overflow-hidden p-1.5 group">
+              {siteConfig.logoUrl && !logoImgError ? (
+                <img
+                  src={siteConfig.logoUrl}
+                  alt={siteConfig.siteTitle || 'Logo'}
+                  referrerPolicy="no-referrer"
+                  onError={() => setLogoImgError(true)}
+                  className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(244,63,94,0.5)] transition-transform group-hover:scale-105"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center">
+                  <span className="font-display font-black text-base tracking-wider bg-gradient-to-r from-white via-rose-200 to-amber-200 bg-clip-text text-transparent">
+                    {brandInitials}
+                  </span>
+                  <span className="text-[7px] font-mono font-bold text-rose-400 uppercase tracking-tighter">
+                    VIP
+                  </span>
+                </div>
+              )}
             </div>
-            <h1 className="font-display font-bold text-xl sm:text-2xl tracking-tight text-white">
+
+            <h1 className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-white via-rose-100 to-amber-200 bg-clip-text text-transparent">
               {siteConfig.siteTitle || 'Nexa Panel'}
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 leading-relaxed px-2">
               {mode === 'login'
-                ? 'Sign in to access your reseller workspace'
+                ? 'Sign in to access your digital reseller workspace'
                 : mode === 'otp'
                 ? 'Sign in with a one-time email verification code'
                 : mode === 'register'

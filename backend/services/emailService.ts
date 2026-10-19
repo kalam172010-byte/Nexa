@@ -252,8 +252,34 @@ export class EmailService {
     });
 
     const senderEmail = (config.senderEmail || 'kalamkalam1234kd@gmail.com').trim();
-    const senderName = (config.senderName || 'KALAM FF PANEL').trim();
+    const senderName = (config.senderName || db.siteConfig.siteTitle || 'KALAM FF PANEL').trim();
     const siteTitle = db.siteConfig.siteTitle || 'KALAM FF PANEL';
+
+    // Variable replacer for customizable message templates
+    const replaceVars = (templateStr?: string, fallback = '') => {
+      const src = templateStr && templateStr.trim() ? templateStr : fallback;
+      return src
+        .replace(/\{OTP\}/g, code)
+        .replace(/\{CODE\}/g, code)
+        .replace(/\{SITE_NAME\}/g, siteTitle)
+        .replace(/\{MINUTES\}/g, String(expiryMinutes))
+        .replace(/\{EMAIL\}/g, email);
+    };
+
+    const finalSubject = replaceVars(config.otpSubject, `🔐 Your ${siteTitle} Login OTP: ${code}`);
+    const finalHeader = replaceVars(config.otpHeader, 'Secure Email OTP Authentication');
+    const finalBodyText = replaceVars(
+      config.otpMessageBody,
+      `Use the 6-digit verification code below to log in to your ${siteTitle} account:`
+    );
+    const finalSecurityNotice = replaceVars(
+      config.otpSecurityNotice,
+      '🔒 Security Notice: Never share this code with anyone, including staff. Our administrators will never ask for your OTP.'
+    );
+    const finalFooterText = replaceVars(
+      config.otpFooterText,
+      `Sent by ${senderName} · Automated Gaming Reseller Infrastructure`
+    );
 
     const htmlBody = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; background-color: #0b0f19; border: 1px solid #1f2937; border-radius: 12px; overflow: hidden; color: #f3f4f6;">
@@ -261,14 +287,14 @@ export class EmailService {
           <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">
             ${siteTitle}
           </h1>
-          <p style="margin: 6px 0 0 0; color: #ffe4e6; font-size: 13px;">Secure Email OTP Authentication</p>
+          <p style="margin: 6px 0 0 0; color: #ffe4e6; font-size: 13px;">${finalHeader}</p>
         </div>
         <div style="padding: 30px 24px;">
           <p style="margin: 0 0 16px 0; font-size: 15px; color: #d1d5db; line-height: 1.5;">
             Hello,
           </p>
-          <p style="margin: 0 0 20px 0; font-size: 14px; color: #9ca3af; line-height: 1.5;">
-            Use the 6-digit verification code below to log in to your <strong>${siteTitle}</strong> account:
+          <p style="margin: 0 0 20px 0; font-size: 14px; color: #9ca3af; line-height: 1.5; white-space: pre-line;">
+            ${finalBodyText}
           </p>
           
           <div style="background-color: #111827; border: 2px dashed #e11d48; border-radius: 10px; padding: 20px; text-align: center; margin: 24px 0;">
@@ -282,7 +308,7 @@ export class EmailService {
 
           <div style="background-color: #1e1b4b; border-left: 4px solid #6366f1; padding: 12px 16px; border-radius: 4px; margin-bottom: 24px;">
             <p style="margin: 0; font-size: 12px; color: #c7d2fe; line-height: 1.4;">
-              🔒 <strong>Security Notice:</strong> Never share this code with anyone, including staff. Our administrators will never ask for your OTP.
+              ${finalSecurityNotice}
             </p>
           </div>
 
@@ -291,8 +317,7 @@ export class EmailService {
           </p>
         </div>
         <div style="background-color: #030712; padding: 16px 24px; text-align: center; border-top: 1px solid #1f2937; font-size: 11px; color: #6b7280;">
-          Sent by ${senderName}<br/>
-          Automated Gaming Reseller Infrastructure
+          ${finalFooterText}
         </div>
       </div>
     `;
@@ -303,8 +328,8 @@ export class EmailService {
         await this.sendMailWithAutoFallback(config, {
           from: `"${senderName}" <${senderEmail}>`,
           to: email,
-          subject: `🔐 Your ${siteTitle} Login OTP: ${code}`,
-          text: `Your ${siteTitle} login verification code is: ${code}. This code expires in ${expiryMinutes} minutes. Never share this code with anyone.`,
+          subject: finalSubject,
+          text: `${finalBodyText} Verification code: ${code}. Valid for ${expiryMinutes} minutes. ${finalSecurityNotice}`,
           html: htmlBody,
         });
 

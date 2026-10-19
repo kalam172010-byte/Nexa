@@ -280,6 +280,11 @@ export interface EmailConfig {
   imapPollIntervalSeconds?: number; // Background polling interval (e.g. 20s)
   autoApproveDeposits?: boolean; // Automatically credit wallet when matching UTR found in inbox
   simulationMode?: boolean;   // Enable simulated UPI deposits testing when credentials pending
+  otpSubject?: string;        // e.g. "🔐 Your {SITE_NAME} Login Verification Code: {OTP}"
+  otpHeader?: string;         // e.g. "Secure Email OTP Authentication"
+  otpMessageBody?: string;    // Custom message body before the OTP code
+  otpSecurityNotice?: string; // Security notice disclaimer text
+  otpFooterText?: string;     // Custom footer note
 }
 
 export interface DiscoveredTransaction {
