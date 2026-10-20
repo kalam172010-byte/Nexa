@@ -615,17 +615,22 @@ export const AdminPage: React.FC = () => {
 
     let unsubscribeProds: (() => void) | undefined;
     let unsubscribeVars: (() => void) | undefined;
+    const handleProdUpdate = (evt?: any) => {
+      if (evt?.detail?.products) {
+        setProducts(evt.detail.products);
+      } else {
+        api.getProducts().then(res => {
+          if (res?.products) setProducts(res.products);
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener('nexa_products_updated', handleProdUpdate);
+    window.addEventListener('storage', handleProdUpdate);
+
     try {
-      unsubscribeProds = onSnapshot(collection(db, 'products'), () => {
-        api.getProducts().then(res => {
-          if (res?.products) setProducts(res.products);
-        }).catch(() => {});
-      });
-      unsubscribeVars = onSnapshot(collection(db, 'productVariants'), () => {
-        api.getProducts().then(res => {
-          if (res?.products) setProducts(res.products);
-        }).catch(() => {});
-      });
+      unsubscribeProds = onSnapshot(collection(db, 'products'), () => handleProdUpdate());
+      unsubscribeVars = onSnapshot(collection(db, 'productVariants'), () => handleProdUpdate());
     } catch (e) {
       console.warn('[AdminPage] Real-time products listener setup note:', e);
     }
@@ -635,6 +640,12 @@ export const AdminPage: React.FC = () => {
       api.getAdminStats().then(statsRes => {
         if (statsRes && typeof statsRes === 'object' && !('error' in statsRes)) {
           setStats(prev => ({ ...prev, ...statsRes }));
+        }
+      }).catch(() => {});
+
+      api.getProducts().then(res => {
+        if (res?.products && Array.isArray(res.products) && res.products.length > 0) {
+          setProducts(res.products);
         }
       }).catch(() => {});
 
@@ -654,6 +665,8 @@ export const AdminPage: React.FC = () => {
     }, 4000);
 
     return () => {
+      window.removeEventListener('nexa_products_updated', handleProdUpdate);
+      window.removeEventListener('storage', handleProdUpdate);
       if (unsubscribeUsers) unsubscribeUsers();
       if (unsubscribeProds) unsubscribeProds();
       if (unsubscribeVars) unsubscribeVars();
