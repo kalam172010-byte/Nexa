@@ -21,6 +21,7 @@ import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { KeySuccessModal } from '../components/KeySuccessModal.js';
+import { PremiumLoadingModal } from '../components/PremiumLoader.js';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 
@@ -169,7 +170,14 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
     try {
       setIsBuyingId(variant.id);
-      const res = await api.createOrder(variant.id, undefined, qty);
+      const res = await api.createOrder(variant.id, undefined, qty, {
+        productId: product.id,
+        productName: product.name,
+        game: product.game || 'FREEFIRE',
+        durationLabel: variant.durationLabel,
+        durationHours: variant.durationHours || 24,
+        price: unitPrice,
+      });
 
       if (res?.deliveredKey || res?.key) {
         const delivered = res.deliveredKey || res.key;
@@ -189,7 +197,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           purchaseSourceLabel: delivered.purchaseSourceLabel || 'Buy from Website',
         });
 
-        fetchProducts();
+        fetchProducts(true);
       }
     } catch (err: any) {
       showToastError('Purchase Failed', err.message || 'Could not complete key purchase.');
@@ -265,6 +273,12 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      <PremiumLoadingModal
+        isOpen={Boolean(isBuyingId)}
+        title="Generating Instant License Key..."
+        subtitle="Allocating verified digital license key and updating your wallet ledger."
+        badgeText="AUTOMATED KEY DELIVERY"
+      />
       {/* Page Header & Refresh Control */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

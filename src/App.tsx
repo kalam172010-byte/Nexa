@@ -12,6 +12,7 @@ import { Sidebar } from './components/Sidebar.js';
 import { BottomNav } from './components/BottomNav.js';
 import { SideDrawer } from './components/SideDrawer.js';
 import { ResellerUpgradeModal } from './components/ResellerUpgradeModal.js';
+import { PremiumLoadingPage, PremiumLoadingModal } from './components/PremiumLoader.js';
 import { MessageSquare, ExternalLink, ShieldCheck } from 'lucide-react';
 
 // Pages
@@ -65,6 +66,12 @@ const AdminUnlockCard: React.FC<{ onNavigate: (page: string) => void }> = ({ onN
 
   return (
     <div className="p-8 sm:p-10 text-center rounded-2xl bg-[#10121a] border border-white/[0.08] space-y-6 max-w-md mx-auto my-8 shadow-2xl">
+      <PremiumLoadingModal
+        isOpen={isSubmitting}
+        title="Verifying Admin Credentials..."
+        subtitle="Authenticating master privileges and unlocking system control panel."
+        badgeText="SECURITY VERIFICATION"
+      />
       <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500/20 to-amber-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto shadow-md">
         <ShieldCheck className="w-6 h-6 text-rose-400" />
       </div>
@@ -170,20 +177,24 @@ const MainLayout: React.FC = () => {
     }
   }, [user, currentPage]);
 
-  if (isLoading) {
+  const [isBootSplash, setIsBootSplash] = useState<boolean>(true);
+  const [isTransitionLoading, setIsTransitionLoading] = useState<boolean>(false);
+  const [transitionTitle, setTransitionTitle] = useState<string>('Loading Workspace...');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsBootSplash(false);
+    }, 550);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isLoading || isBootSplash) {
     return (
-      <div className="min-h-screen bg-[#07080e] flex flex-col items-center justify-center space-y-3">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center font-display font-black text-sm shadow-lg shadow-rose-950/60 overflow-hidden">
-          {siteConfig.logoUrl ? (
-            <img src={siteConfig.logoUrl} alt="Logo" className="w-full h-full object-cover" />
-          ) : (
-            siteConfig.siteTitle ? siteConfig.siteTitle.slice(0, 2).toUpperCase() : 'NX'
-          )}
-        </div>
-        <div className="text-xs text-slate-400 font-medium tracking-wide">
-          Loading workspace...
-        </div>
-      </div>
+      <PremiumLoadingPage
+        siteTitle={siteConfig.siteTitle || 'KALAM FF PANEL'}
+        logoUrl={siteConfig.logoUrl}
+        subtitle={siteConfig.siteTagline || 'Initializing VIP License Infrastructure & Cloud Sync'}
+      />
     );
   }
 
@@ -208,6 +219,14 @@ const MainLayout: React.FC = () => {
       window.location.hash = 'auth';
       return;
     }
+    if (pageId !== currentPage && pageId !== 'keys') {
+      const targetName = PAGE_TITLES[pageId] || 'Workspace';
+      setTransitionTitle(`Loading ${targetName}...`);
+      setIsTransitionLoading(true);
+      setTimeout(() => {
+        setIsTransitionLoading(false);
+      }, 180);
+    }
     setCurrentPage(pageId);
     window.location.hash = pageId;
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -215,6 +234,12 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-rose-500/25 selection:text-rose-200">
+      <PremiumLoadingModal
+        isOpen={isTransitionLoading}
+        title={transitionTitle}
+        subtitle="Synchronizing real-time catalog and account state..."
+        badgeText="KALAM VIP CLOUD"
+      />
       {/* Desktop Sidebar */}
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 

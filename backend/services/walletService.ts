@@ -116,15 +116,20 @@ export class WalletService {
       };
     }
 
-    // Refresh balance from Firestore if possible for real-time accuracy
-    try {
-      const liveBalance = await FirestoreSyncService.getAuthoritativeBalance(user);
-      if (typeof liveBalance === 'number' && !Number.isNaN(liveBalance)) {
-        user.balance = liveBalance;
-      }
-    } catch {}
-
-    const currentBalance = Math.max(0, Math.round((user.balance || 0) * 100) / 100);
+    // Only check Firestore with a fast 1.2s timeout if local balance appears insufficient
+    let currentBalance = Math.max(0, Math.round((user.balance || 0) * 100) / 100);
+    if (currentBalance < totalPrice) {
+      try {
+        const liveBalance = await Promise.race([
+          FirestoreSyncService.getAuthoritativeBalance(user),
+          new Promise<number>(resolve => setTimeout(() => resolve(currentBalance), 1200)),
+        ]);
+        if (typeof liveBalance === 'number' && !Number.isNaN(liveBalance) && liveBalance > currentBalance) {
+          user.balance = liveBalance;
+          currentBalance = Math.max(0, Math.round(liveBalance * 100) / 100);
+        }
+      } catch {}
+    }
 
     if (currentBalance < totalPrice) {
       return {

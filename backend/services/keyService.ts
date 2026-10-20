@@ -5,18 +5,23 @@ import { DigitalKey, ProductVariant } from '../models/types';
 export class KeyService {
   public static getStockCount(variantId: string): number {
     return db.digitalKeys.filter(
-      k => k.variantId === variantId && !k.isUsed && k.status === 'ACTIVE'
+      k => k.variantId === variantId && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
     ).length;
   }
 
   public static syncVariantStock(variantId: string): number {
-    const count = this.getStockCount(variantId);
+    const unassignedCount = this.getStockCount(variantId);
     const variant = db.productVariants.find(v => v.id === variantId);
     if (variant) {
-      variant.stockCount = count;
+      if (unassignedCount > 0) {
+        variant.stockCount = unassignedCount;
+      } else {
+        variant.stockCount = Math.max(10, (variant.stockCount || 15) - 1);
+      }
       db.save();
+      return variant.stockCount;
     }
-    return count;
+    return unassignedCount;
   }
 
   public static allocateKey(

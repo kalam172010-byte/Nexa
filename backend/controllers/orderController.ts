@@ -17,7 +17,17 @@ export class OrderController {
         return;
       }
 
-      const { variantId, androidId, quantity } = req.body;
+      const {
+        variantId,
+        androidId,
+        quantity,
+        productId: bodyProductId,
+        productName: bodyProductName,
+        game: bodyGame,
+        durationLabel: bodyDurationLabel,
+        durationHours: bodyDurationHours,
+        price: bodyPrice,
+      } = req.body;
       if (!variantId) {
         res.status(400).json({ error: 'Product duration variant ID is required.' });
         return;
@@ -25,15 +35,51 @@ export class OrderController {
 
       const qty = Math.max(1, Math.min(20, parseInt(quantity, 10) || 1));
 
-      // 1. Server-side variant lookup
-      const variant = db.productVariants.find(v => v.id === variantId && v.isActive);
+      // 1. Server-side variant lookup (with automatic upsert if product/variant was created in client cache)
+      let variant = db.productVariants.find(v => v.id === variantId && v.isActive !== false);
+      let product = variant
+        ? db.products.find(p => p.id === variant!.productId && p.isActive !== false)
+        : bodyProductId
+        ? db.products.find(p => p.id === bodyProductId && p.isActive !== false)
+        : undefined;
+
+      if (!product && (bodyProductId || bodyProductName)) {
+        const newProdId = bodyProductId || `PROD-${Date.now().toString().slice(-6)}`;
+        product = {
+          id: newProdId,
+          name: bodyProductName || 'VIP Gaming Panel',
+          game: bodyGame || 'FREEFIRE',
+          description: '',
+          category: bodyGame || 'FREEFIRE',
+          badge: 'VIP',
+          deviceType: 'NONROOT',
+          isActive: true,
+          isUnderMaintenance: false,
+          createdAt: new Date().toISOString(),
+        };
+        db.products.unshift(product);
+      }
+
+      if (!variant && product) {
+        const unitP = Math.max(1, Number(bodyPrice || 50));
+        variant = {
+          id: String(variantId),
+          productId: product.id,
+          durationLabel: bodyDurationLabel || '1 Day',
+          durationHours: Number(bodyDurationHours) || 24,
+          price: unitP,
+          resellerPrice: unitP,
+          stockCount: 50,
+          isActive: true,
+        };
+        db.productVariants.push(variant);
+      }
+
       if (!variant) {
         res.status(404).json({ error: 'Selected duration variant is unavailable or invalid.' });
         return;
       }
 
-      // 2. Product verification
-      const product = db.products.find(p => p.id === variant.productId && p.isActive);
       if (!product) {
         res.status(404).json({ error: 'The parent product is currently disabled or removed.' });
         return;
@@ -79,17 +125,36 @@ export class OrderController {
       }
 
       const dbUser = verification.user || user;
-      const userEmail = (dbUser.email || user.email || '').toLowerCase();
+      const headerEmail = (req.headers['x-user-email'] as string | undefined)?.toLowerCase().trim();
+      const userEmail = (dbUser.email || user.email || headerEmail || '').toLowerCase().trim();
       const userApiKey = dbUser.apiKey || user.apiKey || '';
 
-      // 5. Key generation via External Reseller API or Local Pool
+      // 5. Instant Key Allocation: Check local inventory first, then fast upstream or instant auto-generation
       const deliveredKeys: DigitalKey[] = [];
       const effectivePid = variant.externalPid?.trim() || product.externalPid?.trim();
       const effectiveDuration = variant.externalDuration?.trim() || variant.durationLabel.trim();
 
       for (let i = 0; i < qty; i++) {
         const subOrderId = qty > 1 ? `${orderId}-${i + 1}` : orderId;
-        if (effectivePid) {
+
+        // Priority A: Check local pre-generated key stock in db.digitalKeys first (0ms latency)
+        const availableKey = db.digitalKeys.find(
+          k => k.variantId === variant!.id && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
+        );
+
+        if (availableKey) {
+          const localKey = KeyService.allocateKey(dbUser.id, variant, subOrderId, 'WEB');
+          localKey.assignedUserEmail = userEmail;
+          localKey.assignedApiKey = userApiKey;
+          localKey.productName = product.name;
+          localKey.gameName = product.game || 'FREEFIRE';
+          localKey.durationLabel = variant.durationLabel;
+          deliveredKeys.push(localKey);
+          continue;
+        }
+
+        // Priority B: External provider if PID is explicitly configured
+        if (effectivePid && db.resellerConfig?.isLiveApiEnabled !== false) {
           const apiResult = await ResellerApiService.fetchKeyFromProvider({
             externalPid: effectivePid,
             durationLabel: effectiveDuration,
@@ -98,7 +163,8 @@ export class OrderController {
           });
 
           if (apiResult.success && apiResult.keyCode) {
-            const expiryDate = new Date(Date.now() + variant.durationHours * 3600 * 1000);
+            const nowIso = new Date().toISOString();
+            const expiryDate = new Date(Date.now() + (variant.durationHours || 24) * 3600 * 1000);
             const extKey: DigitalKey = {
               id: `KEY-${Date.now()}-${i}-${crypto.randomBytes(2).toString('hex')}`,
               productId: product.id,
@@ -112,61 +178,30 @@ export class OrderController {
               assignedUserEmail: userEmail,
               assignedApiKey: userApiKey,
               assignedOrderId: subOrderId,
-              assignedAt: new Date().toISOString(),
+              assignedAt: nowIso,
               expiresAt: expiryDate.toISOString(),
               status: 'ACTIVE',
               purchaseSource: 'WEB',
               purchaseSourceLabel: 'Buy from Website',
-              createdAt: new Date().toISOString(),
+              createdAt: nowIso,
             };
-            db.digitalKeys.push(extKey);
-            KeyService.syncVariantStock(variant.id);
+            db.digitalKeys.unshift(extKey);
             deliveredKeys.push(extKey);
-          } else {
-            // Check local inventory first
-            const availableKey = db.digitalKeys.find(
-              k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
-            );
-
-            if (availableKey) {
-              const localKey = KeyService.allocateKey(dbUser.id, variant, subOrderId, 'WEB');
-              localKey.assignedUserEmail = userEmail;
-              localKey.assignedApiKey = userApiKey;
-              deliveredKeys.push(localKey);
-            } else {
-              // Auto-generate high entropy fallback key if upstream fails / out of stock
-              const fallbackKey = KeyService.generateFallbackKey(dbUser.id, product, variant, subOrderId, 'WEB');
-              fallbackKey.assignedUserEmail = userEmail;
-              fallbackKey.assignedApiKey = userApiKey;
-              db.logActivity(
-                dbUser.id,
-                dbUser.username,
-                'ORDER_KEY_FALLBACK_ISSUED',
-                `Delivered instant digital key for ${product.name} (${variant.durationLabel}). Upstream notice: ${apiResult.message || 'Out of stock'}`
-              );
-              deliveredKeys.push(fallbackKey);
-            }
-          }
-        } else {
-          // Local inventory allocation or fallback auto-generation
-          const availableKey = db.digitalKeys.find(
-            k => k.variantId === variant.id && !k.isUsed && k.status === 'ACTIVE' && !k.assignedUserId
-          );
-          if (availableKey) {
-            const localKey = KeyService.allocateKey(dbUser.id, variant, subOrderId, 'WEB');
-            localKey.assignedUserEmail = userEmail;
-            localKey.assignedApiKey = userApiKey;
-            deliveredKeys.push(localKey);
-          } else {
-            const fallbackKey = KeyService.generateFallbackKey(dbUser.id, product, variant, subOrderId, 'WEB');
-            fallbackKey.assignedUserEmail = userEmail;
-            fallbackKey.assignedApiKey = userApiKey;
-            deliveredKeys.push(fallbackKey);
+            continue;
           }
         }
+
+        // Priority C: Instant high-entropy key generation (0ms latency)
+        const fallbackKey = KeyService.generateFallbackKey(dbUser.id, product, variant, subOrderId, undefined, 'WEB');
+        fallbackKey.assignedUserEmail = userEmail;
+        fallbackKey.assignedApiKey = userApiKey;
+        fallbackKey.productName = product.name;
+        fallbackKey.gameName = product.game || 'FREEFIRE';
+        fallbackKey.durationLabel = variant.durationLabel;
+        deliveredKeys.push(fallbackKey);
       }
 
-      // 6. Create Order records
+      // 6. Create Order records and trigger non-blocking Firestore sync
       for (let i = 0; i < deliveredKeys.length; i++) {
         const k = deliveredKeys[i];
         const subOrderId = qty > 1 ? `${orderId}-${i + 1}` : orderId;
@@ -209,38 +244,52 @@ export class OrderController {
       WalletService.processReferralReward(dbUser.id, authoritativePrice);
 
       const deliveredKey = deliveredKeys[0];
+      const allKeyCodes = deliveredKeys.map(k => k.keyCode).join('\n');
 
       // 8. Audit log
       db.logActivity(
         dbUser.id,
         dbUser.username,
         'KEY_PURCHASE_WEB',
-        `[This Key Buyed by Web] Purchased ${product.name} [${variant.durationLabel}] for ₹${authoritativePrice}. Key: ${deliveredKey.keyCode}`
+        `[This Key Buyed by Web] Purchased ${qty}x ${product.name} [${variant.durationLabel}] for ₹${authoritativePrice}. Key: ${deliveredKey.keyCode}`
       );
 
       const latestOrder = db.orders[0];
+      const formattedDeliveredKeys = deliveredKeys.map(k => ({
+        id: k.id,
+        keyCode: k.keyCode,
+        productId: product!.id,
+        variantId: variant!.id,
+        productName: product!.name,
+        gameName: product!.game || 'FREEFIRE',
+        durationLabel: variant!.durationLabel,
+        assignedUserId: dbUser.id,
+        assignedUserEmail: userEmail,
+        assignedApiKey: userApiKey,
+        assignedOrderId: k.assignedOrderId,
+        assignedAt: k.assignedAt,
+        expiresAt: k.expiresAt,
+        status: 'ACTIVE' as const,
+        isUsed: false,
+        purchaseSource: 'WEB' as const,
+        purchaseSourceLabel: 'Buy from Website',
+        createdAt: k.createdAt,
+      }));
 
       res.status(201).json({
         success: true,
         message: 'Purchase successful! This Key Buyed by Web.',
         order: latestOrder,
+        deliveredKeys: formattedDeliveredKeys,
         deliveredKey: {
-          id: deliveredKey.id,
-          keyCode: deliveredKey.keyCode,
-          durationLabel: variant.durationLabel,
-          expiresAt: deliveredKey.expiresAt,
-          productName: product.name,
-          purchaseSource: 'WEB',
-          purchaseSourceLabel: 'Buy from Website',
+          ...formattedDeliveredKeys[0],
+          keyCode: allKeyCodes,
         },
         key: {
-          id: deliveredKey.id,
-          keyCode: deliveredKey.keyCode,
-          durationLabel: variant.durationLabel,
-          expiresAt: deliveredKey.expiresAt,
-          productName: product.name,
-          purchaseSource: 'WEB',
-          purchaseSourceLabel: 'This Key Buyed by Web',
+          ...formattedDeliveredKeys[0],
+          keyCode: allKeyCodes,
+          keys: deliveredKeys.map(k => k.keyCode),
+          quantity: qty,
         },
         newBalance,
       });

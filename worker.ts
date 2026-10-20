@@ -1129,28 +1129,41 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       }
 
       const firstKey = deliveredKeys[0];
+      const allKeyCodes = deliveredKeys.map(k => k.keyCode).join('\n');
+      const formattedDeliveredKeys = deliveredKeys.map(k => ({
+        id: k.id,
+        keyCode: k.keyCode,
+        productId: product.id,
+        variantId: variant.id,
+        productName: product.name,
+        gameName: product.game || 'FREEFIRE',
+        durationLabel: variant.durationLabel,
+        assignedUserId: user.id,
+        assignedUserEmail: user.email?.toLowerCase(),
+        assignedOrderId: k.assignedOrderId,
+        assignedAt: k.assignedAt,
+        expiresAt: k.expiresAt,
+        status: 'ACTIVE',
+        isUsed: false,
+        purchaseSource: 'WEB',
+        purchaseSourceLabel: 'Buy from Website',
+        createdAt: k.createdAt,
+      }));
       return jsonResponse(
         {
           success: true,
           message: 'Purchase successful! This Key Buyed by Web.',
           order: edgeDb.orders[0],
+          deliveredKeys: formattedDeliveredKeys,
           deliveredKey: {
-            id: firstKey.id,
-            keyCode: firstKey.keyCode,
-            durationLabel: variant.durationLabel,
-            expiresAt: firstKey.expiresAt,
-            productName: product.name,
-            purchaseSource: 'WEB',
-            purchaseSourceLabel: 'Buy from Website',
+            ...formattedDeliveredKeys[0],
+            keyCode: allKeyCodes,
           },
           key: {
-            id: firstKey.id,
-            keyCode: firstKey.keyCode,
-            durationLabel: variant.durationLabel,
-            expiresAt: firstKey.expiresAt,
-            productName: product.name,
-            purchaseSource: 'WEB',
-            purchaseSourceLabel: 'Buy from Website',
+            ...formattedDeliveredKeys[0],
+            keyCode: allKeyCodes,
+            keys: deliveredKeys.map(k => k.keyCode),
+            quantity: qty,
           },
           newBalance: user.balance,
         },

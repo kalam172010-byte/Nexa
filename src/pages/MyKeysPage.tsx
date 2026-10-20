@@ -24,8 +24,8 @@ interface MyKeysPageProps {
 export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
   const { user } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
-  const [keys, setKeys] = useState<DigitalKey[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [keys, setKeys] = useState<DigitalKey[]>(() => api.getCachedKeysSync());
+  const [isLoading, setIsLoading] = useState<boolean>(() => api.getCachedKeysSync().length === 0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED' | 'USED'>('ALL');
   const [sourceFilter, setSourceFilter] = useState<'ALL' | 'WEB' | 'API'>('ALL');
@@ -34,11 +34,25 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
 
   const fetchKeys = async (silent = false) => {
     try {
-      if (!silent) setIsLoading(true);
-      const res = await api.getKeys(statusFilter, search);
+      const cachedNow = api.getCachedKeysSync();
+      if (cachedNow.length > 0) {
+        setKeys(prev => {
+          const map = new Map<string, DigitalKey>();
+          for (const k of cachedNow) map.set(k.id, k);
+          for (const k of prev) {
+            if (!map.has(k.id)) map.set(k.id, k);
+          }
+          return Array.from(map.values()).sort((a, b) => {
+            const timeA = new Date(a.assignedAt || a.createdAt || 0).getTime();
+            const timeB = new Date(b.assignedAt || b.createdAt || 0).getTime();
+            return timeB - timeA;
+          });
+        });
+      }
+      if (!silent && cachedNow.length === 0 && keys.length === 0) setIsLoading(true);
+      const res = await api.getKeys('ALL', '');
       if (res?.keys) {
         setKeys(prev => {
-          // Merge preserving any live keys from Firestore
           const map = new Map<string, DigitalKey>();
           for (const k of res.keys) {
             map.set(k.id, k);
@@ -60,13 +74,39 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
         showToastError('Failed to fetch keys', err.message);
       }
     } finally {
-      if (!silent) setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchKeys();
-  }, [statusFilter, search]);
+    fetchKeys(keys.length > 0);
+
+    const handleKeysUpdated = () => {
+      const updated = api.getCachedKeysSync();
+      if (updated.length > 0) {
+        setKeys(prev => {
+          const map = new Map<string, DigitalKey>();
+          for (const k of updated) map.set(k.id, k);
+          for (const k of prev) {
+            if (!map.has(k.id)) map.set(k.id, k);
+          }
+          return Array.from(map.values()).sort((a, b) => {
+            const timeA = new Date(a.assignedAt || a.createdAt || 0).getTime();
+            const timeB = new Date(b.assignedAt || b.createdAt || 0).getTime();
+            return timeB - timeA;
+          });
+        });
+        setIsLoading(false);
+      }
+    };
+
+    window.addEventListener('nexa_keys_updated', handleKeysUpdated);
+    window.addEventListener('storage', handleKeysUpdated);
+    return () => {
+      window.removeEventListener('nexa_keys_updated', handleKeysUpdated);
+      window.removeEventListener('storage', handleKeysUpdated);
+    };
+  }, []);
 
   // Real-time Firestore onSnapshot listener for instant key delivery (matches by ID, Email, or API Key)
   useEffect(() => {
@@ -81,10 +121,11 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
       ''
     ).trim();
 
+    let unsubscribe: (() => void) | undefined;
     try {
       const colRef = collection(db, 'digitalKeys');
 
-      const unsubscribe = onSnapshot(
+      unsubscribe = onSnapshot(
         colRef,
         snapshot => {
           const fsKeys: DigitalKey[] = [];
@@ -98,7 +139,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
               (myId && docUserId === myId) ||
               (myEmail && docEmail && docEmail === myEmail) ||
               (myApiKey && docApiKey && docApiKey === myApiKey) ||
-              (myEmail === 'kalam172010@gmail.com' &&
+              ((myEmail === 'kalam172010@gmail.com' || user?.role === 'ADMIN' || user?.role === 'SUPER ADMIN') &&
                 (docUserId === 'USR-KALAM-172010' || docUserId === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2'));
 
             if (!belongsToUser) return;
@@ -148,24 +189,22 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
             });
           }
         },
-        err => {
-          console.warn('[MyKeysPage] Firestore keys snapshot notice:', err);
-        }
+        () => {}
       );
-
-      // Periodic live polling every 2.5s to ensure backend sync
-      const pollTimer = setInterval(() => {
-        fetchKeys(true);
-      }, 2500);
-
-      return () => {
-        unsubscribe();
-        clearInterval(pollTimer);
-      };
     } catch (err) {
       console.warn('[MyKeysPage] Listener attach error:', err);
     }
-  }, [user?.id, user?.email, user?.apiKey, statusFilter, search]);
+
+    // Periodic live polling every 2.5s to ensure backend sync
+    const pollTimer = setInterval(() => {
+      fetchKeys(true);
+    }, 2500);
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      clearInterval(pollTimer);
+    };
+  }, [user?.id, user?.email, user?.apiKey]);
 
   const handleCopy = (keyCode: string, id: string) => {
     navigator.clipboard.writeText(keyCode);

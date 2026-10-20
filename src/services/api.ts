@@ -8,6 +8,13 @@ export function getEffectiveOrigin(): string {
     window.location.hostname === 'localhost' ||
     window.location.hostname === '127.0.0.1';
 
+  const isHostedAppServer =
+    isLocalBrowser || window.location.hostname.endsWith('.run.app');
+
+  if (isHostedAppServer) {
+    return currentOrigin;
+  }
+
   // 1. Check custom override from localStorage (ignore localhost if running on a deployed domain)
   try {
     const localStoredUrl = localStorage.getItem('nexa_api_base_url');
@@ -280,7 +287,7 @@ function mergeWithCachedProducts(backendProds: any[]): { merged: any[]; unsynced
   return { merged: Array.from(map.values()), unsyncedLocal };
 }
 
-function getCachedKeys(): any[] {
+export function getCachedKeys(): any[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem('nexa_cached_keys');
@@ -292,10 +299,63 @@ function getCachedKeys(): any[] {
   return [];
 }
 
-function saveCachedKeys(keys: any[]): void {
+export function getUserCachedKeys(): any[] {
+  if (typeof window === 'undefined') return [];
+  const all = getCachedKeys();
+  const storedUserRaw = localStorage.getItem('nexa_user_data') || localStorage.getItem('nexa_current_user');
+  let storedUser: any = null;
+  try {
+    if (storedUserRaw) storedUser = JSON.parse(storedUserRaw);
+  } catch {}
+  const myId = (storedUser?.id || '').trim();
+  const myEmail = (storedUser?.email || '').trim().toLowerCase();
+  const myApiKey = (storedUser?.apiKey || localStorage.getItem('nexa_user_outbound_api_key') || '').trim();
+  const isAdmin =
+    storedUser?.role === 'ADMIN' ||
+    storedUser?.role === 'SUPER ADMIN' ||
+    myEmail === 'kalam172010@gmail.com' ||
+    myEmail === 'kk7953926@gmail.com';
+
+  return all
+    .filter(k => {
+      if (!k || !k.keyCode) return false;
+      if (!k.assignedUserId && !k.assignedUserEmail) return true;
+      if (!myId && !myEmail) return true;
+      if (myId && k.assignedUserId === myId) return true;
+      if (myEmail && k.assignedUserEmail && String(k.assignedUserEmail).trim().toLowerCase() === myEmail) return true;
+      if (myApiKey && k.assignedApiKey && String(k.assignedApiKey).trim() === myApiKey) return true;
+      if (isAdmin && (k.assignedUserId === 'USR-KALAM-172010' || k.assignedUserId === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2')) return true;
+      return false;
+    })
+    .map(k => {
+      const isApi =
+        k.purchaseSource === 'API' ||
+        String(k.assignedOrderId || '').startsWith('API-ORD-') ||
+        String(k.id || '').includes('API');
+      return {
+        ...k,
+        status: k.status || 'ACTIVE',
+        isUsed: Boolean(k.isUsed),
+        productName: k.productName || 'Gaming Panel',
+        gameName: k.gameName || 'FREEFIRE',
+        durationLabel: k.durationLabel || '1 Day',
+        assignedAt: k.assignedAt || k.createdAt || new Date().toISOString(),
+        createdAt: k.createdAt || k.assignedAt || new Date().toISOString(),
+        purchaseSource: isApi ? 'API' : 'WEB',
+        purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+      };
+    });
+}
+
+function saveCachedKeys(keys: any[], notify = true): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem('nexa_cached_keys', JSON.stringify(keys));
+    const serialized = JSON.stringify(keys);
+    const prev = localStorage.getItem('nexa_cached_keys');
+    localStorage.setItem('nexa_cached_keys', serialized);
+    if (notify && prev !== serialized) {
+      window.dispatchEvent(new CustomEvent('nexa_keys_updated', { detail: keys }));
+    }
   } catch {}
 }
 
@@ -503,8 +563,51 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           }))
         );
       }
+    } else if (endpoint.startsWith('/keys') && method === 'GET' && Array.isArray(data.keys)) {
+      const currentCached = getUserCachedKeys();
+      const map = new Map<string, any>();
+      for (const bk of data.keys) {
+        if (bk && bk.id) {
+          map.set(bk.id, {
+            ...bk,
+            status: bk.status || 'ACTIVE',
+            assignedAt: bk.assignedAt || bk.createdAt || new Date().toISOString(),
+          });
+        }
+      }
+      for (const ck of currentCached) {
+        if (ck && ck.id && !map.has(ck.id) && !Array.from(map.values()).some(v => v.keyCode === ck.keyCode)) {
+          map.set(ck.id, ck);
+        }
+      }
+      const mergedAll = Array.from(map.values()).sort((a, b) => {
+        const timeA = new Date(a.assignedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.assignedAt || b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+      saveCachedKeys(mergedAll, false);
+
+      // Apply status & search filter from query string if any
+      const qIdx = endpoint.indexOf('?');
+      const params = qIdx >= 0 ? new URLSearchParams(endpoint.slice(qIdx + 1)) : new URLSearchParams();
+      const statusParam = params.get('status');
+      const searchParam = (params.get('search') || '').trim().toLowerCase();
+
+      let filtered = mergedAll;
+      if (statusParam && statusParam !== 'ALL') {
+        filtered = filtered.filter(k => (k.status || 'ACTIVE') === statusParam.toUpperCase());
+      }
+      if (searchParam) {
+        filtered = filtered.filter(
+          k =>
+            String(k.keyCode || '').toLowerCase().includes(searchParam) ||
+            String(k.productName || '').toLowerCase().includes(searchParam) ||
+            String(k.durationLabel || '').toLowerCase().includes(searchParam)
+        );
+      }
+      data.keys = filtered;
     } else if (endpoint.startsWith('/admin/keys') && method === 'GET' && Array.isArray(data.keys)) {
-      saveCachedKeys(data.keys);
+      saveCachedKeys(data.keys, false);
     } else if (endpoint.startsWith('/admin/users') && method === 'GET' && Array.isArray(data.users)) {
       saveCachedUsers(data.users);
     } else if (endpoint.includes('/admin/settings/gateway') && data.config) {
@@ -537,14 +640,35 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           }
         } catch {}
       }
-      if (data.deliveredKey || data.key) {
-        const newK = data.deliveredKey || data.key;
-        if (newK && newK.id) {
-          const currentKeys = getCachedKeys();
-          if (!currentKeys.some((k: any) => k.id === newK.id)) {
-            saveCachedKeys([newK, ...currentKeys]);
-          }
-        }
+      const rawDeliveredList = Array.isArray(data.deliveredKeys) && data.deliveredKeys.length > 0
+        ? data.deliveredKeys
+        : [data.deliveredKey || data.key].filter(Boolean);
+
+      if (rawDeliveredList.length > 0) {
+        const nowIso = new Date().toISOString();
+        const normalizedNewKeys = rawDeliveredList.map((nk: any, idx: number) => ({
+          id: nk.id || `KEY-WEB-${Date.now()}-${idx}`,
+          keyCode: nk.keyCode || '',
+          productId: nk.productId || data.order?.productId || '',
+          variantId: nk.variantId || data.order?.variantId || '',
+          productName: nk.productName || data.order?.productName || 'VIP Gaming Panel',
+          gameName: nk.gameName || 'FREEFIRE',
+          durationLabel: nk.durationLabel || data.order?.durationLabel || '1 Day',
+          assignedUserId: nk.assignedUserId || storedUser?.id || 'USR-KALAM-172010',
+          assignedUserEmail: nk.assignedUserEmail || (storedUser?.email ? String(storedUser.email).toLowerCase() : undefined),
+          assignedApiKey: nk.assignedApiKey || storedUser?.apiKey,
+          assignedOrderId: nk.assignedOrderId || data.order?.id || `ORD-${Date.now()}`,
+          assignedAt: nk.assignedAt || nowIso,
+          expiresAt: nk.expiresAt || new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+          status: nk.status || 'ACTIVE',
+          isUsed: Boolean(nk.isUsed),
+          purchaseSource: 'WEB',
+          purchaseSourceLabel: 'Buy from Website',
+          createdAt: nk.createdAt || nowIso,
+        }));
+        const currentKeys = getCachedKeys();
+        const newIds = new Set(normalizedNewKeys.map((k: any) => k.id));
+        saveCachedKeys([...normalizedNewKeys, ...currentKeys.filter((k: any) => !newIds.has(k.id))], true);
       }
     } else if ((endpoint.includes('/reseller/buy') || endpoint.includes('reseller_v1.php')) && data && (data.status === true || data.success === true)) {
       if (typeof data.remaining_balance === 'number' && storedUser) {
@@ -1640,25 +1764,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
 
     if (endpoint.startsWith('/keys') && method === 'GET') {
-      const userEmail = (storedUser?.email || '').trim().toLowerCase();
-      const userApiKey = (storedUser?.apiKey || localStorage.getItem('nexa_user_outbound_api_key') || '').trim();
-      const allKeys = getCachedKeys().filter(
-        k =>
-          !storedUser?.id ||
-          k.assignedUserId === storedUser.id ||
-          (userEmail && (k.assignedUserEmail || '').trim().toLowerCase() === userEmail) ||
-          (userApiKey && (k.assignedApiKey || '').trim() === userApiKey)
-      );
+      const allKeys = getUserCachedKeys();
       return {
-        keys: allKeys.map(k => ({
-          ...k,
-          purchaseSource: k.purchaseSource || (String(k.assignedOrderId || '').startsWith('API-ORD-') ? 'API' : 'WEB'),
-          purchaseSourceLabel:
-            k.purchaseSourceLabel ||
-            (k.purchaseSource === 'API' || String(k.assignedOrderId || '').startsWith('API-ORD-')
-              ? 'Buy from API'
-              : 'Buy from Website'),
-        })),
+        keys: allKeys,
       } as unknown as T;
     }
 
@@ -2047,11 +2155,15 @@ export const api = {
   getProduct: (id: string) => request<{ product: any }>(`/products/${id}`),
 
   // Orders & Purchasing
-  createOrder: (variantId: string, androidId?: string, quantity?: number) =>
-    request<any>('/orders', { method: 'POST', body: JSON.stringify({ variantId, androidId, quantity }) }),
+  createOrder: (variantId: string, androidId?: string, quantity?: number, meta?: Record<string, any>) =>
+    request<any>('/orders', {
+      method: 'POST',
+      body: JSON.stringify({ variantId, androidId, quantity, ...(meta || {}) }),
+    }),
   getOrders: () => request<{ orders: any[] }>('/orders'),
 
   // User Keys
+  getCachedKeysSync: () => getUserCachedKeys(),
   getKeys: (status?: string, search?: string) => {
     const params = new URLSearchParams();
     if (status) params.append('status', status);

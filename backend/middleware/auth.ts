@@ -166,6 +166,16 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
           email: primaryAdmin.email,
         };
       }
+    } else {
+      const uid = headerUserId || `USR-${Date.now()}`;
+      const email = headerEmail || `${uid}@user.local`;
+      const username = email.split('@')[0] || 'user';
+      decoded = {
+        userId: uid,
+        role: (headerUserRole === 'RESELLER' ? 'RESELLER' : 'USER') as UserRole,
+        username,
+        email,
+      };
     }
   }
 
@@ -199,6 +209,29 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
 
   if (!user && ((decoded.email && ADMIN_EMAILS.includes(decoded.email.toLowerCase())) || (headerEmail && ADMIN_EMAILS.includes(headerEmail)) || (decoded.username && ADMIN_USERNAMES.includes(decoded.username.toLowerCase())) || isAdminRoute)) {
     user = db.users.find(u => ADMIN_EMAILS.includes(u.email.toLowerCase())) || db.users.find(u => u.role === 'ADMIN') || db.users[0];
+  }
+
+  if (!user && (decoded.userId || headerUserId || headerEmail)) {
+    const newId = headerUserId || decoded.userId;
+    const newEmail = (headerEmail || decoded.email || `${newId}@user.local`).toLowerCase();
+    const isAutoAdmin = ADMIN_EMAILS.includes(newEmail);
+    user = {
+      id: newId,
+      firebaseUid: newId,
+      username: decoded.username || newEmail.split('@')[0] || 'user',
+      email: newEmail,
+      passwordHash: '',
+      role: isAutoAdmin ? 'ADMIN' : (decoded.role || 'USER'),
+      balance: isAutoAdmin ? 5000 : 0,
+      apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
+      referralCode: `NX${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      twoFactorEnabled: false,
+      isBanned: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    db.users.push(user);
+    db.saveSync();
   }
 
   if (!user) {

@@ -69,6 +69,7 @@ import { useAuth } from '../context/AuthContext.js';
 import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase.js';
 import { AdminStats, Product, ProductVariant, SiteCustomizationConfig } from '../types/index.js';
+import { PremiumLoadingModal } from '../components/PremiumLoader.js';
 
 const ALBUM_PRESETS = [
   {
@@ -310,6 +311,7 @@ export const AdminPage: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [isEditingProduct, setIsEditingProduct] = useState(false);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
 
   // New Product Form
   const [newProdName, setNewProdName] = useState('');
@@ -1635,6 +1637,7 @@ export const AdminPage: React.FC = () => {
       showToastError('Validation Error', 'Please enter a product title.');
       return;
     }
+    setIsSubmittingProduct(true);
     try {
       const feats = newProdFeatures
         .split(',')
@@ -1709,6 +1712,8 @@ export const AdminPage: React.FC = () => {
       setNewProdMaintenanceNotice('');
     } catch (err: any) {
       showToastError('Creation failed', err.message);
+    } finally {
+      setIsSubmittingProduct(false);
     }
   };
 
@@ -2809,6 +2814,18 @@ export const AdminPage: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-24 md:pb-12 max-w-6xl mx-auto">
+      <PremiumLoadingModal
+        isOpen={isSubmittingProduct || isDeletingLoading || isBatchCreating}
+        title={
+          isSubmittingProduct
+            ? 'Publishing New Product Panel...'
+            : isDeletingLoading
+            ? 'Removing Catalog Item...'
+            : 'Configuring Duration Pricing...'
+        }
+        subtitle="Synchronizing real-time product catalog across store, database, and cloud."
+        badgeText="ADMIN LIVE SYNC"
+      />
       {/* Admin Top Header with Custom Branding */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-3xl bg-gradient-to-r from-rose-950/40 via-[#0d0d14] to-[#0a0a0f] border border-rose-500/40 shadow-2xl">
         <div className="flex items-center gap-3">
