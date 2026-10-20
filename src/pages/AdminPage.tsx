@@ -1442,14 +1442,46 @@ export const AdminPage: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  // Update User Role
+  // Update User Role with instant optimistic UI, direct Firestore sync, and event broadcast
   const handleUpdateRole = async (userId: string, newRole: string) => {
+    const targetUser = users.find(u => u.id === userId);
+    // 1. Optimistic instant local state update
+    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, role: newRole as any } : u)));
+
+    // 2. Direct real-time Firestore sync across all linked user IDs
+    try {
+      const candidateIds = new Set<string>([userId]);
+      if (targetUser?.email && targetUser.email.toLowerCase() === 'kalam172010@gmail.com') {
+        candidateIds.add('USR-KALAM-172010');
+        candidateIds.add('tnqy7LYfgwgzYpoQGqljC4H6bKc2');
+      }
+      if ((targetUser as any)?.firebaseUid) {
+        candidateIds.add((targetUser as any).firebaseUid);
+      }
+      for (const cid of candidateIds) {
+        setDoc(doc(db, 'users', cid), { role: newRole, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+      }
+    } catch (fsErr) {
+      console.warn('Real-time Firestore user role sync notice:', fsErr);
+    }
+
+    // 3. Broadcast real-time role change event across active tabs
+    try {
+      window.dispatchEvent(
+        new CustomEvent('nexa_user_role_updated', {
+          detail: { userId, email: targetUser?.email, role: newRole },
+        })
+      );
+    } catch {}
+
+    // 4. Update backend and cache
     try {
       await api.updateUserRole(userId, newRole);
-      showToastSuccess('User Role Updated');
+      showToastSuccess('User Role Updated', `Role updated to ${newRole}`);
       loadAllAdminData();
     } catch (err: any) {
       showToastError('Failed to update role', err.message);
+      loadAllAdminData();
     }
   };
 

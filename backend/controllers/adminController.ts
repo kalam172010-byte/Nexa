@@ -8,7 +8,7 @@ import { PaymentGatewayAdapter } from '../services/paymentAdapter';
 import { ResellerApiService } from '../services/resellerApi';
 import { emailService } from '../services/emailService';
 import { hashPassword } from '../db/seed';
-import { Product, ProductVariant, DigitalKey, Order } from '../models/types';
+import { User, Product, ProductVariant, DigitalKey, Order } from '../models/types';
 import { FirestoreSyncService } from '../services/firestoreSync';
 
 export class AdminController {
@@ -146,14 +146,29 @@ export class AdminController {
         return;
       }
 
-      const target = db.users.find(u => u.id === id);
+      let target: User | undefined = db.users.find(u => u.id === id || u.firebaseUid === id || (req.body.email && u.email.toLowerCase() === String(req.body.email).toLowerCase()));
       if (!target) {
-        res.status(404).json({ error: 'User not found.' });
-        return;
+        target = {
+          id,
+          firebaseUid: id,
+          username: req.body.username || (req.body.email ? String(req.body.email).split('@')[0] : 'user'),
+          email: req.body.email || `${id}@user.local`,
+          passwordHash: '',
+          role,
+          balance: 0,
+          apiKey: `nexa_live_${crypto.randomBytes(16).toString('hex')}`,
+          referralCode: `NX${id.slice(0, 4).toUpperCase()}`,
+          twoFactorEnabled: false,
+          isBanned: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        db.users.push(target);
+      } else {
+        target.role = role;
+        target.updatedAt = new Date().toISOString();
       }
 
-      target.role = role;
-      target.updatedAt = new Date().toISOString();
       db.save();
       FirestoreSyncService.syncUserProfile(target).catch(() => {});
 
@@ -283,6 +298,68 @@ export class AdminController {
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update user password.' });
+    }
+  }
+
+  public static async upgradeToReseller(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ error: 'Please log in to upgrade.' });
+        return;
+      }
+
+      const dbUser = db.users.find(u => u.id === user.id || (user.email && u.email.toLowerCase() === user.email.toLowerCase()));
+      if (!dbUser) {
+        res.status(404).json({ error: 'User account not found.' });
+        return;
+      }
+
+      if (dbUser.role === 'RESELLER' || dbUser.role === 'ADMIN' || dbUser.role === 'SUPER ADMIN') {
+        res.json({ message: 'User is already a privileged account.', user: dbUser, newBalance: dbUser.balance });
+        return;
+      }
+
+      const upgradePrice = Number(db.siteConfig?.resellerUpgradePrice || 299);
+      if (dbUser.balance < upgradePrice) {
+        res.status(400).json({
+          error: `Insufficient balance. Required: ₹${upgradePrice.toFixed(2)}, Available: ₹${dbUser.balance.toFixed(2)}. Please add funds.`,
+        });
+        return;
+      }
+
+      dbUser.balance = Number((dbUser.balance - upgradePrice).toFixed(2));
+      dbUser.role = 'RESELLER';
+      if (!dbUser.apiKey) {
+        dbUser.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
+      }
+      dbUser.updatedAt = new Date().toISOString();
+
+      db.transactions.unshift({
+        id: `TXN-UPGRADE-${Date.now()}`,
+        userId: dbUser.id,
+        userEmail: dbUser.email,
+        apiKey: dbUser.apiKey,
+        type: 'PURCHASE',
+        amount: -upgradePrice,
+        description: 'Upgraded account to Wholesale Reseller Tier',
+        status: 'SUCCESS',
+        createdAt: new Date().toISOString(),
+      });
+
+      db.saveSync();
+      FirestoreSyncService.syncUserProfile(dbUser).catch(() => {});
+
+      db.logActivity(dbUser.id, dbUser.username, 'RESELLER_UPGRADE', `Upgraded to Reseller. Balance deducted: ₹${upgradePrice}`);
+
+      res.json({
+        success: true,
+        message: 'Successfully upgraded to Wholesale Reseller tier!',
+        newBalance: dbUser.balance,
+        user: dbUser,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to upgrade to reseller tier.' });
     }
   }
 
@@ -1149,52 +1226,6 @@ export class AdminController {
       res.json({ logs: db.activityLogs });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to fetch logs.' });
-    }
-  }
-
-  // Reseller Upgrade handler for standard users
-  public static async upgradeToReseller(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      const user = req.user;
-      if (!user) {
-        res.status(401).json({ error: 'Not authenticated.' });
-        return;
-      }
-
-      if (user.role === 'RESELLER' || user.role === 'ADMIN' || user.role === 'SUPER ADMIN') {
-        res.status(400).json({ error: `Your account already holds ${user.role} privileges.` });
-        return;
-      }
-
-      const upgradePrice = db.siteConfig.resellerUpgradePrice || 299.0;
-      if (user.balance < upgradePrice) {
-        res.status(400).json({
-          error: `Insufficient balance for Reseller Upgrade. Requires ${db.siteConfig.currencySymbol || '₹'}${upgradePrice.toFixed(2)}, your balance is ${db.siteConfig.currencySymbol || '₹'}${user.balance.toFixed(2)}.`,
-          requiredAmount: upgradePrice,
-          currentBalance: user.balance,
-        });
-        return;
-      }
-
-      WalletService.deductFunds(user.id, upgradePrice, 'VIP Reseller License Upgrade');
-
-      const target = db.users.find(u => u.id === user.id);
-      if (target) {
-        target.role = 'RESELLER';
-        target.updatedAt = new Date().toISOString();
-        db.save();
-      }
-
-      db.logActivity(user.id, user.username, 'RESELLER_UPGRADE', 'Upgraded account to RESELLER status');
-
-      res.json({
-        success: true,
-        message: 'Congratulations! Your account has been upgraded to RESELLER status.',
-        role: 'RESELLER',
-        newBalance: WalletService.getBalance(user.id),
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Upgrade failed.' });
     }
   }
 

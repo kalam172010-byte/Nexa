@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { User, Product, ProductVariant, DigitalKey, Order, Transaction } from '../models/types';
+import { User, UserRole, Product, ProductVariant, DigitalKey, Order, Transaction } from '../models/types';
 import { db } from '../db/database';
 
 const PROJECT_ID = firebaseConfig.projectId || 'kalam-panel';
@@ -998,6 +998,38 @@ export class FirestoreSyncService {
     }
 
     return Math.max(0, Math.round((user.balance || 0) * 100) / 100);
+  }
+
+  /**
+   * Fetch the authoritative user role across all linked Firestore user documents
+   */
+  public static async getAuthoritativeRole(user: User): Promise<UserRole | null> {
+    const candidateIds = this.getLinkedUserIds(user);
+    const roleRank: Record<string, number> = {
+      'SUPER ADMIN': 4,
+      ADMIN: 3,
+      RESELLER: 2,
+      USER: 1,
+    };
+    let highestRole: UserRole = user.role || 'USER';
+
+    await Promise.all(
+      candidateIds.map(async cid => {
+        try {
+          const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(cid)}?key=${API_KEY}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const docData: any = await res.json();
+            const r = docData?.fields?.role?.stringValue as UserRole | undefined;
+            if (r && (roleRank[r] || 1) > (roleRank[highestRole] || 1)) {
+              highestRole = r;
+            }
+          }
+        } catch {}
+      })
+    );
+
+    return highestRole;
   }
 
   private static buildFullUserFields(docId: string, user: User | undefined, balanceOverride?: number, apiKeyOverride?: string) {

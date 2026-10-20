@@ -463,6 +463,13 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
                 : Number(uData.fields.balance.doubleValue || 0);
             if (!Number.isNaN(fsBal)) bals.push(fsBal);
           }
+          if (uData?.fields?.role?.stringValue) {
+            const fsRole = uData.fields.role.stringValue;
+            const roleRank: Record<string, number> = { 'SUPER ADMIN': 4, ADMIN: 3, RESELLER: 2, USER: 1 };
+            if ((roleRank[fsRole] || 1) > (roleRank[user.role] || 1)) {
+              user.role = fsRole as any;
+            }
+          }
         }
       }
       if (bals.length > 0) {
@@ -1415,12 +1422,91 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
 
   if (path.startsWith('/api/admin/users/') && path.endsWith('/role') && (method === 'PATCH' || method === 'PUT')) {
     const userId = path.split('/api/admin/users/')[1].replace('/role', '');
-    const target = edgeDb.users.find(u => u.id === userId);
-    if (target && bodyData.role) {
-      target.role = bodyData.role;
+    let target = edgeDb.users.find(u => u.id === userId || (u.email && bodyData.email && u.email.toLowerCase() === String(bodyData.email).toLowerCase()));
+    if (!target && bodyData.role) {
+      const newUser: EdgeUser = {
+        id: userId,
+        username: bodyData.username || (bodyData.email ? String(bodyData.email).split('@')[0] : 'user'),
+        email: bodyData.email || `${userId}@user.local`,
+        role: bodyData.role as any,
+        balance: 0,
+        apiKey: `nexa_live_${generateRandomHex(24)}`,
+        referralCode: `NX${userId.slice(0, 4).toUpperCase()}`,
+        twoFactorEnabled: false,
+        isBanned: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      edgeDb.users.push(newUser);
+      target = newUser;
+    } else if (target && bodyData.role) {
+      target.role = bodyData.role as any;
       target.updatedAt = new Date().toISOString();
     }
-    return jsonResponse({ message: 'User role updated.', user: target });
+
+    try {
+      const email = (target?.email || bodyData.email || '').toLowerCase();
+      const linkedIds =
+        email === 'kalam172010@gmail.com'
+          ? Array.from(new Set([userId, target?.id || userId, 'USR-KALAM-172010', 'tnqy7LYfgwgzYpoQGqljC4H6bKc2']))
+          : Array.from(new Set([userId, target?.id || userId]));
+
+      for (const lid of linkedIds) {
+        const uDocUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(lid)}?updateMask.fieldPaths=role&updateMask.fieldPaths=updatedAt&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+        fetch(uDocUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              role: { stringValue: bodyData.role },
+              updatedAt: { stringValue: new Date().toISOString() },
+            },
+          }),
+        }).catch(() => {});
+      }
+    } catch {}
+
+    return jsonResponse({ message: 'User role updated.', user: target || { id: userId, role: bodyData.role } });
+  }
+
+  // 8B. Reseller Tier Upgrade (/api/wallet/upgrade-reseller)
+  if (path === '/api/wallet/upgrade-reseller' && method === 'POST') {
+    const user = resolveUserFromRequest(request, bodyData);
+    const upgradePrice = 299;
+    if (user.role === 'RESELLER' || user.role === 'ADMIN' || user.role === 'SUPER ADMIN') {
+      return jsonResponse({ message: 'User is already a privileged account.', user, newBalance: user.balance });
+    }
+    if ((user.balance || 0) < upgradePrice) {
+      return jsonResponse(
+        { error: `Insufficient balance. Required: ₹${upgradePrice}, Available: ₹${user.balance}. Please add funds.` },
+        400
+      );
+    }
+    user.balance = Number(((user.balance || 0) - upgradePrice).toFixed(2));
+    user.role = 'RESELLER';
+    user.updatedAt = new Date().toISOString();
+
+    try {
+      const uDocUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users/${encodeURIComponent(user.id)}?updateMask.fieldPaths=role&updateMask.fieldPaths=balance&updateMask.fieldPaths=updatedAt&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      fetch(uDocUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            role: { stringValue: 'RESELLER' },
+            balance: { doubleValue: user.balance },
+            updatedAt: { stringValue: new Date().toISOString() },
+          },
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    return jsonResponse({
+      success: true,
+      message: 'Successfully upgraded to Wholesale Reseller tier!',
+      newBalance: user.balance,
+      user,
+    });
   }
 
   // 9. Admin Orders & Keys (/api/admin/orders, /api/admin/keys, /api/admin/settings/reseller)

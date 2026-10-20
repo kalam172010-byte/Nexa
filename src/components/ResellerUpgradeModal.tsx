@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext.js';
 import { useSite } from '../context/SiteContext.js';
 import { api } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase.js';
 
 interface ResellerUpgradeModalProps {
   onClose: () => void;
@@ -16,7 +18,7 @@ export const ResellerUpgradeModal: React.FC<ResellerUpgradeModalProps> = ({
   onSuccess,
   onNavigateDeposit,
 }) => {
-  const { balance, updateBalanceLocally, refreshUser } = useAuth();
+  const { user, balance, updateBalanceLocally, refreshUser } = useAuth();
   const { siteConfig } = useSite();
   const { success: showToastSuccess, error: showToastError } = useToast();
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -43,6 +45,29 @@ export const ResellerUpgradeModal: React.FC<ResellerUpgradeModalProps> = ({
     try {
       const res = await api.upgradeToReseller();
       updateBalanceLocally(res.newBalance);
+
+      // Real-time Firestore sync for the upgraded reseller role
+      if (user?.id) {
+        try {
+          const candidateIds = [user.id];
+          if ((user.email || '').toLowerCase() === 'kalam172010@gmail.com') {
+            candidateIds.push('USR-KALAM-172010', 'tnqy7LYfgwgzYpoQGqljC4H6bKc2');
+          }
+          for (const cid of candidateIds) {
+            setDoc(doc(db, 'users', cid), { role: 'RESELLER', balance: res.newBalance, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+          }
+        } catch {}
+      }
+
+      // Dispatch real-time user role change event across active windows
+      try {
+        window.dispatchEvent(
+          new CustomEvent('nexa_user_role_updated', {
+            detail: { userId: user?.id, email: user?.email, role: 'RESELLER' },
+          })
+        );
+      } catch {}
+
       await refreshUser();
       showToastSuccess('Upgraded to Reseller', 'Wholesale reseller capabilities are now active.');
       onSuccess();

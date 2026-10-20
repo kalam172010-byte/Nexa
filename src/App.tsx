@@ -162,7 +162,7 @@ const MainLayout: React.FC = () => {
 
   // Redirect to dashboard immediately whenever user becomes authenticated
   useEffect(() => {
-    if (user && currentPage === 'auth') {
+    if (user && (currentPage === 'auth' || window.location.hash === '#auth')) {
       setCurrentPage('dashboard');
       if (window.location.hash === '#auth') {
         window.location.hash = 'dashboard';
@@ -194,6 +194,9 @@ const MainLayout: React.FC = () => {
         onSuccess={() => {
           console.log('[MainLayout] AuthPage onSuccess callback invoked. Setting active page to dashboard...');
           setCurrentPage('dashboard');
+          if (window.location.hash === '#auth') {
+            window.location.hash = 'dashboard';
+          }
         }}
       />
     );

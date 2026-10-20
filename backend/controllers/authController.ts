@@ -316,11 +316,15 @@ export class AuthController {
         user.firebaseUid = uid;
         user.updatedAt = new Date().toISOString();
 
-        // Sync balance from Firestore if Firestore has a record for this user
+        // Sync balance and role from Firestore if Firestore has a record for this user
         try {
           const liveBal = await FirestoreSyncService.getAuthoritativeBalance(user);
           if (typeof liveBal === 'number' && !Number.isNaN(liveBal)) {
             user.balance = liveBal;
+          }
+          const liveRole = await FirestoreSyncService.getAuthoritativeRole(user);
+          if (liveRole) {
+            user.role = liveRole;
           }
         } catch {}
 

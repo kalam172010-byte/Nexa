@@ -1880,6 +1880,80 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       return { token: 'mock-token-cloudflare-static', user } as unknown as T;
     }
 
+    if (endpoint.includes('/auth/firebase-sync') || endpoint.includes('/auth/token-refresh')) {
+      const uid = bodyObj.uid || bodyObj.userId || (storedUser ? storedUser.id : `fb_${Date.now()}`);
+      const rawEmail = bodyObj.email || (storedUser ? storedUser.email : `${uid}@firebase.user`);
+      const email = String(rawEmail).toLowerCase().trim();
+      const username = bodyObj.displayName || bodyObj.username || email.split('@')[0] || 'user';
+      const isAdmin =
+        email === 'kk7953926@gmail.com' ||
+        email === 'kalam172010@gmail.com' ||
+        email === 'kalamkalam1234kd@gmail.com' ||
+        email === 'admin@example.com' ||
+        username === 'kalam' ||
+        username === 'admin';
+
+      const cachedUsers = getCachedUsers();
+      const existingUser = cachedUsers.find(u => u.id === uid || (u.email && u.email.toLowerCase() === email));
+
+      const user = existingUser || {
+        id: uid,
+        username,
+        email,
+        role: isAdmin ? 'ADMIN' : (storedUser?.role || 'USER'),
+        balance: isAdmin ? 5000.0 : (storedUser?.balance || 0.0),
+        apiKey: `nexa_live_${uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}`,
+        referralCode: `REF_${uid.slice(0, 6).toUpperCase()}`,
+        twoFactorEnabled: false,
+        isBanned: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (isAdmin && user.role !== 'ADMIN' && user.role !== 'SUPER ADMIN') {
+        user.role = 'ADMIN';
+      }
+
+      try {
+        localStorage.setItem('nexa_user_data', JSON.stringify(user));
+        localStorage.setItem('nexa_auth_token', `edge_jwt_${uid}_${Date.now()}`);
+      } catch {}
+
+      return {
+        success: true,
+        message: 'Firebase sync completed successfully.',
+        token: `edge_jwt_${uid}_${Date.now()}`,
+        user,
+      } as unknown as T;
+    }
+
+    if (endpoint.includes('/wallet/upgrade-reseller') && method === 'POST') {
+      const currentBal = Number(storedUser?.balance || 0);
+      const upgradePrice = 299;
+      if (currentBal < upgradePrice) {
+        throw new ApiError(`Insufficient balance. Required: ₹${upgradePrice}, Available: ₹${currentBal}. Please add funds.`, 400);
+      }
+      const newBal = Number((currentBal - upgradePrice).toFixed(2));
+      if (storedUser) {
+        storedUser.balance = newBal;
+        storedUser.role = 'RESELLER';
+        try {
+          localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+        } catch {}
+      }
+      const users = getCachedUsers().map(u => (u.id === storedUser?.id ? { ...u, balance: newBal, role: 'RESELLER' as any } : u));
+      saveCachedUsers(users);
+      try {
+        window.dispatchEvent(new CustomEvent('nexa_user_role_updated', { detail: { userId: storedUser?.id, role: 'RESELLER' } }));
+      } catch {}
+      return {
+        success: true,
+        message: 'Successfully upgraded to Wholesale Reseller tier!',
+        newBalance: newBal,
+        user: storedUser,
+      } as unknown as T;
+    }
+
     if (endpoint.includes('/site-settings') || endpoint.includes('/admin/settings/site')) {
       if (method === 'PATCH') {
         const currentRaw = localStorage.getItem('nexa_site_customization');
@@ -1989,8 +2063,16 @@ export const api = {
     if (search) params.append('search', search);
     return request<{ users: any[] }>(`/admin/users?${params.toString()}`);
   },
-  updateUserRole: (id: string, role: string) =>
-    request<any>(`/admin/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  updateUserRole: (id: string, role: string, email?: string) => {
+    let targetEmail = email;
+    if (!targetEmail) {
+      try {
+        const cached = getCachedUsers().find(u => u.id === id);
+        if (cached?.email) targetEmail = cached.email;
+      } catch {}
+    }
+    return request<any>(`/admin/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role, email: targetEmail }) });
+  },
   adjustUserBalance: (id: string, amount: number, reason: string) =>
     request<any>(`/admin/users/${id}/adjust-balance`, { method: 'POST', body: JSON.stringify({ amount, reason }) }),
   toggleUserBan: (id: string) => request<any>(`/admin/users/${id}/ban`, { method: 'PATCH' }),
