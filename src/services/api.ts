@@ -1701,7 +1701,17 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const userId = endpoint.replace('/admin/users/', '').replace('/role', '');
       const users = getCachedUsers().map(u => (u.id === userId ? { ...u, role: bodyObj.role } : u));
       saveCachedUsers(users);
-      return { message: `Role updated to ${bodyObj.role}.` } as unknown as T;
+      if (storedUser && (storedUser.id === userId || (storedUser.email && users.find(u => u.id === userId)?.email?.toLowerCase() === storedUser.email.toLowerCase()))) {
+        storedUser.role = bodyObj.role;
+        try {
+          localStorage.setItem('nexa_user_data', JSON.stringify(storedUser));
+        } catch {}
+      }
+      try {
+        window.dispatchEvent(new CustomEvent('nexa_user_role_updated', { detail: { userId, role: bodyObj.role } }));
+        window.dispatchEvent(new Event('storage'));
+      } catch {}
+      return { message: `Role updated to ${bodyObj.role}.`, user: { id: userId, role: bodyObj.role } } as unknown as T;
     }
 
     if (endpoint.startsWith('/admin/users/') && endpoint.endsWith('/adjust-balance') && method === 'POST') {

@@ -1065,6 +1065,48 @@ export class FirestoreSyncService {
   }
 
   /**
+   * Sync complete user profile (role, balance, status, apiKey) to Firestore across ALL linked document IDs AND push to Edge Worker
+   */
+  public static async syncUserProfile(user: User): Promise<void> {
+    try {
+      const userIdsToSync = new Set<string>(this.getLinkedUserIds(user, user.id));
+
+      await Promise.all(
+        Array.from(userIdsToSync).map(async id => {
+          const patchUrl = `${FIRESTORE_BASE}/users/${encodeURIComponent(id)}?key=${API_KEY}`;
+          await fetch(patchUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: this.buildFullUserFields(id, user, user.balance, user.apiKey),
+            }),
+          }).catch(() => {});
+        })
+      );
+
+      const payloadUsers = Array.from(userIdsToSync).map(id => ({
+        id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        balance: user.balance,
+        apiKey: user.apiKey,
+        referralCode: user.referralCode,
+        twoFactorEnabled: user.twoFactorEnabled,
+        isBanned: user.isBanned,
+      }));
+
+      fetch(EDGE_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: payloadUsers, forceBalanceSync: true }),
+      }).catch(() => {});
+    } catch (err) {
+      console.warn('[FirestoreSync] Failed to sync user profile to Firestore:', err);
+    }
+  }
+
+  /**
    * Sync newly purchased digital key directly into Firestore digitalKeys collection with full details
    */
   public static async syncDigitalKey(key: DigitalKey): Promise<void> {

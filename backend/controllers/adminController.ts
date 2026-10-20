@@ -155,6 +155,7 @@ export class AdminController {
       target.role = role;
       target.updatedAt = new Date().toISOString();
       db.save();
+      FirestoreSyncService.syncUserProfile(target).catch(() => {});
 
       db.logActivity(req.user?.id, req.user?.username, 'ADMIN_ROLE_CHANGE', `Updated role of ${target.username} to ${role}`);
       res.json({ message: `Role updated to ${role} successfully.`, user: target });

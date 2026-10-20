@@ -160,6 +160,16 @@ const MainLayout: React.FC = () => {
     };
   }, []);
 
+  // Redirect to dashboard immediately whenever user becomes authenticated
+  useEffect(() => {
+    if (user && currentPage === 'auth') {
+      setCurrentPage('dashboard');
+      if (window.location.hash === '#auth') {
+        window.location.hash = 'dashboard';
+      }
+    }
+  }, [user, currentPage]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#07080e] flex flex-col items-center justify-center space-y-3">

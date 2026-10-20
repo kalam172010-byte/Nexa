@@ -278,18 +278,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Listen to Firebase auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async firebaseUser => {
-      const isExplicitlyLoggedOut = localStorage.getItem('nexa_logged_out') === 'true';
-      if (isExplicitlyLoggedOut) {
-        clearUserSession();
-        setIsLoading(false);
-        return;
-      }
-
       console.log(
         '[AuthContext] onAuthStateChanged listener triggered. Firebase User:',
         firebaseUser ? `${firebaseUser.uid} (${firebaseUser.email || 'no-email'})` : 'null'
       );
       if (firebaseUser) {
+        localStorage.removeItem('nexa_logged_out');
         try {
           console.log('[AuthContext] Syncing user session for Firebase UID:', firebaseUser.uid);
           await syncUserWithBackend(firebaseUser);
@@ -310,6 +304,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       } else {
+        const isExplicitlyLoggedOut = localStorage.getItem('nexa_logged_out') === 'true';
         // If no Firebase user, check if we have a valid cached session (e.g., username/password or static host)
         const storedToken = localStorage.getItem('nexa_auth_token');
         const storedUserData = localStorage.getItem('nexa_user_data');
@@ -505,6 +500,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Google Login via Firebase Popup (with automatic fallback to Redirect on mobile/blocked popups)
   const loginWithGoogle = async () => {
     setIsLoading(true);
+    try {
+      localStorage.removeItem('nexa_logged_out');
+    } catch {}
     console.log('[AuthContext] loginWithGoogle triggered...');
     try {
       let result;
@@ -543,6 +541,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Direct secure application login (Supports username or email + password)
   const login = async (usernameOrEmail: string, password: string) => {
     setIsLoading(true);
+    try {
+      localStorage.removeItem('nexa_logged_out');
+    } catch {}
     try {
       const res = await api.login({ usernameOrEmail: usernameOrEmail.trim(), password });
       saveUserSession(res.user, res.token);
