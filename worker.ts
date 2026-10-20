@@ -1468,8 +1468,202 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     }
   }
 
-  // 10. Public Products Fallback
+  // 10. Public Products & Admin Product Management
+  if (path === '/api/admin/products' && method === 'POST') {
+    const newProdId = bodyData.id || `PROD-${Date.now().toString().slice(-6)}-${Math.floor(10 + Math.random() * 89)}`;
+    const cleanPid = bodyData.externalPid?.trim() || undefined;
+    const defaultDurations = Array.isArray(bodyData.initialDurations)
+      ? bodyData.initialDurations
+      : [
+          { label: '1 Day', hours: 24, price: 50, resellerPrice: 38, extDur: '1 DAYS' },
+          { label: '3 Days', hours: 72, price: 120, resellerPrice: 90, extDur: '3 DAYS' },
+          { label: '7 Days', hours: 168, price: 250, resellerPrice: 190, extDur: '7 DAYS' },
+          { label: '30 Days', hours: 720, price: 600, resellerPrice: 450, extDur: '30 DAYS' },
+        ];
+
+    const initialVariants = defaultDurations.map((d: any, idx: number) => ({
+      id: `VAR-${Date.now().toString().slice(-5)}-${idx}-${Math.floor(10 + Math.random() * 89)}`,
+      productId: newProdId,
+      durationLabel: String(d.label || d.durationLabel || '1 Day').trim(),
+      durationHours: Number(d.hours || d.durationHours) || 24,
+      price: Number(d.price) || 50,
+      resellerPrice: Number(d.resellerPrice) || Math.round((Number(d.price) || 50) * 0.75),
+      stockCount: cleanPid ? 999 : 15,
+      externalPid: d.externalPid?.trim() || cleanPid,
+      externalDuration: String(d.extDur || d.externalDuration || d.label || '1 DAYS').trim(),
+      isActive: true,
+      isAvailable: true,
+    }));
+
+    const newProduct = {
+      id: newProdId,
+      name: String(bodyData.name || 'New Gaming Panel').trim(),
+      game: String(bodyData.game || bodyData.category || 'FREEFIRE').trim(),
+      category: String(bodyData.category || 'FREEFIRE').trim(),
+      deviceType: String(bodyData.deviceType || 'NONROOT').trim(),
+      description: String(bodyData.description || '').trim(),
+      badge: bodyData.badge?.trim() || 'STAR',
+      imageUrl: bodyData.imageUrl || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
+      features: Array.isArray(bodyData.features) ? bodyData.features : ['Auto Headshot', 'Location Pinpoint', 'Anti-Ban'],
+      updateFileUrl: bodyData.updateFileUrl?.trim() || undefined,
+      videoUrl: bodyData.videoUrl?.trim() || undefined,
+      externalPid: cleanPid,
+      isActive: true,
+      isUnderMaintenance: Boolean(bodyData.isUnderMaintenance),
+      maintenanceNotice: bodyData.maintenanceNotice?.trim() || undefined,
+      createdAt: new Date().toISOString(),
+      variants: initialVariants,
+    };
+
+    edgeDb.products = [newProduct, ...edgeDb.products.filter((p: any) => p.id !== newProdId)];
+
+    try {
+      const fsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/products/${encodeURIComponent(newProdId)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      await fetch(fsUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            id: { stringValue: newProduct.id },
+            name: { stringValue: newProduct.name },
+            game: { stringValue: newProduct.game },
+            description: { stringValue: newProduct.description },
+            category: { stringValue: newProduct.category },
+            badge: { stringValue: newProduct.badge || '' },
+            imageUrl: { stringValue: newProduct.imageUrl || '' },
+            deviceType: { stringValue: newProduct.deviceType || 'NONROOT' },
+            externalPid: { stringValue: newProduct.externalPid || '' },
+            isActive: { booleanValue: true },
+            isUnderMaintenance: { booleanValue: newProduct.isUnderMaintenance },
+            createdAt: { stringValue: newProduct.createdAt },
+          },
+        }),
+      }).catch(() => {});
+
+      for (const v of initialVariants) {
+        const vUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/productVariants/${encodeURIComponent(v.id)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+        await fetch(vUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              id: { stringValue: v.id },
+              productId: { stringValue: v.productId },
+              durationLabel: { stringValue: v.durationLabel },
+              durationHours: { doubleValue: v.durationHours },
+              price: { doubleValue: v.price },
+              resellerPrice: { doubleValue: v.resellerPrice },
+              stockCount: { integerValue: String(v.stockCount) },
+              externalPid: { stringValue: v.externalPid || '' },
+              externalDuration: { stringValue: v.externalDuration || '' },
+              isActive: { booleanValue: true },
+            },
+          }),
+        }).catch(() => {});
+      }
+    } catch {}
+
+    return jsonResponse(
+      {
+        message: 'Product created successfully with standard durations.',
+        product: newProduct,
+      },
+      201
+    );
+  }
+
+  if (path.startsWith('/api/admin/products/') && method === 'DELETE') {
+    const delId = path.replace('/api/admin/products/', '').split('/')[0];
+    edgeDb.products = edgeDb.products.filter((p: any) => p.id !== delId);
+    try {
+      const fsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/products/${encodeURIComponent(delId)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      await fetch(fsUrl, { method: 'DELETE' }).catch(() => {});
+    } catch {}
+    return jsonResponse({ message: 'Product deleted permanently.' });
+  }
+
+  // 10B. Public Products Endpoint with Firestore Integration
   if (path === '/api/products') {
+    try {
+      const fsProdsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents:runQuery?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
+      const [pRes, vRes] = await Promise.all([
+        fetch(fsProdsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'products' }], limit: 100 } }),
+        }),
+        fetch(fsProdsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'productVariants' }], limit: 200 } }),
+        }),
+      ]);
+
+      if (pRes.ok) {
+        const pArr: any = await pRes.json();
+        const pDocs = Array.isArray(pArr) ? pArr.map((item: any) => item?.document).filter(Boolean) : [];
+        const vDocsRaw: any = vRes.ok ? await vRes.json() : [];
+        const vDocs = Array.isArray(vDocsRaw) ? vDocsRaw.map((item: any) => item?.document).filter(Boolean) : [];
+
+        const parsedVarsMap = new Map<string, any[]>();
+        for (const vd of vDocs) {
+          const vf = vd.fields || {};
+          const vid = vf.id?.stringValue || (vd.name || '').split('/').pop() || '';
+          const pid = vf.productId?.stringValue || '';
+          if (vid && pid) {
+            const vObj = {
+              id: vid,
+              productId: pid,
+              durationLabel: vf.durationLabel?.stringValue || '1 Day',
+              durationHours: typeof vf.durationHours?.doubleValue === 'number' ? vf.durationHours.doubleValue : parseInt(vf.durationHours?.integerValue || '24', 10),
+              price: typeof vf.price?.doubleValue === 'number' ? vf.price.doubleValue : parseInt(vf.price?.integerValue || '50', 10),
+              resellerPrice: typeof vf.resellerPrice?.doubleValue === 'number' ? vf.resellerPrice.doubleValue : parseInt(vf.resellerPrice?.integerValue || '38', 10),
+              stockCount: typeof vf.stockCount?.integerValue === 'string' ? parseInt(vf.stockCount.integerValue, 10) : Number(vf.stockCount?.doubleValue || 15),
+              externalPid: vf.externalPid?.stringValue,
+              externalDuration: vf.externalDuration?.stringValue,
+              isActive: vf.isActive?.booleanValue !== false,
+            };
+            if (!parsedVarsMap.has(pid)) parsedVarsMap.set(pid, []);
+            parsedVarsMap.get(pid)!.push(vObj);
+          }
+        }
+
+        for (const pd of pDocs) {
+          const pf = pd.fields || {};
+          const pid = pf.id?.stringValue || (pd.name || '').split('/').pop() || '';
+          if (!pid) continue;
+          const pObj = {
+            id: pid,
+            name: pf.name?.stringValue || 'Gaming Panel',
+            game: pf.game?.stringValue || pf.category?.stringValue || 'FREEFIRE',
+            description: pf.description?.stringValue || '',
+            category: pf.category?.stringValue || 'FREEFIRE',
+            badge: pf.badge?.stringValue,
+            imageUrl: pf.imageUrl?.stringValue,
+            deviceType: pf.deviceType?.stringValue,
+            updateFileUrl: pf.updateFileUrl?.stringValue,
+            videoUrl: pf.videoUrl?.stringValue,
+            externalPid: pf.externalPid?.stringValue,
+            isActive: pf.isActive?.booleanValue !== false,
+            isUnderMaintenance: Boolean(pf.isUnderMaintenance?.booleanValue),
+            maintenanceNotice: pf.maintenanceNotice?.stringValue,
+            createdAt: pf.createdAt?.stringValue || new Date().toISOString(),
+            variants: parsedVarsMap.get(pid) || [],
+          };
+          const existingIdx = edgeDb.products.findIndex((p: any) => p.id === pid);
+          if (existingIdx === -1) {
+            edgeDb.products.unshift(pObj);
+          } else {
+            edgeDb.products[existingIdx] = {
+              ...edgeDb.products[existingIdx],
+              ...pObj,
+              variants: (pObj.variants && pObj.variants.length > 0) ? pObj.variants : edgeDb.products[existingIdx].variants,
+            };
+          }
+        }
+      }
+    } catch {}
+
     return jsonResponse({ products: edgeDb.products });
   }
 

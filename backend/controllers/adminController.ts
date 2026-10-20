@@ -376,6 +376,7 @@ export class AdminController {
       }
 
       db.saveSync();
+      FirestoreSyncService.syncProduct(newProduct, initialVariants).catch(() => {});
 
       const responseProduct = {
         ...newProduct,
@@ -432,6 +433,7 @@ export class AdminController {
 
       db.saveSync();
       const variants = db.productVariants.filter(v => v.productId === product.id && v.isActive);
+      FirestoreSyncService.syncProduct(product, variants).catch(() => {});
       res.json({ message: 'Product updated successfully.', product: { ...product, variants } });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update product.' });
@@ -450,6 +452,7 @@ export class AdminController {
       product.externalPid = String(externalPid || '').trim();
       db.saveSync();
       const variants = db.productVariants.filter(v => v.productId === product.id && v.isActive);
+      FirestoreSyncService.syncProduct(product, variants).catch(() => {});
       res.json({ message: 'Product PID updated successfully.', product: { ...product, variants } });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update product PID.' });
@@ -474,6 +477,9 @@ export class AdminController {
         }
       }
       db.saveSync();
+      for (const p of db.products) {
+        FirestoreSyncService.syncProduct(p).catch(() => {});
+      }
       const productsWithVariants = db.products.map(p => ({
         ...p,
         variants: db.productVariants.filter(v => v.productId === p.id && v.isActive),
@@ -506,6 +512,7 @@ export class AdminController {
 
       db.saveSync();
       const variants = db.productVariants.filter(v => v.productId === product.id && v.isActive);
+      FirestoreSyncService.syncProduct(product, variants).catch(() => {});
       res.json({
         message: `Product ${product.name} is now ${product.isUnderMaintenance ? 'Under Maintenance' : 'Active'}.`,
         product: { ...product, variants },
@@ -526,6 +533,7 @@ export class AdminController {
 
       const productName = targetProduct.name;
       db.permanentlyDeleteProduct(id);
+      FirestoreSyncService.deleteProductSync(id).catch(() => {});
 
       db.logActivity(
         req.user?.id,
@@ -592,6 +600,7 @@ export class AdminController {
         newVariant.stockCount = 15;
       }
       db.saveSync();
+      FirestoreSyncService.syncVariant(newVariant).catch(() => {});
 
       res.status(201).json({ message: 'Duration variant created successfully.', variant: newVariant });
     } catch (err: any) {
@@ -618,6 +627,7 @@ export class AdminController {
       if (typeof isActive === 'boolean') variant.isActive = isActive;
 
       db.saveSync();
+      FirestoreSyncService.syncVariant(variant).catch(() => {});
       res.json({ message: 'Duration variant updated successfully.', variant });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update variant.' });
@@ -634,6 +644,7 @@ export class AdminController {
       }
       db.productVariants.splice(index, 1);
       db.saveSync();
+      FirestoreSyncService.deleteVariantSync(id).catch(() => {});
       res.json({ message: 'Duration variant removed successfully.' });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to remove variant.' });

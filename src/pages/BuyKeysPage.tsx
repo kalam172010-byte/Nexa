@@ -21,6 +21,8 @@ import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { KeySuccessModal } from '../components/KeySuccessModal.js';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase.js';
 
 interface BuyKeysPageProps {
   onNavigateDeposit: () => void;
@@ -98,6 +100,15 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     window.addEventListener('nexa_products_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
 
+    let unsubscribeProds: (() => void) | undefined;
+    let unsubscribeVars: (() => void) | undefined;
+    try {
+      unsubscribeProds = onSnapshot(collection(db, 'products'), () => fetchProducts(true));
+      unsubscribeVars = onSnapshot(collection(db, 'productVariants'), () => fetchProducts(true));
+    } catch (e) {
+      console.warn('[BuyKeysPage] Realtime product listener note:', e);
+    }
+
     const interval = setInterval(() => {
       fetchProducts(true);
     }, 2500);
@@ -105,6 +116,8 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     return () => {
       window.removeEventListener('nexa_products_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
+      if (unsubscribeProds) unsubscribeProds();
+      if (unsubscribeVars) unsubscribeVars();
       clearInterval(interval);
     };
   }, []);

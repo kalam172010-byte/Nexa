@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { User, DigitalKey, Order, Transaction } from '../models/types';
+import { User, Product, ProductVariant, DigitalKey, Order, Transaction } from '../models/types';
 import { db } from '../db/database';
 
 const PROJECT_ID = firebaseConfig.projectId || 'kalam-panel';
@@ -118,11 +118,100 @@ export class FirestoreSyncService {
         }
       };
 
-      const [fsUsersDocs, fsKeysDocs, fsOrdersDocs] = await Promise.all([
+      const [fsUsersDocs, fsKeysDocs, fsOrdersDocs, fsProductsDocs, fsVariantsDocs] = await Promise.all([
         runColQuery('users', 100),
         runColQuery('digitalKeys', 200),
         runColQuery('orders', 200),
+        runColQuery('products', 100),
+        runColQuery('productVariants', 200),
       ]);
+
+      // 1B. Parse and merge Firestore products & variants so products added anywhere persist and sync everywhere
+      const parsedFsProducts: Product[] = [];
+      for (const doc of fsProductsDocs) {
+        const p = this.parseFirestoreProductDoc(doc);
+        if (p) parsedFsProducts.push(p);
+      }
+
+      const parsedFsVariants: ProductVariant[] = [];
+      for (const doc of fsVariantsDocs) {
+        const v = this.parseFirestoreVariantDoc(doc);
+        if (v) parsedFsVariants.push(v);
+      }
+
+      for (const fp of parsedFsProducts) {
+        const existing = db.products.find(p => p.id === fp.id);
+        if (!existing) {
+          db.products.unshift(fp);
+          dbChanged = true;
+        } else {
+          // Keep active/maintenance fields synchronized
+          if (fp.name && existing.name !== fp.name) { existing.name = fp.name; dbChanged = true; }
+          if (typeof fp.isActive === 'boolean' && existing.isActive !== fp.isActive) { existing.isActive = fp.isActive; dbChanged = true; }
+          if (typeof fp.isUnderMaintenance === 'boolean' && existing.isUnderMaintenance !== fp.isUnderMaintenance) { existing.isUnderMaintenance = fp.isUnderMaintenance; dbChanged = true; }
+          if (fp.externalPid !== undefined && existing.externalPid !== fp.externalPid) { existing.externalPid = fp.externalPid; dbChanged = true; }
+        }
+      }
+
+      for (const fv of parsedFsVariants) {
+        const existing = db.productVariants.find(v => v.id === fv.id);
+        if (!existing) {
+          db.productVariants.push(fv);
+          dbChanged = true;
+        } else {
+          if (fv.price !== undefined && existing.price !== fv.price) { existing.price = fv.price; dbChanged = true; }
+          if (fv.resellerPrice !== undefined && existing.resellerPrice !== fv.resellerPrice) { existing.resellerPrice = fv.resellerPrice; dbChanged = true; }
+          if (fv.externalPid !== undefined && existing.externalPid !== fv.externalPid) { existing.externalPid = fv.externalPid; dbChanged = true; }
+        }
+      }
+
+      // Merge newly discovered Edge products into db.products if present
+      if (Array.isArray(edgeState?.products)) {
+        for (const ep of edgeState.products) {
+          if (!ep || !ep.id) continue;
+          if (!db.products.some(p => p.id === ep.id)) {
+            db.products.push({
+              id: ep.id,
+              name: ep.name || 'Gaming Panel',
+              game: ep.game || 'FREEFIRE',
+              description: ep.description || '',
+              category: ep.category || 'FREEFIRE',
+              badge: ep.badge,
+              imageUrl: ep.imageUrl,
+              features: ep.features,
+              deviceType: ep.deviceType,
+              updateFileUrl: ep.updateFileUrl,
+              videoUrl: ep.videoUrl,
+              externalPid: ep.externalPid,
+              isActive: ep.isActive !== false,
+              isUnderMaintenance: Boolean(ep.isUnderMaintenance),
+              maintenanceNotice: ep.maintenanceNotice,
+              createdAt: ep.createdAt || new Date().toISOString(),
+            });
+            dbChanged = true;
+          }
+          if (Array.isArray(ep.variants)) {
+            for (const ev of ep.variants) {
+              if (!ev || !ev.id) continue;
+              if (!db.productVariants.some(v => v.id === ev.id)) {
+                db.productVariants.push({
+                  id: ev.id,
+                  productId: ep.id,
+                  durationLabel: ev.durationLabel || '1 Day',
+                  durationHours: Number(ev.durationHours || 24),
+                  price: Number(ev.price || 50),
+                  resellerPrice: Number(ev.resellerPrice || 38),
+                  stockCount: Number(ev.stockCount ?? 15),
+                  externalPid: ev.externalPid,
+                  externalDuration: ev.externalDuration,
+                  isActive: ev.isActive !== false,
+                });
+                dbChanged = true;
+              }
+            }
+          }
+        }
+      }
 
       // Parse Firestore users
       const parsedFsUsers: User[] = [];
@@ -553,6 +642,190 @@ export class FirestoreSyncService {
       }
     } catch {}
     return null;
+  }
+
+  public static parseFirestoreProductDoc(doc: any): Product | null {
+    if (!doc || !doc.fields) return null;
+    const f = doc.fields;
+    const docPath = doc.name || '';
+    const docId = docPath.split('/').pop() || '';
+    const id = f.id?.stringValue || docId;
+    if (!id) return null;
+    return {
+      id,
+      name: f.name?.stringValue || 'Gaming Panel',
+      game: f.game?.stringValue || f.category?.stringValue || 'FREEFIRE',
+      description: f.description?.stringValue || '',
+      category: f.category?.stringValue || 'FREEFIRE',
+      badge: f.badge?.stringValue || undefined,
+      imageUrl: f.imageUrl?.stringValue || undefined,
+      features: Array.isArray(f.features?.arrayValue?.values)
+        ? f.features.arrayValue.values.map((v: any) => v.stringValue).filter(Boolean)
+        : undefined,
+      deviceType: f.deviceType?.stringValue || undefined,
+      updateFileUrl: f.updateFileUrl?.stringValue || undefined,
+      videoUrl: f.videoUrl?.stringValue || undefined,
+      externalPid: f.externalPid?.stringValue || undefined,
+      isActive: f.isActive?.booleanValue !== false,
+      isUnderMaintenance: Boolean(f.isUnderMaintenance?.booleanValue),
+      maintenanceNotice: f.maintenanceNotice?.stringValue || undefined,
+      createdAt: f.createdAt?.stringValue || new Date().toISOString(),
+    };
+  }
+
+  public static parseFirestoreVariantDoc(doc: any): ProductVariant | null {
+    if (!doc || !doc.fields) return null;
+    const f = doc.fields;
+    const docPath = doc.name || '';
+    const docId = docPath.split('/').pop() || '';
+    const id = f.id?.stringValue || docId;
+    if (!id) return null;
+    return {
+      id,
+      productId: f.productId?.stringValue || '',
+      durationLabel: f.durationLabel?.stringValue || '1 Day',
+      durationHours: typeof f.durationHours?.doubleValue === 'number'
+        ? f.durationHours.doubleValue
+        : parseInt(f.durationHours?.integerValue || '24', 10),
+      price: typeof f.price?.doubleValue === 'number'
+        ? f.price.doubleValue
+        : parseInt(f.price?.integerValue || '50', 10),
+      resellerPrice: typeof f.resellerPrice?.doubleValue === 'number'
+        ? f.resellerPrice.doubleValue
+        : parseInt(f.resellerPrice?.integerValue || '38', 10),
+      stockCount: typeof f.stockCount?.integerValue === 'string'
+        ? parseInt(f.stockCount.integerValue, 10)
+        : Number(f.stockCount?.doubleValue || 15),
+      externalPid: f.externalPid?.stringValue || undefined,
+      externalDuration: f.externalDuration?.stringValue || undefined,
+      isActive: f.isActive?.booleanValue !== false,
+    };
+  }
+
+  public static async syncProduct(product: Product, variants?: ProductVariant[]): Promise<void> {
+    try {
+      const patchUrl = `${FIRESTORE_BASE}/products/${encodeURIComponent(product.id)}?key=${API_KEY}`;
+      await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            id: { stringValue: product.id },
+            name: { stringValue: product.name },
+            game: { stringValue: product.game },
+            description: { stringValue: product.description || '' },
+            category: { stringValue: product.category || 'FREEFIRE' },
+            badge: { stringValue: product.badge || '' },
+            imageUrl: { stringValue: product.imageUrl || '' },
+            deviceType: { stringValue: product.deviceType || 'NONROOT' },
+            updateFileUrl: { stringValue: product.updateFileUrl || '' },
+            videoUrl: { stringValue: product.videoUrl || '' },
+            externalPid: { stringValue: product.externalPid || '' },
+            isActive: { booleanValue: product.isActive !== false },
+            isUnderMaintenance: { booleanValue: Boolean(product.isUnderMaintenance) },
+            maintenanceNotice: { stringValue: product.maintenanceNotice || '' },
+            createdAt: { stringValue: product.createdAt || new Date().toISOString() },
+          },
+        }),
+      });
+
+      const varsToSync = variants || db.productVariants.filter(v => v.productId === product.id);
+      for (const v of varsToSync) {
+        await this.syncVariant(v);
+      }
+
+      const allProdsWithVars = db.products.map(p => ({
+        ...p,
+        variants: db.productVariants.filter(v => v.productId === p.id),
+      }));
+      fetch(EDGE_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: allProdsWithVars }),
+      }).catch(() => {});
+    } catch (err) {
+      console.warn('[FirestoreSync] Failed to sync product to Firestore:', err);
+    }
+  }
+
+  public static async deleteProductSync(productId: string): Promise<void> {
+    try {
+      const deleteUrl = `${FIRESTORE_BASE}/products/${encodeURIComponent(productId)}?key=${API_KEY}`;
+      await fetch(deleteUrl, { method: 'DELETE' });
+
+      const relatedVars = db.productVariants.filter(v => v.productId === productId);
+      for (const v of relatedVars) {
+        const varDeleteUrl = `${FIRESTORE_BASE}/productVariants/${encodeURIComponent(v.id)}?key=${API_KEY}`;
+        await fetch(varDeleteUrl, { method: 'DELETE' }).catch(() => {});
+      }
+
+      const allProdsWithVars = db.products.map(p => ({
+        ...p,
+        variants: db.productVariants.filter(v => v.productId === p.id),
+      }));
+      fetch(EDGE_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: allProdsWithVars }),
+      }).catch(() => {});
+    } catch (err) {
+      console.warn('[FirestoreSync] Failed to delete product from Firestore:', err);
+    }
+  }
+
+  public static async syncVariant(variant: ProductVariant): Promise<void> {
+    try {
+      const patchUrl = `${FIRESTORE_BASE}/productVariants/${encodeURIComponent(variant.id)}?key=${API_KEY}`;
+      await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            id: { stringValue: variant.id },
+            productId: { stringValue: variant.productId },
+            durationLabel: { stringValue: variant.durationLabel },
+            durationHours: { doubleValue: Number(variant.durationHours || 24) },
+            price: { doubleValue: Number(variant.price || 50) },
+            resellerPrice: { doubleValue: Number(variant.resellerPrice || 38) },
+            stockCount: { integerValue: String(variant.stockCount ?? 15) },
+            externalPid: { stringValue: variant.externalPid || '' },
+            externalDuration: { stringValue: variant.externalDuration || '' },
+            isActive: { booleanValue: variant.isActive !== false },
+          },
+        }),
+      });
+
+      const allProdsWithVars = db.products.map(p => ({
+        ...p,
+        variants: db.productVariants.filter(v => v.productId === p.id),
+      }));
+      fetch(EDGE_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: allProdsWithVars }),
+      }).catch(() => {});
+    } catch (err) {
+      console.warn('[FirestoreSync] Failed to sync variant to Firestore:', err);
+    }
+  }
+
+  public static async deleteVariantSync(variantId: string): Promise<void> {
+    try {
+      const deleteUrl = `${FIRESTORE_BASE}/productVariants/${encodeURIComponent(variantId)}?key=${API_KEY}`;
+      await fetch(deleteUrl, { method: 'DELETE' });
+
+      const allProdsWithVars = db.products.map(p => ({
+        ...p,
+        variants: db.productVariants.filter(v => v.productId === p.id),
+      }));
+      fetch(EDGE_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: allProdsWithVars }),
+      }).catch(() => {});
+    } catch (err) {
+      console.warn('[FirestoreSync] Failed to delete variant from Firestore:', err);
+    }
   }
 
   public static parseFirestoreUserDoc(doc: any): User | null {

@@ -613,9 +613,26 @@ export const AdminPage: React.FC = () => {
       console.warn('[AdminPage] Real-time users listener setup note:', e);
     }
 
+    let unsubscribeProds: (() => void) | undefined;
+    let unsubscribeVars: (() => void) | undefined;
+    try {
+      unsubscribeProds = onSnapshot(collection(db, 'products'), () => {
+        api.getProducts().then(res => {
+          if (res?.products) setProducts(res.products);
+        }).catch(() => {});
+      });
+      unsubscribeVars = onSnapshot(collection(db, 'productVariants'), () => {
+        api.getProducts().then(res => {
+          if (res?.products) setProducts(res.products);
+        }).catch(() => {});
+      });
+    } catch (e) {
+      console.warn('[AdminPage] Real-time products listener setup note:', e);
+    }
+
     // Auto-poll admin data every 4 seconds so preview and deployed instances stay synchronized
     const pollInterval = setInterval(() => {
-      api.getDashboardStats().then(statsRes => {
+      api.getAdminStats().then(statsRes => {
         if (statsRes && typeof statsRes === 'object' && !('error' in statsRes)) {
           setStats(prev => ({ ...prev, ...statsRes }));
         }
@@ -638,6 +655,8 @@ export const AdminPage: React.FC = () => {
 
     return () => {
       if (unsubscribeUsers) unsubscribeUsers();
+      if (unsubscribeProds) unsubscribeProds();
+      if (unsubscribeVars) unsubscribeVars();
       clearInterval(pollInterval);
     };
   }, []);
