@@ -38,8 +38,8 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   const { user, role, balance, updateBalanceLocally } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [products, setProducts] = useState<Product[]>(() => api.getCachedProductsSync());
+  const [isLoading, setIsLoading] = useState<boolean>(() => api.getCachedProductsSync().length === 0);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Filters
@@ -91,10 +91,15 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   };
 
   useEffect(() => {
-    fetchProducts();
+    fetchProducts(products.length > 0);
 
-    const handleUpdate = () => {
-      fetchProducts(true);
+    const handleUpdate = (evt?: any) => {
+      if (evt?.detail?.products && Array.isArray(evt.detail.products)) {
+        setProducts(evt.detail.products);
+        setIsLoading(false);
+      } else {
+        fetchProducts(true);
+      }
     };
 
     window.addEventListener('nexa_products_updated', handleUpdate);
@@ -103,15 +108,23 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     let unsubscribeProds: (() => void) | undefined;
     let unsubscribeVars: (() => void) | undefined;
     try {
-      unsubscribeProds = onSnapshot(collection(db, 'products'), () => fetchProducts(true));
-      unsubscribeVars = onSnapshot(collection(db, 'productVariants'), () => fetchProducts(true));
+      unsubscribeProds = onSnapshot(
+        collection(db, 'products'),
+        () => fetchProducts(true),
+        () => {}
+      );
+      unsubscribeVars = onSnapshot(
+        collection(db, 'productVariants'),
+        () => fetchProducts(true),
+        () => {}
+      );
     } catch (e) {
       console.warn('[BuyKeysPage] Realtime product listener note:', e);
     }
 
     const interval = setInterval(() => {
       fetchProducts(true);
-    }, 2500);
+    }, 4000);
 
     return () => {
       window.removeEventListener('nexa_products_updated', handleUpdate);
@@ -373,7 +386,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           {filteredProducts.map(product => {
             const isExpanded = !!expandedMap[product.id];
             const features = product.features || ['Precision Aim Assist', 'ESP Overlay', 'Anti-Ban Protection'];
-            const hasValidImage = Boolean(product.imageUrl && !failedImages[product.id] && !product.imageUrl?.includes('images.unsplash.com'));
+            const hasValidImage = Boolean(product.imageUrl && !failedImages[product.id]);
 
             return (
               <div

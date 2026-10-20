@@ -66,7 +66,7 @@ export class FirestoreSyncService {
     this.pullAndMergeExternalState(true).catch(() => {});
     setInterval(() => {
       this.pullAndMergeExternalState(false).catch(() => {});
-    }, 2500);
+    }, 30000);
   }
 
   /**
@@ -75,7 +75,7 @@ export class FirestoreSyncService {
    */
   public static async pullAndMergeExternalState(force = false): Promise<void> {
     const now = Date.now();
-    if (!force && (this.isPulling || now - this.lastPullTime < 800)) {
+    if (!force && (this.isPulling || now - this.lastPullTime < 15000)) {
       return;
     }
     this.isPulling = true;
@@ -139,14 +139,22 @@ export class FirestoreSyncService {
         if (v) parsedFsVariants.push(v);
       }
 
+      const deletedProdSet = new Set(db.deletedProductIds || []);
+
       for (const fp of parsedFsProducts) {
+        if (!fp.id || deletedProdSet.has(fp.id)) continue;
         const existing = db.products.find(p => p.id === fp.id);
         if (!existing) {
           db.products.unshift(fp);
           dbChanged = true;
         } else {
-          // Keep active/maintenance fields synchronized
+          // Keep product fields synchronized
           if (fp.name && existing.name !== fp.name) { existing.name = fp.name; dbChanged = true; }
+          if (fp.description !== undefined && fp.description !== '' && existing.description !== fp.description) { existing.description = fp.description; dbChanged = true; }
+          if (fp.imageUrl && existing.imageUrl !== fp.imageUrl) { existing.imageUrl = fp.imageUrl; dbChanged = true; }
+          if (fp.game && existing.game !== fp.game) { existing.game = fp.game; dbChanged = true; }
+          if (fp.category && existing.category !== fp.category) { existing.category = fp.category; dbChanged = true; }
+          if (fp.deviceType && existing.deviceType !== fp.deviceType) { existing.deviceType = fp.deviceType; dbChanged = true; }
           if (typeof fp.isActive === 'boolean' && existing.isActive !== fp.isActive) { existing.isActive = fp.isActive; dbChanged = true; }
           if (typeof fp.isUnderMaintenance === 'boolean' && existing.isUnderMaintenance !== fp.isUnderMaintenance) { existing.isUnderMaintenance = fp.isUnderMaintenance; dbChanged = true; }
           if (fp.externalPid !== undefined && existing.externalPid !== fp.externalPid) { existing.externalPid = fp.externalPid; dbChanged = true; }
@@ -154,6 +162,7 @@ export class FirestoreSyncService {
       }
 
       for (const fv of parsedFsVariants) {
+        if (!fv.id || !fv.productId || deletedProdSet.has(fv.productId)) continue;
         const existing = db.productVariants.find(v => v.id === fv.id);
         if (!existing) {
           db.productVariants.push(fv);
@@ -165,10 +174,11 @@ export class FirestoreSyncService {
         }
       }
 
-      // Merge newly discovered Edge products into db.products if present
+      // Merge newly discovered Edge products into db.products if present (excluding Default Seed Edge IDs and deleted IDs)
+      const ignoredEdgeIds = new Set(['PROD-FF-155', 'PROD-BGMI-65', 'PROD-171001', 'PROD-171002', 'PROD-171003', 'PROD-499177']);
       if (Array.isArray(edgeState?.products)) {
         for (const ep of edgeState.products) {
-          if (!ep || !ep.id) continue;
+          if (!ep || !ep.id || deletedProdSet.has(ep.id) || ignoredEdgeIds.has(ep.id)) continue;
           if (!db.products.some(p => p.id === ep.id)) {
             db.products.push({
               id: ep.id,
@@ -704,6 +714,10 @@ export class FirestoreSyncService {
 
   public static async syncProduct(product: Product, variants?: ProductVariant[]): Promise<void> {
     try {
+      const safeImageUrl =
+        product.imageUrl && product.imageUrl.length > 750000
+          ? 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80'
+          : (product.imageUrl || '');
       const patchUrl = `${FIRESTORE_BASE}/products/${encodeURIComponent(product.id)}?key=${API_KEY}`;
       await fetch(patchUrl, {
         method: 'PATCH',
@@ -716,7 +730,7 @@ export class FirestoreSyncService {
             description: { stringValue: product.description || '' },
             category: { stringValue: product.category || 'FREEFIRE' },
             badge: { stringValue: product.badge || '' },
-            imageUrl: { stringValue: product.imageUrl || '' },
+            imageUrl: { stringValue: safeImageUrl },
             deviceType: { stringValue: product.deviceType || 'NONROOT' },
             updateFileUrl: { stringValue: product.updateFileUrl || '' },
             videoUrl: { stringValue: product.videoUrl || '' },

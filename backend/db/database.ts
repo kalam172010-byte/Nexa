@@ -313,20 +313,26 @@ export class Database {
     if (this.data.deletedProductIds) {
       this.data.deletedProductIds = this.data.deletedProductIds.filter(id => id !== product.id);
     }
-    this.data.products.unshift(product);
+    this.data.products = [product, ...this.data.products.filter(p => p.id !== product.id)];
     this.saveSync();
   }
 
   public addVariant(variant: ProductVariant): void {
     if (!this.data.productVariants) this.data.productVariants = [];
-    this.data.productVariants.push(variant);
+    this.data.productVariants = [...this.data.productVariants.filter(v => v.id !== variant.id), variant];
     this.saveSync();
   }
 
   public addVariants(variants: ProductVariant[]): void {
     if (!this.data.productVariants) this.data.productVariants = [];
-    this.data.productVariants.push(...variants);
+    const newIds = new Set(variants.map(v => v.id));
+    this.data.productVariants = [...this.data.productVariants.filter(v => !newIds.has(v.id)), ...variants];
     this.saveSync();
+  }
+
+  public get deletedProductIds(): string[] {
+    if (!this.data.deletedProductIds) this.data.deletedProductIds = [];
+    return this.data.deletedProductIds;
   }
 
   public get users(): User[] {

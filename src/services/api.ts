@@ -189,77 +189,95 @@ function unmarkProductDeleted(id: string): void {
   } catch {}
 }
 
-function getCachedProducts(): any[] {
-  if (typeof window === 'undefined') return DEFAULT_SEED_PRODUCTS;
+const SEED_PRODUCT_ID_SET = new Set(DEFAULT_SEED_PRODUCTS.map(p => p.id));
+
+export function getCachedProducts(): any[] {
+  if (typeof window === 'undefined') return [];
   const deleted = getDeletedProductIds();
   try {
     const raw = localStorage.getItem('nexa_cached_products');
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.filter(p => !deleted.has(p.id));
+      if (Array.isArray(parsed)) {
+        return parsed.filter(p => p && p.id && !deleted.has(p.id) && !SEED_PRODUCT_ID_SET.has(p.id));
       }
     }
   } catch {}
-  try {
-    localStorage.setItem('nexa_cached_products', JSON.stringify(DEFAULT_SEED_PRODUCTS));
-  } catch {}
-  return DEFAULT_SEED_PRODUCTS.filter(p => !deleted.has(p.id));
+  return [];
 }
 
-function saveCachedProducts(products: any[]): void {
+function saveCachedProducts(products: any[], emitEvent = true): void {
   if (typeof window === 'undefined') return;
   const deleted = getDeletedProductIds();
-  const cleanProducts = products.filter(p => !deleted.has(p.id));
+  const cleanProducts = (products || []).filter(p => p && p.id && !deleted.has(p.id));
   try {
     localStorage.setItem('nexa_cached_products', JSON.stringify(cleanProducts));
   } catch (err) {
-    // If quota exceeded due to large base64 image, keep URL or trimmed image so metadata always persists
+    // Free up transient caches first so product photos can be stored intact
     try {
-      const compact = cleanProducts.map(p => ({
-        ...p,
-        imageUrl:
-          typeof p.imageUrl === 'string' && p.imageUrl.length > 150000
-            ? 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80'
-            : p.imageUrl,
-      }));
-      localStorage.setItem('nexa_cached_products', JSON.stringify(compact));
+      localStorage.removeItem('nexa_cached_keys');
+      localStorage.removeItem('nexa_cached_orders');
+      localStorage.setItem('nexa_cached_products', JSON.stringify(cleanProducts));
+    } catch {
+      try {
+        const compact = cleanProducts.map(p => ({
+          ...p,
+          imageUrl:
+            typeof p.imageUrl === 'string' && p.imageUrl.length > 250000
+              ? 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80'
+              : p.imageUrl,
+        }));
+        localStorage.setItem('nexa_cached_products', JSON.stringify(compact));
+      } catch {}
+    }
+  }
+  if (emitEvent) {
+    try {
+      window.dispatchEvent(new CustomEvent('nexa_products_updated', { detail: { products: cleanProducts } }));
     } catch {}
   }
-  try {
-    window.dispatchEvent(new CustomEvent('nexa_products_updated', { detail: { products: cleanProducts } }));
-  } catch {}
 }
 
-function mergeWithCachedProducts(backendProds: any[]): any[] {
+function mergeWithCachedProducts(backendProds: any[]): { merged: any[]; unsyncedLocal: any[] } {
   const deleted = getDeletedProductIds();
-  const currentCached = getCachedProducts().filter(p => !deleted.has(p.id));
-  const validBackend = (backendProds || []).filter((p: any) => !deleted.has(p.id));
+  const currentCached = getCachedProducts().filter(p => p && p.id && !deleted.has(p.id) && !SEED_PRODUCT_ID_SET.has(p.id));
+  const validBackend = (backendProds || []).filter((p: any) => p && p.id && !deleted.has(p.id));
 
   const map = new Map<string, any>();
+  const unsyncedLocal: any[] = [];
+
+  // Put unsynced local custom products first so newly added products appear at top immediately
+  for (const cp of currentCached) {
+    if (!validBackend.some((bp: any) => bp.id === cp.id)) {
+      map.set(cp.id, cp);
+      unsyncedLocal.push(cp);
+    }
+  }
+
   for (const bp of validBackend) {
     map.set(bp.id, { ...bp, variants: bp.variants || [] });
   }
 
   for (const cp of currentCached) {
-    if (!map.has(cp.id)) {
-      map.set(cp.id, cp);
-    } else {
+    if (map.has(cp.id) && validBackend.some((bp: any) => bp.id === cp.id)) {
       const existing = map.get(cp.id)!;
+      if (!existing.imageUrl && cp.imageUrl) {
+        existing.imageUrl = cp.imageUrl;
+      }
       const existingVarMap = new Map<string, any>((existing.variants || []).map((v: any) => [v.id, v]));
       for (const cv of (cp.variants || [])) {
         if (!existingVarMap.has(cv.id)) {
           existingVarMap.set(cv.id, cv);
         } else {
           const prevVar = existingVarMap.get(cv.id) || {};
-          existingVarMap.set(cv.id, { ...prevVar, ...cv });
+          existingVarMap.set(cv.id, { ...cv, ...prevVar });
         }
       }
       existing.variants = Array.from(existingVarMap.values());
     }
   }
 
-  return Array.from(map.values());
+  return { merged: Array.from(map.values()), unsyncedLocal };
 }
 
 function getCachedKeys(): any[] {
@@ -345,6 +363,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (storedUser?.id && !headers.has('X-User-Id')) {
     headers.set('X-User-Id', String(storedUser.id));
   }
+  if (storedUser?.role && !headers.has('X-User-Role')) {
+    headers.set('X-User-Role', String(storedUser.role));
+  }
 
   const baseUrl = getBaseUrl();
   let response: Response | undefined;
@@ -424,13 +445,27 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (!fetchFailed && !isHtml && response && response.ok && data) {
     const method = (options.method || 'GET').toUpperCase();
     if (endpoint === '/products' && Array.isArray(data.products)) {
-      const merged = mergeWithCachedProducts(data.products);
-      saveCachedProducts(merged);
+      const { merged, unsyncedLocal } = mergeWithCachedProducts(data.products);
+      saveCachedProducts(merged, false);
       data.products = merged;
+
+      // Auto-push any locally created products that aren't in backend DB yet so they persist on server
+      if (unsyncedLocal.length > 0) {
+        for (const up of unsyncedLocal) {
+          fetch(`${baseUrl}/admin/products`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ...up,
+              variants: up.variants || [],
+            }),
+          }).catch(() => {});
+        }
+      }
     } else if (endpoint === '/admin/products' && method === 'POST' && data.product) {
       unmarkProductDeleted(data.product.id);
       const current = getCachedProducts();
-      saveCachedProducts([data.product, ...current.filter(p => p.id !== data.product.id)]);
+      saveCachedProducts([data.product, ...current.filter(p => p.id !== data.product.id)], true);
     } else if (endpoint.startsWith('/admin/products/') && method === 'PATCH' && data.product) {
       const current = getCachedProducts();
       saveCachedProducts(current.map(p => (p.id === data.product.id ? { ...p, ...data.product, variants: data.product.variants || p.variants || [] } : p)));
@@ -2007,6 +2042,7 @@ export const api = {
   toggleTwoFactor: () => request<any>('/auth/toggle-2fa', { method: 'POST' }),
 
   // Products
+  getCachedProductsSync: () => getCachedProducts(),
   getProducts: () => request<{ products: any[] }>('/products'),
   getProduct: (id: string) => request<{ product: any }>(`/products/${id}`),
 

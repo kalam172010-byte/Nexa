@@ -131,6 +131,16 @@
   ],
   "products": [
     {
+      "id": "PROD-035699-81",
+      "name": "TEST PRODUCT AUTO CHECK",
+      "game": "FREEFIRE",
+      "description": "Testing addition",
+      "category": "FREEFIRE",
+      "isActive": true,
+      "isUnderMaintenance": false,
+      "createdAt": "2026-10-20T10:27:15.699Z"
+    },
+    {
       "id": "PROD-499177",
       "name": "KALAM VIP AIMBOT FF OB55",
       "game": "FREEFIRE",
@@ -184,6 +194,50 @@
       "stockCount": 1,
       "externalPid": "155",
       "externalDuration": "1 DAYS",
+      "isActive": true
+    },
+    {
+      "id": "VAR-35701-0-11",
+      "productId": "PROD-035699-81",
+      "durationLabel": "1 Day",
+      "durationHours": 24,
+      "price": 50,
+      "resellerPrice": 50,
+      "stockCount": 15,
+      "externalDuration": "1 DAYS",
+      "isActive": true
+    },
+    {
+      "id": "VAR-35702-1-88",
+      "productId": "PROD-035699-81",
+      "durationLabel": "3 Days",
+      "durationHours": 72,
+      "price": 120,
+      "resellerPrice": 120,
+      "stockCount": 15,
+      "externalDuration": "3 DAYS",
+      "isActive": true
+    },
+    {
+      "id": "VAR-35702-2-19",
+      "productId": "PROD-035699-81",
+      "durationLabel": "7 Days",
+      "durationHours": 168,
+      "price": 250,
+      "resellerPrice": 250,
+      "stockCount": 15,
+      "externalDuration": "7 DAYS",
+      "isActive": true
+    },
+    {
+      "id": "VAR-35703-3-18",
+      "productId": "PROD-035699-81",
+      "durationLabel": "30 Days",
+      "durationHours": 720,
+      "price": 600,
+      "resellerPrice": 600,
+      "stockCount": 15,
+      "externalDuration": "30 DAYS",
       "isActive": true
     }
   ],
@@ -322,6 +376,546 @@
       "purchaseSourceLabel": "Buy from API",
       "assignedAt": "2026-10-18T07:05:28.554Z",
       "createdAt": "2026-10-18T07:05:28.554Z"
+    },
+    {
+      "id": "KEY-1792492035701-0-358c",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-12CC33F2-B24F2E41",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035701-1-0045",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-6ACFE197-3B1213A7",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035701-2-b340",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-F3F2EAD5-7193AACE",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035701-3-8733",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-4C7E63E1-2E7C7835",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035701-4-1781",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-64DF32C1-7E8E2463",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-5-ddcc",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-EBE2E7CF-49DF639F",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-6-ca13",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-DA8A844A-1921BB6F",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-7-4fd8",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-66FA57C4-D58BCF95",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-8-6fba",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-474326B6-80A8C728",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-9-0e5d",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-236C5FEF-77AF65EF",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-10-bd93",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-403CE0E4-023AED63",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-11-3f54",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-D60DAAC6-F94CC5CF",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-12-5024",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-69B719E6-C63F798D",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-13-87ff",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-E216FED3-5F10630E",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-14-208e",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35701-0-11",
+      "keyCode": "KALAM-C72C534D-3180B291",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.701Z"
+    },
+    {
+      "id": "KEY-1792492035702-0-05dd",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-3364791C-A8B6823E",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-1-16f0",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-0887671D-57DC7424",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-2-0f07",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-2C0048D8-87DE9456",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-3-0dfa",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-EB73A236-643DBF19",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-4-7ba9",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-9055E5CB-CF0B06CA",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-5-8dbc",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-3664849F-C1EE2614",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-6-7674",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-F7C1035B-45686EFD",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-7-3f18",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-E85E8F38-5B02E353",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-8-adcc",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-68408712-244E648F",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-9-1159",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-6EA3DBEB-279123BD",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-10-c5c6",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-F475D65D-FA8C9C16",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-11-ff4e",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-77A120AB-85E47A75",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-12-e94e",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-8F237D61-B63C0707",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-13-ccac",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-E8E15328-84A0AC9D",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-14-8a34",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-1-88",
+      "keyCode": "KALAM-E6B977CF-64A52DCE",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035702-0-8e57",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-307FE2B6-A2DED612",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-1-acc7",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-77E2C3E1-69B31BE4",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-2-07f3",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-E8179DDC-AB774EB7",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-3-e844",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-CF06FEBA-AB24E1F2",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-4-1fdc",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-9F7BB0EE-D6B7C0DA",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-5-64d9",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-B515C254-9DC07EEB",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-6-51c8",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-21BA33BF-A3D14668",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-7-a1e8",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-9AC847A2-9165F9FF",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-8-9b42",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-ECFABF06-AB950C2D",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-9-d875",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-45ADDA5B-11240F17",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-10-1e0f",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-98CAB25E-6857B301",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-11-3617",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-3BA433FA-ADA48CBC",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-12-4236",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-85A74494-8DC3C3A6",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-13-f387",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-B67A9ED3-9C6CB7F6",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-14-9fd0",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35702-2-19",
+      "keyCode": "KALAM-E51CE53F-594FD756",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.702Z"
+    },
+    {
+      "id": "KEY-1792492035703-0-31f7",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-034DEC00-08865251",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-1-29d5",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-BC94A1DD-7B684EEF",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-2-102b",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-6271A04A-5822EE5D",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-3-d3b7",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-4020E461-EC9EB518",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-4-f0a3",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-51BAD136-FD2914E7",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-5-63ac",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-178E27A9-4CD2A296",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-6-a154",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-B48A5936-7FE4F557",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-7-2e52",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-44A56773-37B9F93C",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-8-593b",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-58600ECB-6FABF6F6",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-9-b9a7",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-E4728DBF-95717EFC",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-10-1266",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-BB556DF6-54FB7C34",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-11-787e",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-A38D9974-90BC0FA2",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-12-4532",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-695EB1EA-4326F990",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-13-07d3",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-496546F4-AE76341C",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
+    },
+    {
+      "id": "KEY-1792492035703-14-1ab2",
+      "productId": "PROD-035699-81",
+      "variantId": "VAR-35703-3-18",
+      "keyCode": "KALAM-AF2F7B11-8AD20101",
+      "isUsed": false,
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T10:27:15.703Z"
     }
   ],
   "orders": [

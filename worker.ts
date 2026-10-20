@@ -12,37 +12,7 @@ const CORS_HEADERS: Record<string, string> = {
     'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-User-Email, X-User-Id, X-Api-Key, X-Master-Key, x-api-key, x-master-key',
 };
 
-const DEFAULT_EDGE_PRODUCTS = [
-  {
-    id: 'PROD-FF-155',
-    name: 'KALAM VIP PANEL (ANDROID / PC)',
-    game: 'Free Fire Max',
-    description: 'High-stability VIP panel with instant auto-key delivery.',
-    externalPid: '155',
-    isActive: true,
-    isUnderMaintenance: false,
-    variants: [
-      { id: 'VAR-155-1D', productId: 'PROD-FF-155', durationLabel: '1 Day', durationHours: 24, price: 120, resellerPrice: 80, stockCount: 999, externalPid: '155', externalDuration: '1 Day', isActive: true },
-      { id: 'VAR-155-7D', productId: 'PROD-FF-155', durationLabel: '7 Days', durationHours: 168, price: 450, resellerPrice: 320, stockCount: 999, externalPid: '155', externalDuration: '7 Days', isActive: true },
-      { id: 'VAR-155-30D', productId: 'PROD-FF-155', durationLabel: '30 Days', durationHours: 720, price: 1100, resellerPrice: 800, stockCount: 999, externalPid: '155', externalDuration: '30 Days', isActive: true },
-      { id: 'VAR-155-60D', productId: 'PROD-FF-155', durationLabel: '60 Days', durationHours: 1440, price: 1800, resellerPrice: 1350, stockCount: 999, externalPid: '155', externalDuration: '60 Days', isActive: true },
-    ],
-  },
-  {
-    id: 'PROD-BGMI-65',
-    name: 'BGMI LOADER PRO V2',
-    game: 'BGMI',
-    description: 'Safe ESP & aim assistance loader for Android non-root devices.',
-    externalPid: '65',
-    isActive: true,
-    isUnderMaintenance: false,
-    variants: [
-      { id: 'VAR-65-1D', productId: 'PROD-BGMI-65', durationLabel: '1 Day', durationHours: 24, price: 150, resellerPrice: 100, stockCount: 999, externalPid: '65', externalDuration: '1 Day', isActive: true },
-      { id: 'VAR-65-7D', productId: 'PROD-BGMI-65', durationLabel: '7 Days', durationHours: 168, price: 550, resellerPrice: 400, stockCount: 999, externalPid: '65', externalDuration: '7 Days', isActive: true },
-      { id: 'VAR-65-30D', productId: 'PROD-BGMI-65', durationLabel: '30 Days', durationHours: 720, price: 1300, resellerPrice: 950, stockCount: 999, externalPid: '65', externalDuration: '30 Days', isActive: true },
-    ],
-  },
-];
+const DEFAULT_EDGE_PRODUCTS: any[] = [];
 
 interface EdgeUser {
   id: string;
@@ -1604,6 +1574,10 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     edgeDb.products = [newProduct, ...edgeDb.products.filter((p: any) => p.id !== newProdId)];
 
     try {
+      const safeImageUrl =
+        newProduct.imageUrl && newProduct.imageUrl.length > 750000
+          ? 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80'
+          : (newProduct.imageUrl || '');
       const fsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/products/${encodeURIComponent(newProdId)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
       await fetch(fsUrl, {
         method: 'PATCH',
@@ -1616,7 +1590,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
             description: { stringValue: newProduct.description },
             category: { stringValue: newProduct.category },
             badge: { stringValue: newProduct.badge || '' },
-            imageUrl: { stringValue: newProduct.imageUrl || '' },
+            imageUrl: { stringValue: safeImageUrl },
             deviceType: { stringValue: newProduct.deviceType || 'NONROOT' },
             externalPid: { stringValue: newProduct.externalPid || '' },
             isActive: { booleanValue: true },

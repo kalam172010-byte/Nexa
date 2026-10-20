@@ -170,7 +170,7 @@ export const AdminPage: React.FC = () => {
     salesChart: [],
   });
   const [users, setUsers] = useState<any[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => api.getCachedProductsSync());
   const [keys, setKeys] = useState<any[]>([]);
   const [deposits, setDeposits] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -326,7 +326,7 @@ export const AdminPage: React.FC = () => {
   const [newProdIsUnderMaintenance, setNewProdIsUnderMaintenance] = useState(false);
   const [newProdMaintenanceNotice, setNewProdMaintenanceNotice] = useState('');
   const [newProdAlbumTab, setNewProdAlbumTab] = useState<'upload' | 'preset' | 'url'>('upload');
-  const [newProdDurationChoice, setNewProdDurationChoice] = useState<'clean' | 'presets'>('clean');
+  const [newProdDurationChoice, setNewProdDurationChoice] = useState<'clean' | 'presets'>('presets');
   const [justCreatedProdId, setJustCreatedProdId] = useState<string | null>(null);
   const [inlineAddingProdId, setInlineAddingProdId] = useState<string | null>(null);
   const [inlineDurationForms, setInlineDurationForms] = useState<
@@ -629,8 +629,16 @@ export const AdminPage: React.FC = () => {
     window.addEventListener('storage', handleProdUpdate);
 
     try {
-      unsubscribeProds = onSnapshot(collection(db, 'products'), () => handleProdUpdate());
-      unsubscribeVars = onSnapshot(collection(db, 'productVariants'), () => handleProdUpdate());
+      unsubscribeProds = onSnapshot(
+        collection(db, 'products'),
+        () => handleProdUpdate(),
+        () => {}
+      );
+      unsubscribeVars = onSnapshot(
+        collection(db, 'productVariants'),
+        () => handleProdUpdate(),
+        () => {}
+      );
     } catch (e) {
       console.warn('[AdminPage] Real-time products listener setup note:', e);
     }
@@ -644,7 +652,7 @@ export const AdminPage: React.FC = () => {
       }).catch(() => {});
 
       api.getProducts().then(res => {
-        if (res?.products && Array.isArray(res.products) && res.products.length > 0) {
+        if (res?.products && Array.isArray(res.products)) {
           setProducts(res.products);
         }
       }).catch(() => {});
@@ -1545,25 +1553,63 @@ export const AdminPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [activeTab, userSearchQuery]);
 
-  // Image upload handler from device / album
+  // Image upload handler from device / album with automatic canvas optimization so photos persist in localStorage & Firestore
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      showToastError('File Too Large', 'Please select an image file under 5MB.');
+    if (file.size > 15 * 1024 * 1024) {
+      showToastError('File Too Large', 'Please select an image file under 15MB.');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
-      const dataUrl = reader.result as string;
-      if (isEdit) {
-        setEditProdImageUrl(dataUrl);
-      } else {
-        setNewProdImageUrl(dataUrl);
-      }
-      showToastSuccess('Photo Loaded From Album', `Selected: ${file.name}`);
+      const rawDataUrl = reader.result as string;
+      const img = new window.Image();
+      img.onload = () => {
+        try {
+          const maxW = 900;
+          const maxH = 600;
+          let width = img.width || 800;
+          let height = img.height || 450;
+          if (width > maxW || height > maxH) {
+            const ratio = Math.min(maxW / width, maxH / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedUrl = canvas.toDataURL('image/jpeg', 0.82);
+            if (isEdit) {
+              setEditProdImageUrl(compressedUrl);
+            } else {
+              setNewProdImageUrl(compressedUrl);
+            }
+            showToastSuccess('Photo Loaded From Album', `Selected: ${file.name}`);
+            return;
+          }
+        } catch {}
+        if (isEdit) {
+          setEditProdImageUrl(rawDataUrl);
+        } else {
+          setNewProdImageUrl(rawDataUrl);
+        }
+        showToastSuccess('Photo Loaded From Album', `Selected: ${file.name}`);
+      };
+      img.onerror = () => {
+        if (isEdit) {
+          setEditProdImageUrl(rawDataUrl);
+        } else {
+          setNewProdImageUrl(rawDataUrl);
+        }
+        showToastSuccess('Photo Loaded From Album', `Selected: ${file.name}`);
+      };
+      img.src = rawDataUrl;
     };
     reader.onerror = () => {
       showToastError('Upload Error', 'Failed to read image file from device.');
@@ -1596,7 +1642,9 @@ export const AdminPage: React.FC = () => {
         .filter(Boolean);
 
       const finalGame = (newProdGame.trim() || newProdCategory || 'FREEFIRE').trim();
+      const clientProdId = `PROD-${Date.now().toString().slice(-6)}-${Math.floor(10 + Math.random() * 89)}`;
       const res = await api.createProduct({
+        id: clientProdId,
         name: newProdName.trim(),
         game: finalGame,
         category: newProdCategory || 'FREEFIRE',
@@ -1629,6 +1677,9 @@ export const AdminPage: React.FC = () => {
         try {
           const { variants: prodVariants, ...prodDoc } = createdProduct;
           const cleanProdDoc = JSON.parse(JSON.stringify(prodDoc));
+          if (cleanProdDoc.imageUrl && cleanProdDoc.imageUrl.length > 750000) {
+            cleanProdDoc.imageUrl = ALBUM_PRESETS[0].url;
+          }
           setDoc(doc(db, 'products', createdProduct.id), cleanProdDoc, { merge: true }).catch(() => {});
           if (Array.isArray(prodVariants)) {
             for (const v of prodVariants) {
@@ -1656,7 +1707,6 @@ export const AdminPage: React.FC = () => {
       setNewProdExternalPid('');
       setNewProdIsUnderMaintenance(false);
       setNewProdMaintenanceNotice('');
-      await loadAllAdminData();
     } catch (err: any) {
       showToastError('Creation failed', err.message);
     }
@@ -4281,6 +4331,7 @@ export const AdminPage: React.FC = () => {
                 setNewProdFeatures('Headshot, Location, Fast Revive');
                 setNewProdUpdateFileUrl('');
                 setNewProdVideoUrl('');
+                setNewProdDurationChoice('presets');
                 setIsCreatingProduct(true);
               }}
               className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-lg shadow-rose-950/50 self-start sm:self-auto"

@@ -367,6 +367,7 @@ export class AdminController {
   public static async createProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const {
+        id: requestedId,
         name,
         game,
         description,
@@ -381,6 +382,7 @@ export class AdminController {
         isUnderMaintenance,
         maintenanceNotice,
         initialDurations,
+        variants: requestedVariants,
       } = req.body;
 
       if (!name) {
@@ -389,9 +391,13 @@ export class AdminController {
       }
 
       const finalGame = (game || category || 'FREEFIRE').trim();
+      const prodId =
+        typeof requestedId === 'string' && requestedId.trim()
+          ? requestedId.trim()
+          : `PROD-${Date.now().toString().slice(-6)}-${Math.floor(10 + Math.random() * 89)}`;
 
       const newProduct: Product = {
-        id: `PROD-${Date.now().toString().slice(-6)}-${Math.floor(10 + Math.random() * 89)}`,
+        id: prodId,
         name: name.trim(),
         game: finalGame,
         description: description?.trim() || '',
@@ -413,26 +419,32 @@ export class AdminController {
 
       const initialVariants: ProductVariant[] = [];
       const cleanPid = newProduct.externalPid || undefined;
-      const defaultDurations = Array.isArray(initialDurations)
+      const sourceDurations = Array.isArray(requestedVariants)
+        ? requestedVariants
+        : Array.isArray(initialDurations)
         ? initialDurations
         : [
-            { label: '1 Day', hours: 24, price: 50, resellerPrice: 50, extDur: '1 DAYS' },
-            { label: '3 Days', hours: 72, price: 120, resellerPrice: 120, extDur: '3 DAYS' },
-            { label: '7 Days', hours: 168, price: 250, resellerPrice: 250, extDur: '7 DAYS' },
-            { label: '30 Days', hours: 720, price: 600, resellerPrice: 600, extDur: '30 DAYS' },
+            { label: '1 Day', hours: 24, price: 50, resellerPrice: 38, extDur: '1 DAYS' },
+            { label: '3 Days', hours: 72, price: 120, resellerPrice: 90, extDur: '3 DAYS' },
+            { label: '7 Days', hours: 168, price: 250, resellerPrice: 190, extDur: '7 DAYS' },
+            { label: '30 Days', hours: 720, price: 600, resellerPrice: 450, extDur: '30 DAYS' },
           ];
 
-      for (let idx = 0; idx < defaultDurations.length; idx++) {
-        const d = defaultDurations[idx];
+      for (let idx = 0; idx < sourceDurations.length; idx++) {
+        const d = sourceDurations[idx];
         const labelStr = String(d.label || d.durationLabel || '1 Day').trim();
         const hoursNum = Number(d.hours || d.durationHours) || 24;
         const priceNum = Number(d.price) || 50;
         const resellerPriceNum = Number(d.resellerPrice) || priceNum;
         const varPid = d.externalPid?.trim() || cleanPid;
         const extDur = String(d.extDur || d.externalDuration || labelStr).trim();
+        const varId =
+          typeof d.id === 'string' && d.id.trim()
+            ? d.id.trim()
+            : `VAR-${Date.now().toString().slice(-5)}-${idx}-${Math.floor(10 + Math.random() * 89)}`;
 
         const variant: ProductVariant = {
-          id: `VAR-${Date.now().toString().slice(-5)}-${idx}-${Math.floor(10 + Math.random() * 89)}`,
+          id: varId,
           productId: newProduct.id,
           durationLabel: labelStr,
           durationHours: hoursNum,
@@ -443,9 +455,10 @@ export class AdminController {
           externalDuration: extDur,
           isActive: true,
         };
-        db.productVariants.push(variant);
+        db.addVariant(variant);
 
-        if (!varPid) {
+        const existingKeysForVar = db.digitalKeys.filter(k => k.variantId === variant.id && !k.isUsed).length;
+        if (!varPid && existingKeysForVar === 0) {
           KeyService.generateKeys(newProduct.id, variant.id, 15, 'KALAM');
           variant.stockCount = 15;
         }
@@ -455,6 +468,13 @@ export class AdminController {
 
       db.saveSync();
       FirestoreSyncService.syncProduct(newProduct, initialVariants).catch(() => {});
+
+      db.logActivity(
+        req.user?.id,
+        req.user?.username,
+        'PRODUCT_CREATE',
+        `Created product ${newProduct.name} (${newProduct.id}) with ${initialVariants.length} duration tiers`
+      );
 
       const responseProduct = {
         ...newProduct,
@@ -470,11 +490,7 @@ export class AdminController {
   public static async updateProduct(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const product = db.products.find(p => p.id === id);
-      if (!product) {
-        res.status(404).json({ error: 'Product not found.' });
-        return;
-      }
+      let product = db.products.find(p => p.id === id);
 
       const {
         name,
@@ -493,24 +509,46 @@ export class AdminController {
         maintenanceNotice,
       } = req.body;
 
-      if (name) product.name = name.trim();
-      if (game) product.game = game.trim();
-      else if (category) product.game = category.trim();
-      if (description !== undefined) product.description = description.trim();
-      if (category) product.category = category.trim();
-      if (badge !== undefined) product.badge = badge.trim() || undefined;
-      if (imageUrl !== undefined) product.imageUrl = imageUrl.trim() || undefined;
-      if (features !== undefined) product.features = Array.isArray(features) ? features : undefined;
-      if (deviceType !== undefined) product.deviceType = deviceType.trim() || undefined;
-      if (updateFileUrl !== undefined) product.updateFileUrl = updateFileUrl.trim() || undefined;
-      if (videoUrl !== undefined) product.videoUrl = videoUrl.trim() || undefined;
-      if (externalPid !== undefined) product.externalPid = externalPid.trim() || undefined;
-      if (typeof isActive === 'boolean') product.isActive = isActive;
-      if (typeof isUnderMaintenance === 'boolean') product.isUnderMaintenance = isUnderMaintenance;
-      if (maintenanceNotice !== undefined) product.maintenanceNotice = maintenanceNotice.trim() || undefined;
+      if (!product) {
+        product = {
+          id,
+          name: (name || 'Gaming Panel').trim(),
+          game: (game || category || 'FREEFIRE').trim(),
+          description: description?.trim() || '',
+          category: (category || 'FREEFIRE').trim(),
+          badge: badge?.trim() || undefined,
+          imageUrl: imageUrl?.trim() || undefined,
+          features: Array.isArray(features) ? features : undefined,
+          deviceType: deviceType?.trim() || 'NONROOT',
+          updateFileUrl: updateFileUrl?.trim() || undefined,
+          videoUrl: videoUrl?.trim() || undefined,
+          externalPid: externalPid?.trim() || undefined,
+          isActive: typeof isActive === 'boolean' ? isActive : true,
+          isUnderMaintenance: Boolean(isUnderMaintenance),
+          maintenanceNotice: maintenanceNotice?.trim() || undefined,
+          createdAt: new Date().toISOString(),
+        };
+        db.addProduct(product);
+      } else {
+        if (name) product.name = name.trim();
+        if (game) product.game = game.trim();
+        else if (category) product.game = category.trim();
+        if (description !== undefined) product.description = description.trim();
+        if (category) product.category = category.trim();
+        if (badge !== undefined) product.badge = badge.trim() || undefined;
+        if (imageUrl !== undefined) product.imageUrl = imageUrl.trim() || undefined;
+        if (features !== undefined) product.features = Array.isArray(features) ? features : undefined;
+        if (deviceType !== undefined) product.deviceType = deviceType.trim() || undefined;
+        if (updateFileUrl !== undefined) product.updateFileUrl = updateFileUrl.trim() || undefined;
+        if (videoUrl !== undefined) product.videoUrl = videoUrl.trim() || undefined;
+        if (externalPid !== undefined) product.externalPid = externalPid.trim() || undefined;
+        if (typeof isActive === 'boolean') product.isActive = isActive;
+        if (typeof isUnderMaintenance === 'boolean') product.isUnderMaintenance = isUnderMaintenance;
+        if (maintenanceNotice !== undefined) product.maintenanceNotice = maintenanceNotice.trim() || undefined;
+      }
 
       db.saveSync();
-      const variants = db.productVariants.filter(v => v.productId === product.id && v.isActive);
+      const variants = db.productVariants.filter(v => v.productId === product!.id && v.isActive);
       FirestoreSyncService.syncProduct(product, variants).catch(() => {});
       res.json({ message: 'Product updated successfully.', product: { ...product, variants } });
     } catch (err: any) {
@@ -604,12 +642,8 @@ export class AdminController {
     try {
       const { id } = req.params;
       const targetProduct = db.products.find(p => p.id === id);
-      if (!targetProduct) {
-        res.status(404).json({ error: 'Product not found.' });
-        return;
-      }
+      const productName = targetProduct?.name || id;
 
-      const productName = targetProduct.name;
       db.permanentlyDeleteProduct(id);
       FirestoreSyncService.deleteProductSync(id).catch(() => {});
 
