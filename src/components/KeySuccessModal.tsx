@@ -40,15 +40,15 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
         className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
       />
 
-      <div className="relative w-full max-w-sm bg-[#10121a] border border-white/10 rounded-2xl p-6 shadow-2xl z-10 space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+      <div className="relative w-full max-w-sm bg-gradient-to-b from-[#131626] via-[#0f111d] to-[#090b12] border border-rose-500/30 rounded-3xl p-6 shadow-[0_0_50px_rgba(244,63,94,0.3)] z-10 space-y-5">
+        <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+              <CheckCircle2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-display font-bold text-sm text-white">License Delivered</h3>
-              <p className="text-xs text-emerald-400">
+              <h3 className="font-display font-bold text-sm text-white">License Delivered!</h3>
+              <p className="text-xs text-emerald-400 font-semibold">
                 {keyData.purchaseSourceLabel ||
                   (keyData.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website')}
               </p>
@@ -57,7 +57,7 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-white/[0.04] text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg bg-white/[0.06] text-slate-300 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

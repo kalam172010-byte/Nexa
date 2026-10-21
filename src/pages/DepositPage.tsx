@@ -6,13 +6,17 @@ import {
   ShieldCheck,
   RefreshCw,
   Wallet,
+  Check,
+  Zap,
   Sparkles,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { api } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
 import { Deposit } from '../types/index.js';
 import { QRModal } from '../components/QRModal.js';
+import upiCardImg from '../assets/images/card_upi_instant_deposit_1792510216821.jpg';
 
 interface DepositPageProps {
   onOpenSupport: () => void;
@@ -27,6 +31,7 @@ export const DepositPage: React.FC<DepositPageProps> = ({ onOpenSupport }) => {
   const [amount, setAmount] = useState<string>('100');
   const [isLoading, setIsLoading] = useState(false);
   const [activeDeposit, setActiveDeposit] = useState<Deposit | null>(null);
+  const [imgFailed, setImgFailed] = useState(false);
 
   const presets = [50, 100, 200, 500, 1000, 2000];
 
@@ -64,7 +69,6 @@ export const DepositPage: React.FC<DepositPageProps> = ({ onOpenSupport }) => {
         showToastSuccess('Payment Order Created', 'Scan the UPI QR code to complete your deposit.');
       }
     } catch (err: any) {
-      console.warn('API deposit call encountered an issue, generating direct UPI payment QR:', err);
       let storedGw: any = {};
       try {
         const rawGw = localStorage.getItem('nexa_admin_gateway_config');
@@ -85,7 +89,9 @@ export const DepositPage: React.FC<DepositPageProps> = ({ onOpenSupport }) => {
         merchantName: customMerchant,
         upiIntent: `upi://pay?pa=${encodeURIComponent(customVpa)}&pn=${encodeURIComponent(customMerchant)}&am=${num.toFixed(2)}&cu=INR&tn=Order-${Date.now()}`,
         status: 'PENDING',
-        expiresAt: new Date(Date.now() + (Number(storedGw.paymentExpiryMinutes) || 10) * 60 * 1000).toISOString(),
+        expiresAt: new Date(
+          Date.now() + (Number(storedGw.paymentExpiryMinutes) || 10) * 60 * 1000
+        ).toISOString(),
         createdAt: new Date().toISOString(),
       };
       setActiveDeposit(fallbackDeposit);
@@ -95,183 +101,238 @@ export const DepositPage: React.FC<DepositPageProps> = ({ onOpenSupport }) => {
     }
   };
 
+  const parsedAmount = Math.max(0, parseFloat(amount) || 0);
+
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-6">
       {/* Page Header */}
       <div>
-        <h2 className="font-display font-bold text-xl sm:text-2xl bg-gradient-to-r from-white via-emerald-100 to-teal-200 bg-clip-text text-transparent">
-          Add Funds & Wallet
+        <h2 className="font-display font-extrabold text-2xl sm:text-3xl bg-gradient-to-r from-white via-emerald-100 to-teal-200 bg-clip-text text-transparent">
+          Add Funds & Automated UPI QR Terminal
         </h2>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Top up your balance instantly via zero-fee automated UPI QR verification.
+        <p className="text-xs sm:text-sm text-slate-300 mt-0.5">
+          Top up your wallet balance instantly with 0% gateway fee via PhonePe, Google Pay, Paytm, or FamPay.
         </p>
       </div>
 
-      {/* Top Balance Summary Row */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-rose-500/12 via-[#10121a] to-[#10121a] border border-rose-500/25 space-y-1 shadow-[0_4px_20px_rgba(244,63,94,0.08)]">
-          <div className="flex items-center justify-between text-xs font-semibold text-rose-300">
-            <span>Available Balance</span>
-            <Wallet className="w-4 h-4 text-rose-400" />
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-xl font-bold text-rose-400 font-mono">₹</span>
-            <span className="font-mono text-2xl sm:text-3xl font-extrabold text-white tabular-nums">
-              {balance.toFixed(2)}
-            </span>
-          </div>
-          <div className="text-xs text-slate-400">Ready for instant orders</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-[#10121a] to-[#10121a] border border-emerald-500/30 space-y-1 shadow-[0_4px_20px_rgba(16,185,129,0.08)]">
-          <div className="flex items-center justify-between text-xs font-semibold text-emerald-300">
-            <span>Added Today</span>
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-xl font-bold text-emerald-400 font-mono">₹</span>
-            <span className="font-mono text-2xl sm:text-3xl font-extrabold text-emerald-400 tabular-nums">
-              {todayDeposit.toFixed(2)}
-            </span>
-          </div>
-          <div className="text-xs text-slate-400">Automated UPI credit</div>
-        </div>
-      </div>
-
-      {/* Payment Method Selection */}
-      <div className="space-y-2">
-        <label className="text-xs font-semibold text-slate-300 block">
-          Payment Method
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setSelectedMethod('UPI_QR')}
-            className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-3 cursor-pointer ${
-              selectedMethod === 'UPI_QR'
-                ? 'bg-gradient-to-r from-emerald-500/15 to-teal-500/10 border-emerald-500/50 text-white shadow-[0_4px_20px_rgba(16,185,129,0.15)]'
-                : 'bg-[#10121a] border-white/[0.06] hover:border-white/[0.15] text-slate-300'
-            }`}
-          >
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                selectedMethod === 'UPI_QR'
-                  ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-slate-950'
-                  : 'bg-white/[0.04] text-slate-400'
-              }`}
-            >
-              <QrCode className="w-4 h-4 stroke-[2.2]" />
-            </div>
-            <div className="min-w-0">
-              <div className="font-bold text-xs text-white truncate">Instant UPI QR</div>
-              <div className="text-[11px] text-emerald-400 truncate">0% Fee · Auto-Verified</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedMethod('ADMIN_SUPPORT')}
-            className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-3 cursor-pointer ${
-              selectedMethod === 'ADMIN_SUPPORT'
-                ? 'bg-gradient-to-r from-violet-500/15 to-rose-500/10 border-violet-500/50 text-white shadow-[0_4px_20px_rgba(139,92,246,0.15)]'
-                : 'bg-[#10121a] border-white/[0.06] hover:border-white/[0.15] text-slate-300'
-            }`}
-          >
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                selectedMethod === 'ADMIN_SUPPORT'
-                  ? 'bg-gradient-to-br from-violet-500 to-rose-500 text-white'
-                  : 'bg-white/[0.04] text-slate-400'
-              }`}
-            >
-              <Headphones className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="font-bold text-xs text-white truncate">Support Assistance</div>
-              <div className="text-[11px] text-violet-300 truncate">Manual Deposit Desk</div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Deposit Form */}
-      <form onSubmit={handleCreatePayment} className="p-6 rounded-2xl bg-gradient-to-b from-[#131622] to-[#0e1018] border border-white/[0.08] space-y-5 shadow-xl">
-        <div>
-          <label className="text-xs font-semibold text-slate-300 block mb-2">
-            Deposit Amount (INR)
-          </label>
-          <div className="relative flex items-center">
-            <span className="absolute left-4 font-mono font-bold text-lg text-emerald-400 select-none">
-              ₹
-            </span>
-            <input
-              type="number"
-              min="1"
-              step="any"
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder="100"
-              required
-              className="w-full pl-9 pr-4 py-3 bg-[#090a0f] border border-emerald-500/30 focus:border-emerald-400 rounded-xl font-mono text-lg text-white font-bold tabular-nums placeholder:text-slate-600 focus:outline-none transition-colors"
-            />
-          </div>
-          <div className="flex items-center justify-between text-xs text-slate-400 mt-1.5">
-            <span>Minimum deposit: ₹1.00</span>
-            <span className="text-emerald-400 font-semibold">Gateway fee: 0%</span>
-          </div>
-        </div>
-
-        {/* Amount Quick Presets */}
-        <div>
-          <label className="text-xs font-medium text-slate-400 block mb-2">
-            Quick Select Amount
-          </label>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-            {presets.map(val => (
+      {/* 2-Column Interactive Deposit Terminal */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left 7 Cols: Amount Configurator & Payment Method */}
+        <form
+          onSubmit={handleCreatePayment}
+          className="lg:col-span-7 p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#121628] to-[#0c0f1c] border border-emerald-500/30 space-y-6 shadow-[0_12px_40px_rgba(16,185,129,0.12)]"
+        >
+          {/* Payment Method Selector */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-bold text-slate-200 block uppercase tracking-wider">
+              01. Select Payment Channel
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <button
-                key={val}
                 type="button"
-                onClick={() => setAmount(val.toString())}
-                className={`py-2 px-2 rounded-xl text-xs font-mono font-bold tabular-nums transition-all border cursor-pointer ${
-                  amount === val.toString()
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 border-emerald-400 shadow-[0_2px_12px_rgba(16,185,129,0.3)]'
-                    : 'bg-[#090a0f] text-slate-300 border-white/[0.08] hover:border-emerald-500/40 hover:text-emerald-300'
+                onClick={() => setSelectedMethod('UPI_QR')}
+                className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-3.5 cursor-pointer ${
+                  selectedMethod === 'UPI_QR'
+                    ? 'bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-transparent border-emerald-400 text-white shadow-lg shadow-emerald-950/50 scale-102'
+                    : 'bg-[#121628] border-white/10 hover:border-white/20 text-slate-300'
                 }`}
               >
-                +₹{val}
+                <div
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
+                    selectedMethod === 'UPI_QR'
+                      ? 'bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 font-black'
+                      : 'bg-white/10 text-slate-300'
+                  }`}
+                >
+                  <QrCode className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-extrabold text-sm text-white truncate">Instant UPI QR</div>
+                  <div className="text-xs text-emerald-400 font-bold truncate">0% Fee · Auto-Verified</div>
+                </div>
               </button>
-            ))}
+
+              <button
+                type="button"
+                onClick={() => setSelectedMethod('ADMIN_SUPPORT')}
+                className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-3.5 cursor-pointer ${
+                  selectedMethod === 'ADMIN_SUPPORT'
+                    ? 'bg-gradient-to-r from-violet-500/20 via-pink-500/10 to-transparent border-violet-400 text-white shadow-lg shadow-violet-950/50 scale-102'
+                    : 'bg-[#121628] border-white/10 hover:border-white/20 text-slate-300'
+                }`}
+              >
+                <div
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
+                    selectedMethod === 'ADMIN_SUPPORT'
+                      ? 'bg-gradient-to-tr from-violet-600 to-pink-500 text-white font-black'
+                      : 'bg-white/10 text-slate-300'
+                  }`}
+                >
+                  <Headphones className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-extrabold text-sm text-white truncate">Support Desk</div>
+                  <div className="text-xs text-violet-300 font-bold truncate">Manual Deposit Support</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Deposit Amount Input */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 block uppercase tracking-wider">
+                02. Deposit Amount (INR)
+              </label>
+              <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                Minimum ₹1.00
+              </span>
+            </div>
+
+            <div className="relative flex items-center">
+              <span className="absolute left-4 font-mono font-black text-2xl text-emerald-400 select-none">
+                ₹
+              </span>
+              <input
+                type="number"
+                min="1"
+                step="any"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                placeholder="100"
+                required
+                className="w-full pl-11 pr-4 py-4 bg-[#0a0d18] border border-emerald-500/30 focus:border-emerald-400 rounded-2xl font-mono text-3xl text-white font-black tabular-nums placeholder:text-slate-600 focus:outline-none transition-colors shadow-inner"
+              />
+            </div>
+
+            {/* Colorful Quick Presets */}
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1">
+              {presets.map(val => {
+                const isSelected = amount === val.toString();
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setAmount(val.toString())}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-mono font-black tabular-nums transition-all border cursor-pointer ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-950/60 scale-105'
+                        : 'bg-[#121628] text-slate-300 border-white/10 hover:border-emerald-500/40 hover:text-emerald-300'
+                    }`}
+                  >
+                    +₹{val}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Submit Action */}
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-sm sm:text-base transition-all shadow-[0_4px_30px_rgba(16,185,129,0.45)] flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border border-emerald-300/40 hover:scale-102"
+          >
+            {isLoading ? (
+              <>
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                <span>Generating Payment QR...</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-5 h-5 fill-slate-950" />
+                <span>Generate UPI QR Code · ₹{parsedAmount.toFixed(2)}</span>
+                <ArrowRight className="w-5 h-5 stroke-[3]" />
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Right 5 Cols: Live Balance & Verification Summary */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950/40 via-[#101426] to-[#0c0f1c] border border-emerald-500/35 p-6 sm:p-7 space-y-5 shadow-[0_12px_35px_rgba(16,185,129,0.15)]">
+            {!imgFailed && (
+              <img
+                src={upiCardImg}
+                alt="UPI Deposit"
+                referrerPolicy="no-referrer"
+                onError={() => setImgFailed(true)}
+                className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none select-none mix-blend-screen"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0c0f1c] via-[#0c0f1c]/80 to-transparent pointer-events-none" />
+
+            <div className="relative z-10 grid grid-cols-2 gap-4 pb-4 border-b border-white/10">
+              <div>
+                <div className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
+                  <Wallet className="w-4 h-4 text-rose-400" />
+                  <span>Available Balance</span>
+                </div>
+                <div className="font-mono text-3xl font-black text-white tabular-nums mt-1">
+                  ₹{balance.toFixed(2)}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>Added Today</span>
+                </div>
+                <div className="font-mono text-3xl font-black text-emerald-400 tabular-nums mt-1">
+                  ₹{todayDeposit.toFixed(2)}
+                </div>
+              </div>
+            </div>
+
+            {/* Order Calculation Breakdown */}
+            <div className="relative z-10 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between text-slate-300">
+                <span className="text-slate-400">Requested Amount</span>
+                <span className="font-mono font-bold tabular-nums">₹{parsedAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-300">
+                <span className="text-slate-400">Gateway Processing Fee</span>
+                <span className="font-mono font-bold text-emerald-400 tabular-nums">₹0.00 (0% Zero Fee)</span>
+              </div>
+              <div className="pt-2 border-t border-white/10 flex items-center justify-between text-white font-bold">
+                <span className="text-sm">Net Wallet Credit</span>
+                <span className="font-mono text-base font-black text-emerald-400 tabular-nums">
+                  +₹{parsedAmount.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Supported Payment Apps */}
+            <div className="relative z-10 pt-3 border-t border-white/10 space-y-2.5 text-xs text-slate-300">
+              <div className="font-bold text-white text-xs flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-cyan-400" />
+                <span>Compatible With All UPI Apps:</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <span className="px-2.5 py-1 rounded-lg bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 font-bold text-[11px]">
+                  PhonePe
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 border border-blue-400/30 text-blue-300 font-bold text-[11px]">
+                  Google Pay
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 font-bold text-[11px]">
+                  Paytm
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-orange-500/20 border border-orange-400/30 text-orange-300 font-bold text-[11px]">
+                  FamPay
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 font-bold text-[11px]">
+                  BHIM UPI
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pt-1 text-slate-300 text-xs">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>24/7 Automated UTR Receipt Verification Engine</span>
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Security Notice */}
-        <div className="p-3.5 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/20 flex items-start gap-3 text-xs text-slate-300">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="leading-relaxed">
-            <span className="text-emerald-300 font-semibold">Instant Automated Credit: </span>
-            Compatible with Google Pay, PhonePe, Paytm, FamPay, and BHIM UPI.
-          </div>
-        </div>
-
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold text-xs sm:text-sm transition-all shadow-[0_4px_25px_rgba(16,185,129,0.35)] flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
-        >
-          {isLoading ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>Generating Payment QR...</span>
-            </>
-          ) : (
-            <>
-              <span>Proceed to UPI QR Payment</span>
-              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-            </>
-          )}
-        </button>
-      </form>
+      </div>
 
       {/* QR Modal on deposit creation */}
       {activeDeposit && (

@@ -73,22 +73,22 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
       />
 
       {/* Modal Dialog */}
-      <div className="relative w-full max-w-sm bg-[#0d0d14] border border-white/10 rounded-2xl p-5 shadow-2xl shadow-rose-950/40 z-10 animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-sm bg-gradient-to-b from-[#131628] via-[#0f111e] to-[#090b12] border border-rose-500/30 rounded-3xl p-5 shadow-[0_0_50px_rgba(244,63,94,0.3)] z-10 animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/5">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center">
+        <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500 to-amber-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.4)]">
               <ShoppingBag className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-display font-bold text-sm text-white">CONFIRM ORDER</h3>
-              <p className="text-[10px] text-slate-400 font-mono">AUTOMATED INSTANT DELIVERY</p>
+              <h3 className="font-display font-black text-sm text-white tracking-wide">CONFIRM ORDER</h3>
+              <p className="text-[10px] text-emerald-400 font-mono font-bold">● INSTANT KEY DELIVERY READY</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1 rounded-lg bg-white/[0.04] text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg bg-white/[0.06] text-slate-300 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

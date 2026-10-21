@@ -65,7 +65,7 @@ const AdminUnlockCard: React.FC<{ onNavigate: (page: string) => void }> = ({ onN
   };
 
   return (
-    <div className="p-8 sm:p-10 text-center rounded-2xl bg-[#10121a] border border-white/[0.08] space-y-6 max-w-md mx-auto my-8 shadow-2xl">
+    <div className="p-8 sm:p-10 text-center rounded-3xl bg-gradient-to-b from-[#131628] via-[#0f111d] to-[#090b12] border border-rose-500/30 space-y-6 max-w-md mx-auto my-8 shadow-[0_0_50px_rgba(244,63,94,0.25)]">
       <PremiumLoadingModal
         isOpen={isSubmitting}
         title="Verifying Admin Credentials..."
@@ -233,7 +233,7 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-rose-500/25 selection:text-rose-200">
+    <div className="min-h-screen bg-[#06070a] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-rose-500/25 selection:text-rose-200">
       <PremiumLoadingModal
         isOpen={isTransitionLoading}
         title={transitionTitle}
@@ -247,7 +247,7 @@ const MainLayout: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Optional System Announcement Strip */}
         {siteConfig.isAnnouncementEnabled && siteConfig.announcementText && (
-          <div className="w-full bg-[#12141f] border-b border-white/[0.06] text-slate-200 px-4 py-2 text-xs flex items-center justify-center gap-2.5 relative z-40">
+          <div className="w-full bg-[#0c0e14] border-b border-white/[0.08] text-slate-200 px-4 py-2 text-xs flex items-center justify-center gap-2.5 relative z-40">
             <span className="text-rose-400 font-semibold tracking-wide">
               {siteConfig.announcementType === 'promo' ? 'Promotion' : siteConfig.announcementType === 'alert' ? 'Notice' : 'Update'}
             </span>
@@ -279,8 +279,8 @@ const MainLayout: React.FC = () => {
 
         {/* Optional Broadcast Notice */}
         {siteConfig.isMarqueeEnabled && siteConfig.marqueeText && (
-          <div className="w-full bg-[#0c0e16] border-b border-white/[0.05] py-2 px-4 sm:px-6 lg:px-8 flex items-center gap-2.5 text-xs text-slate-400">
-            <span className="shrink-0 text-slate-300 font-semibold">
+          <div className="w-full bg-[#090b10] border-b border-white/[0.06] py-2 px-4 sm:px-6 lg:px-8 flex items-center gap-2.5 text-xs text-slate-400">
+            <span className="shrink-0 text-rose-400 font-semibold">
               Broadcast
             </span>
             <span aria-hidden="true" className="text-slate-600">·</span>
@@ -289,7 +289,7 @@ const MainLayout: React.FC = () => {
         )}
 
         {/* Page Content Viewport */}
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 md:pb-10 max-w-[1200px] w-full mx-auto">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 md:pb-12 max-w-[1240px] w-full mx-auto">
           {currentPage === 'dashboard' && (
             <DashboardPage
               onNavigate={handleNavigate}

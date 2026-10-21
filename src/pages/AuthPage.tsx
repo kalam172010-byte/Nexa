@@ -15,13 +15,12 @@ import {
   Send,
   BookOpen,
   Zap,
-  Sparkles,
-  Gamepad2,
-  Flame,
+  Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { useSite } from '../context/SiteContext.js';
+import heroBannerImg from '../assets/images/hero_vip_gaming_panel_1792510058753.jpg';
 
 interface AuthPageProps {
   onSuccess: () => void;
@@ -50,9 +49,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [isOtpSending, setIsOtpSending] = useState(false);
   const [isOtpVerifying, setIsOtpVerifying] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
-  const [previewOtp, setPreviewOtp] = useState<string | null>(null);
+  const [, setPreviewOtp] = useState<string | null>(null);
 
-  // Forgot Password (Email sent reset method only) states
+  // Forgot Password states
   const [resetIdentifier, setResetIdentifier] = useState('');
   const [isResetSent, setIsResetSent] = useState(false);
   const [resetCountdown, setResetCountdown] = useState(0);
@@ -60,8 +59,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [previewResetToken, setPreviewResetToken] = useState<string | null>(null);
 
   const [logoImgError, setLogoImgError] = useState(false);
+  const [heroImgError, setHeroImgError] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
-  // Countdown timer effects
   useEffect(() => {
     if (otpCountdown > 0) {
       const timer = setTimeout(() => setOtpCountdown(otpCountdown - 1), 1000);
@@ -75,9 +75,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
       return () => clearTimeout(timer);
     }
   }, [resetCountdown]);
-
-  // How to use site modal
-  const [showGuideModal, setShowGuideModal] = useState(false);
 
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -96,9 +93,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
       if (res.code) {
         setPreviewOtp(res.code);
       }
-      // No notification popup at the top to preserve complete privacy & prevent sender email exposure
     } catch (err: any) {
-      showToastError('Verification Error', 'Failed to send verification code. Please check your email and try again.');
+      showToastError(
+        'Verification Error',
+        'Failed to send verification code. Please check your email and try again.'
+      );
     } finally {
       setIsOtpSending(false);
     }
@@ -119,14 +118,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     }
 
     setIsOtpVerifying(true);
-    console.log('[AuthPage] Verifying OTP code for email:', email);
     try {
       await loginWithOtp(email, code);
-      console.log('[AuthPage] OTP login successful. Triggering onSuccess redirect...');
       showToastSuccess('Login Successful', `Welcome to ${siteConfig.siteTitle || 'Nexa Panel'}!`);
       onSuccess();
     } catch (err: any) {
-      console.error('[AuthPage] OTP verification failed:', err);
       showToastError('Verification Failed', err.message || 'Invalid or expired OTP code.');
     } finally {
       setIsOtpVerifying(false);
@@ -135,14 +131,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
-    console.log('[AuthPage] Initiating Google sign-in...');
     try {
       await loginWithGoogle();
-      console.log('[AuthPage] Google sign-in successful. Triggering onSuccess redirect...');
       showToastSuccess('Google Sign-In Successful', `Welcome to ${siteConfig.siteTitle || 'Nexa Panel'}.`);
       onSuccess();
     } catch (err: any) {
-      console.error('[AuthPage] Google sign-in failed:', err);
       showToastError('Google Sign-In Notice', err.message || 'Could not authenticate with Google.');
     } finally {
       setIsGoogleLoading(false);
@@ -160,7 +153,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     setIsSubmitting(true);
     setPreviewResetToken(null);
     try {
-      console.log('[AuthPage] Sending password reset email for:', identifier);
       const res = await sendPasswordReset(identifier);
       setIsResetSent(true);
       const targetEmail = res.email || identifier;
@@ -171,7 +163,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
       }
       showToastSuccess('Reset Instructions Sent', 'Please check your inbox to reset your password.');
     } catch (err: any) {
-      console.error('[AuthPage] Password reset request failed:', err);
       showToastError('Reset Error', 'Could not send password reset instructions. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -197,9 +188,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
           showToastError('Validation Error', 'Please enter your password.');
           return;
         }
-        console.log('[AuthPage] Submitting login request for:', identifier);
         await login(identifier, password);
-        console.log('[AuthPage] Login successful. Triggering onSuccess redirect...');
         showToastSuccess('Welcome Back!', 'Signed in successfully.');
         onSuccess();
       } else if (mode === 'register') {
@@ -213,14 +202,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
           showToastError('Validation Error', 'Password must be at least 6 characters.');
           return;
         }
-        console.log('[AuthPage] Submitting registration for:', u, em);
         await register(u, em, password, referralCode.trim() || undefined);
-        console.log('[AuthPage] Registration successful. Triggering onSuccess redirect...');
         showToastSuccess('Account Created!', `Welcome to ${siteConfig.siteTitle || 'Nexa Panel'}.`);
         onSuccess();
       }
     } catch (err: any) {
-      console.error('[AuthPage] Authentication error:', err);
       showToastError('Authentication Error', err.message || 'Please check your credentials.');
     } finally {
       setIsSubmitting(false);
@@ -232,83 +218,156 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     : 'NX';
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center px-4 py-10 bg-[#07080e] text-slate-100 font-sans relative overflow-hidden">
-      {/* Dynamic Background Cyber Gradients & Grids */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-900/15 via-[#07080e] to-[#07080e] pointer-events-none" />
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none opacity-40" />
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 sm:p-8 bg-[#06080e] text-slate-100 font-sans relative overflow-hidden">
+      {/* Ambient background glows */}
+      <div className="absolute top-1/4 -left-40 w-96 h-96 bg-rose-600/15 rounded-full blur-[130px] pointer-events-none" />
+      <div className="absolute bottom-1/4 -right-40 w-96 h-96 bg-cyan-600/15 rounded-full blur-[130px] pointer-events-none" />
 
-      {/* ======================================================== */}
-      {/* 🌟 AMBIENT FLOATING GAMING BADGES (Smooth Floating Elements) */}
-      {/* ======================================================== */}
-      <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0e111a]/80 backdrop-blur-md border border-emerald-500/30 text-emerald-300 text-xs font-semibold shadow-[0_0_25px_rgba(16,185,129,0.15)] absolute top-8 left-6 md:left-14 lg:left-24 animate-float-1 z-10 pointer-events-none select-none">
-        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-        <Zap className="w-3.5 h-3.5 text-emerald-400" />
-        <span>Instant Auto-Key Delivery</span>
-      </div>
+      <div className="w-full max-w-[1120px] grid grid-cols-1 lg:grid-cols-12 rounded-3xl bg-[#0c0f18] border border-rose-500/25 overflow-hidden shadow-[0_0_60px_rgba(244,63,94,0.15)] items-stretch relative z-10">
+        {/* Left 7 Cols: High-Craft Visual Showcase & Value Architecture (Desktop) */}
+        <div className="hidden lg:flex lg:col-span-7 relative p-10 flex-col justify-between overflow-hidden border-r border-white/[0.08] bg-gradient-to-br from-[#0c0f1a] to-[#070910]">
+          {!heroImgError && (
+            <img
+              src={heroBannerImg}
+              alt="Gaming Reseller Command Platform"
+              referrerPolicy="no-referrer"
+              onError={() => setHeroImgError(true)}
+              className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none select-none"
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#070910] via-[#070910]/80 to-[#070910]/40 pointer-events-none" />
 
-      <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0e111a]/80 backdrop-blur-md border border-cyan-500/30 text-cyan-300 text-xs font-semibold shadow-[0_0_25px_rgba(6,182,212,0.15)] absolute top-12 right-6 md:right-14 lg:right-24 animate-float-2 z-10 pointer-events-none select-none">
-        <ShieldCheck className="w-4 h-4 text-cyan-400" />
-        <span>Anti-Ban Engine v4.2 Active</span>
-      </div>
-
-      <div className="hidden md:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0e111a]/80 backdrop-blur-md border border-pink-500/30 text-pink-300 text-xs font-semibold shadow-[0_0_25px_rgba(244,63,94,0.15)] absolute bottom-16 left-6 md:left-14 lg:left-28 animate-float-3 z-10 pointer-events-none select-none">
-        <Gamepad2 className="w-4 h-4 text-pink-400" />
-        <span>VIP Gaming Loader · PC &amp; Mobile</span>
-      </div>
-
-      <div className="hidden md:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-[#0e111a]/80 backdrop-blur-md border border-amber-500/30 text-amber-300 text-xs font-semibold shadow-[0_0_25px_rgba(245,158,11,0.15)] absolute bottom-14 right-6 md:right-14 lg:right-24 animate-float-1 z-10 pointer-events-none select-none">
-        <Sparkles className="w-4 h-4 text-amber-400" />
-        <span>Zero-Fee UPI Fast Deposit</span>
-      </div>
-
-      <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0e111a]/70 backdrop-blur-md border border-rose-500/25 text-rose-300 text-[11px] font-mono shadow-lg absolute top-1/2 -translate-y-1/2 right-8 animate-float-2 z-10 pointer-events-none select-none">
-        <Flame className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-        <span>99.9% High Uptime Reseller Node</span>
-      </div>
-
-      <div className="w-full max-w-md space-y-5 relative z-20">
-        {/* Main Auth Container */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-[#10121a]/95 backdrop-blur-xl border border-white/[0.09] space-y-6 shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
-          {/* Brand Header with Central Logo */}
-          <div className="text-center space-y-2">
-            <div className="relative inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#181a26] via-[#12141f] to-[#1f0f18] border-2 border-rose-500/40 text-rose-400 mb-1 shadow-[0_0_20px_rgba(244,63,94,0.3)] overflow-hidden p-1.5 group">
-              {siteConfig.logoUrl && !logoImgError ? (
-                <img
-                  src={siteConfig.logoUrl}
-                  alt={siteConfig.siteTitle || 'Logo'}
-                  referrerPolicy="no-referrer"
-                  onError={() => setLogoImgError(true)}
-                  className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(244,63,94,0.5)] transition-transform group-hover:scale-105"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center">
-                  <span className="font-display font-black text-base tracking-wider bg-gradient-to-r from-white via-rose-200 to-amber-200 bg-clip-text text-transparent">
-                    {brandInitials}
-                  </span>
-                  <span className="text-[7px] font-mono font-bold text-rose-400 uppercase tracking-tighter">
-                    VIP
-                  </span>
-                </div>
-              )}
+          {/* Top Brand Lockup */}
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 to-amber-500 text-white flex items-center justify-center font-display font-bold text-xs shadow-[0_0_15px_rgba(244,63,94,0.5)] overflow-hidden">
+                {siteConfig.logoUrl && !logoImgError ? (
+                  <img
+                    src={siteConfig.logoUrl}
+                    alt={siteConfig.siteTitle || 'Logo'}
+                    referrerPolicy="no-referrer"
+                    onError={() => setLogoImgError(true)}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  brandInitials
+                )}
+              </div>
+              <span className="font-display font-extrabold text-lg text-white tracking-tight">
+                {siteConfig.siteTitle || 'Nexa Panel'}
+              </span>
             </div>
 
-            <h1 className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-white via-rose-100 to-amber-200 bg-clip-text text-transparent">
-              {siteConfig.siteTitle || 'Nexa Panel'}
-            </h1>
-            <p className="text-xs text-slate-400 leading-relaxed px-2">
+            <button
+              type="button"
+              onClick={() => setShowGuideModal(true)}
+              className="text-xs text-rose-300 hover:text-white font-semibold inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 transition-colors cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-rose-400" />
+              <span>Platform Guide</span>
+            </button>
+          </div>
+
+          {/* Center Value Proposition & Mechanism-to-Outcome */}
+          <div className="relative z-10 space-y-6 my-auto py-8">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 font-bold text-xs shadow-[0_0_12px_rgba(244,63,94,0.3)]">
+                🔥 VIP Gaming Digital Reseller Platform
+              </div>
+              <h1 className="font-display font-black text-3xl xl:text-4xl text-white tracking-tight leading-tight max-w-lg">
+                Automated Key Provisioning & Reseller Terminal
+              </h1>
+              <p className="text-sm text-slate-300 max-w-md leading-relaxed">
+                Purchase verified software licenses with instant key dispatch, zero-fee UPI QR wallet deposits, and outbound REST API synchronization.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 max-w-md pt-2">
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/30 via-[#101424] to-[#0c0f18] border border-rose-500/30 flex items-start gap-3 shadow-md">
+                <Zap className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <div className="font-bold text-rose-200">01. Instant Automated Key Delivery</div>
+                  <div className="text-slate-300 mt-0.5">
+                    Select any duration tier to allocate and copy your license key in real time.
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-[#101424] to-[#0c0f18] border border-emerald-500/30 flex items-start gap-3 shadow-md">
+                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <div className="font-bold text-emerald-200">02. Zero-Fee Instant UPI Wallet Gateway</div>
+                  <div className="text-slate-300 mt-0.5">
+                    Automated dynamic QR code verification compatible with PhonePe, GPay, Paytm, and BHIM.
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/30 via-[#101424] to-[#0c0f18] border border-cyan-500/30 flex items-start gap-3 shadow-md">
+                <Terminal className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <div className="font-bold text-cyan-200">03. Outbound Reseller REST API</div>
+                  <div className="text-slate-300 mt-0.5">
+                    Connect external storefronts and Telegram bots with wholesale tier discounts.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Quiet Footer */}
+          <div className="relative z-10 flex items-center justify-between text-xs text-slate-400 pt-4 border-t border-white/[0.08]">
+            <span>© {new Date().getFullYear()} {siteConfig.siteTitle || 'Nexa Panel'}</span>
+            <span className="text-emerald-400 font-medium">● 24/7 Automated Dispatch Online</span>
+          </div>
+        </div>
+
+        {/* Right 5 Cols: Authentication Terminal */}
+        <div className="lg:col-span-5 p-6 sm:p-9 flex flex-col justify-center space-y-6 bg-[#090c14]">
+          {/* Mobile Brand Header */}
+          <div className="space-y-1.5">
+            <div className="flex lg:hidden items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center font-display font-bold text-xs">
+                  {brandInitials}
+                </div>
+                <span className="font-display font-bold text-sm text-white">
+                  {siteConfig.siteTitle || 'Nexa Panel'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGuideModal(true)}
+                className="text-xs text-slate-400 hover:text-white inline-flex items-center gap-1 cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-rose-500" />
+                <span>Guide</span>
+              </button>
+            </div>
+
+            <h2 className="font-display font-bold text-xl sm:text-2xl text-white">
               {mode === 'login'
-                ? 'Sign in to access your digital reseller workspace'
+                ? 'Sign in to your account'
                 : mode === 'otp'
-                ? 'Sign in with a one-time email verification code'
+                ? 'Passwordless Email OTP'
                 : mode === 'register'
-                ? 'Create a new account to purchase digital licenses'
-                : 'Recover your account via email reset link'}
+                ? 'Create a new account'
+                : 'Reset your password'}
+            </h2>
+            <p className="text-xs text-slate-400">
+              {mode === 'login'
+                ? 'Enter your credentials to access your license workspace.'
+                : mode === 'otp'
+                ? 'Receive a 6-digit verification code in your inbox.'
+                : mode === 'register'
+                ? 'Register in seconds for instant catalog access.'
+                : 'Recover access via a verification email link.'}
             </p>
           </div>
 
           {/* Segmented Control Tabs */}
           {mode !== 'reset' && (
-            <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#090a0f] border border-white/[0.06] text-xs font-medium">
+            <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#080a0f] border border-white/[0.08] text-xs font-medium">
               <button
                 type="button"
                 onClick={() => {
@@ -317,7 +376,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 }}
                 className={`py-2 px-3 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   mode === 'login'
-                    ? 'bg-[#181b26] text-white font-semibold border border-white/[0.08]'
+                    ? 'bg-rose-600 text-white font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -331,7 +390,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 }}
                 className={`py-2 px-3 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   mode === 'otp'
-                    ? 'bg-[#181b26] text-white font-semibold border border-white/[0.08]'
+                    ? 'bg-rose-600 text-white font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -345,7 +404,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 }}
                 className={`py-2 px-3 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   mode === 'register'
-                    ? 'bg-[#181b26] text-white font-semibold border border-white/[0.08]'
+                    ? 'bg-rose-600 text-white font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -359,10 +418,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
             <div className="space-y-4 text-xs">
               {!isOtpSent ? (
                 <form onSubmit={handleSendOtp} className="space-y-4">
-                  <p className="text-slate-400 leading-relaxed">
-                    Enter your registered email address to receive a 6-digit verification code for passwordless sign-in.
-                  </p>
-
                   <div>
                     <label className="text-xs font-medium text-slate-300 block mb-1.5">
                       Email Address
@@ -375,7 +430,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         onChange={e => setOtpEmail(e.target.value)}
                         placeholder="you@example.com"
                         required
-                        className="w-full pl-10 pr-4 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-4 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
                       />
                     </div>
                   </div>
@@ -397,7 +452,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  <div className="p-3 rounded-xl bg-[#090a0f] border border-white/[0.06] flex items-center justify-between">
+                  <div className="p-3 rounded-xl bg-[#080a0f] border border-white/[0.08] flex items-center justify-between">
                     <div className="min-w-0">
                       <div className="text-[11px] text-slate-400">Verification code sent to</div>
                       <div className="font-mono text-white font-semibold text-xs truncate mt-0.5">
@@ -416,8 +471,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                     </button>
                   </div>
 
-
-
                   <div>
                     <label className="text-xs font-medium text-slate-300 block mb-1.5">
                       6-Digit Verification Code
@@ -432,7 +485,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         placeholder="000000"
                         required
                         autoFocus
-                        className="w-full pl-10 pr-4 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white font-mono font-bold text-center text-lg tracking-[0.35em] tabular-nums focus:outline-none transition-colors placeholder:tracking-normal"
+                        className="w-full pl-10 pr-4 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white font-mono font-bold text-center text-lg tracking-[0.35em] tabular-nums focus:outline-none transition-colors placeholder:tracking-normal"
                       />
                     </div>
                   </div>
@@ -493,7 +546,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         onChange={e => setRegUsername(e.target.value)}
                         placeholder="Choose a username"
                         required
-                        className="w-full pl-10 pr-4 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-4 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
                       />
                     </div>
                   </div>
@@ -510,7 +563,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         onChange={e => setRegEmail(e.target.value)}
                         placeholder="you@example.com"
                         required
-                        className="w-full pl-10 pr-4 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-4 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
                       />
                     </div>
                   </div>
@@ -527,7 +580,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         onChange={e => setPassword(e.target.value)}
                         placeholder="Minimum 6 characters"
                         required
-                        className="w-full pl-10 pr-10 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-10 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
                       />
                       <button
                         type="button"
@@ -548,7 +601,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                       value={referralCode}
                       onChange={e => setReferralCode(e.target.value)}
                       placeholder="Enter partner referral code"
-                      className="w-full px-3.5 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white font-mono focus:outline-none uppercase transition-colors"
+                      className="w-full px-3.5 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white font-mono focus:outline-none uppercase transition-colors"
                     />
                   </div>
                 </>
@@ -568,16 +621,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         onChange={e => setLoginIdentifier(e.target.value)}
                         placeholder="Enter username or email"
                         required
-                        className="w-full pl-10 pr-4 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-4 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
                       />
                     </div>
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-medium text-slate-300">
-                        Password
-                      </label>
+                      <label className="text-xs font-medium text-slate-300">Password</label>
                       <button
                         type="button"
                         onClick={() => {
@@ -598,7 +649,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         onChange={e => setPassword(e.target.value)}
                         placeholder="Enter password"
                         required
-                        className="w-full pl-10 pr-10 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-10 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
                       />
                       <button
                         type="button"
@@ -612,7 +663,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 </>
               )}
 
-              {/* Submit Action */}
               <button
                 type="submit"
                 disabled={isSubmitting || isGoogleLoading}
@@ -621,21 +671,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 {isSubmitting ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
-                  <span>
-                    {mode === 'login' ? 'Sign In' : 'Create Account'}
-                  </span>
+                  <span>{mode === 'login' ? 'Sign In' : 'Create Account'}</span>
                 )}
               </button>
             </form>
           )}
 
-          {/* FORGOT PASSWORD - EMAIL SENT RESET METHOD ONLY (NO NEW PASSWORD / NO RE-TYPE PASSWORD) */}
+          {/* FORGOT PASSWORD */}
           {mode === 'reset' && (
             <div className="space-y-4 text-xs">
               {!isResetSent ? (
                 <form onSubmit={handleSendResetEmail} className="space-y-4">
-                  <div className="p-3.5 rounded-xl bg-[#090a0f] border border-white/[0.06] text-slate-300 leading-relaxed">
-                    Enter your registered email address or username. We will send a password reset link directly to your email inbox.
+                  <div className="p-3.5 rounded-xl bg-[#080a0f] border border-white/[0.08] text-slate-300 leading-relaxed">
+                    Enter your registered email address or username. We will send a password reset link directly to your inbox.
                   </div>
 
                   <div>
@@ -650,7 +698,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         onChange={e => setResetIdentifier(e.target.value)}
                         placeholder="you@example.com or username"
                         required
-                        className="w-full pl-10 pr-4 py-2.5 bg-[#090a0f] border border-white/10 focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-4 py-2.5 bg-[#080a0f] border border-white/[0.1] focus:border-rose-500 rounded-xl text-white focus:outline-none transition-colors"
                       />
                     </div>
                   </div>
@@ -697,13 +745,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                         <strong className="text-white font-mono break-all">{resetTargetEmail}</strong>.
                       </p>
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      Open the link in your email inbox to complete your password reset.
-                    </p>
                   </div>
 
                   {previewResetToken && (
-                    <div className="p-3 rounded-xl bg-[#090a0f] border border-white/[0.08] text-slate-300 text-xs space-y-1">
+                    <div className="p-3 rounded-xl bg-[#080a0f] border border-white/[0.08] text-slate-300 text-xs space-y-1">
                       <div className="font-medium text-slate-400 text-[11px]">
                         Preview Reset Token
                       </div>
@@ -760,7 +805,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isGoogleLoading || isSubmitting}
-                className="w-full py-2.5 px-4 rounded-xl bg-[#090a0f] hover:bg-white/[0.04] border border-white/10 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2.5 cursor-pointer whitespace-nowrap shrink-0"
+                className="w-full py-2.5 px-4 rounded-xl bg-[#080a0f] hover:bg-white/[0.04] border border-white/[0.1] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2.5 cursor-pointer whitespace-nowrap shrink-0"
               >
                 {isGoogleLoading ? (
                   <RefreshCw className="w-4 h-4 animate-spin text-rose-400" />
@@ -788,30 +833,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
               </button>
             </>
           )}
-
-          {/* Quick Platform Guide */}
-          <div className="text-center pt-1">
-            <button
-              type="button"
-              onClick={() => setShowGuideModal(true)}
-              className="text-xs text-slate-400 hover:text-white font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-rose-400" />
-              <span>Platform Guide & Onboarding</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Quiet Copyright Footer */}
-        <div className="text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} {siteConfig.siteTitle || 'Nexa Panel'}. All rights reserved.
         </div>
       </div>
 
       {/* Platform Guide Modal */}
       {showGuideModal && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#10121a] border border-white/10 rounded-2xl p-6 max-w-md w-full space-y-5 shadow-2xl relative">
+          <div className="bg-[#0c0e14] border border-white/[0.12] rounded-2xl p-6 max-w-md w-full space-y-5 shadow-2xl relative">
             <button
               type="button"
               onClick={() => setShowGuideModal(false)}
@@ -821,26 +849,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
             </button>
 
             <div className="space-y-1">
-              <div className="text-rose-400 text-xs font-medium">
-                Quick Start Guide
-              </div>
+              <div className="text-rose-400 text-xs font-medium">Quick Start Guide</div>
               <h3 className="font-display font-bold text-lg text-white">
                 Getting Started with {siteConfig.siteTitle || 'Nexa Panel'}
               </h3>
             </div>
 
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
-              <div className="p-3.5 rounded-xl bg-[#090a0f] border border-white/[0.06]">
+              <div className="p-3.5 rounded-xl bg-[#080a0f] border border-white/[0.08]">
                 <div className="font-semibold text-white mb-0.5">01. Create Your Account</div>
-                <p className="text-slate-400">Sign in using your username, Email OTP, or Google account for instant access.</p>
+                <p className="text-slate-400">
+                  Sign in using your username, Email OTP, or Google account for instant access.
+                </p>
               </div>
-              <div className="p-3.5 rounded-xl bg-[#090a0f] border border-white/[0.06]">
+              <div className="p-3.5 rounded-xl bg-[#080a0f] border border-white/[0.08]">
                 <div className="font-semibold text-white mb-0.5">02. Add Wallet Balance</div>
-                <p className="text-slate-400">Open the Add Funds section and scan the zero-fee UPI QR code for automated balance credit.</p>
+                <p className="text-slate-400">
+                  Open the Add Funds section and scan the zero-fee UPI QR code for automated balance credit.
+                </p>
               </div>
-              <div className="p-3.5 rounded-xl bg-[#090a0f] border border-white/[0.06]">
+              <div className="p-3.5 rounded-xl bg-[#080a0f] border border-white/[0.08]">
                 <div className="font-semibold text-white mb-0.5">03. Instant License Delivery</div>
-                <p className="text-slate-400">Choose your software duration in the catalog to generate and copy your key immediately.</p>
+                <p className="text-slate-400">
+                  Choose your software duration in the catalog to generate and copy your key immediately.
+                </p>
               </div>
             </div>
 

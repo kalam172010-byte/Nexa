@@ -10,8 +10,9 @@ import {
   Trophy,
   Terminal,
   Users,
-  Sparkles,
   TrendingUp,
+  Sparkles,
+  Flame,
   Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
@@ -19,6 +20,7 @@ import { useSite } from '../context/SiteContext.js';
 import { api } from '../services/api.js';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase.js';
+import heroBannerImg from '../assets/images/hero_vip_gaming_panel_1792510058753.jpg';
 
 interface DashboardPageProps {
   onNavigate: (page: string) => void;
@@ -34,13 +36,11 @@ interface LeaderboardUser {
   totalSpent: number;
 }
 
-
-
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
   onOpenUpgrade,
 }) => {
-  const { balance, role } = useAuth();
+  const { user, balance, role } = useAuth();
   const { siteConfig } = useSite();
   const [summary, setSummary] = useState<any>({
     todaySales: 0,
@@ -49,6 +49,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     referrals: 0,
   });
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
+  const [heroImgFailed, setHeroImgFailed] = useState(false);
 
   const loadDashboardData = async () => {
     try {
@@ -69,7 +70,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   useEffect(() => {
     loadDashboardData();
 
-    // Attach real-time Firestore listener so new users and key purchases update Top Active Members immediately
     let unsubscribeUsers: (() => void) | undefined;
     try {
       const usersColRef = collection(db, 'users');
@@ -90,9 +90,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           });
 
           if (liveUsers.length > 0) {
-            // Sort by keysCount desc, then totalSpent desc, then newest member
             const sorted = liveUsers
-              .sort((a, b) => (b.keysCount - a.keysCount) || (b.totalSpent - a.totalSpent) || (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+              .sort(
+                (a, b) =>
+                  b.keysCount - a.keysCount ||
+                  b.totalSpent - a.totalSpent ||
+                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              )
               .slice(0, 5)
               .map((u, i) => ({
                 rank: i + 1,
@@ -104,7 +108,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               }));
 
             setLeaderboard(prev => {
-              // Only override if we have valid real-time users
               if (sorted.length > 0) return sorted;
               return prev;
             });
@@ -119,7 +122,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }
 
     const interval = setInterval(() => {
-      api.getTopActiveUsers()
+      api
+        .getTopActiveUsers()
         .then(res => {
           if (res?.leaderboard && res.leaderboard.length > 0) {
             setLeaderboard(res.leaderboard);
@@ -127,7 +131,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         })
         .catch(() => {});
 
-      api.getWalletSummary()
+      api
+        .getWalletSummary()
         .then(res => {
           if (res) setSummary(res);
         })
@@ -143,341 +148,390 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
   const currency = siteConfig.currencySymbol || '₹';
 
+  const quickModules = [
+    {
+      id: 'buy',
+      index: '01',
+      title: 'Buy Keys',
+      desc: 'Instant VIP Free Fire & Game licenses',
+      icon: ShoppingBag,
+      color: 'text-rose-400',
+      bgGlow: 'from-rose-500/15 to-[#121625] border-rose-500/30 hover:border-rose-500/60',
+      iconBg: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+    },
+    {
+      id: 'deposit',
+      index: '02',
+      title: 'Add Funds',
+      desc: 'Instant zero-fee automated UPI QR credit',
+      icon: Wallet,
+      color: 'text-emerald-400',
+      bgGlow: 'from-emerald-500/15 to-[#121625] border-emerald-500/30 hover:border-emerald-500/60',
+      iconBg: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    },
+    {
+      id: 'keys',
+      index: '03',
+      title: 'My Keys',
+      desc: 'Active licenses, expiry & 1-click copy',
+      icon: KeyRound,
+      color: 'text-amber-400',
+      bgGlow: 'from-amber-500/15 to-[#121625] border-amber-500/30 hover:border-amber-500/60',
+      iconBg: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    },
+    {
+      id: 'history',
+      index: '04',
+      title: 'Transaction Ledger',
+      desc: 'Realtime order history and audit logs',
+      icon: Clock,
+      color: 'text-cyan-400',
+      bgGlow: 'from-cyan-500/15 to-[#121625] border-cyan-500/30 hover:border-cyan-500/60',
+      iconBg: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    },
+    {
+      id: 'tickets',
+      index: '05',
+      title: 'Support Desk',
+      desc: '24/7 technical and payment resolution',
+      icon: ShieldCheck,
+      color: 'text-violet-400',
+      bgGlow: 'from-violet-500/15 to-[#121625] border-violet-500/30 hover:border-violet-500/60',
+      iconBg: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
+    },
+    {
+      id: 'refer',
+      index: '06',
+      title: 'Partner Referrals',
+      desc: 'Earn 5% lifetime commission on all orders',
+      icon: Users,
+      color: 'text-fuchsia-400',
+      bgGlow: 'from-fuchsia-500/15 to-[#121625] border-fuchsia-500/30 hover:border-fuchsia-500/60',
+      iconBg: 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30',
+    },
+  ];
+
+  const maxKeys = Math.max(1, ...leaderboard.map(u => u.keysCount || 0));
+
   return (
     <div className="space-y-8">
-      {/* 1. Primary Vibrant Wallet Hero Anchor */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-rose-950/60 via-[#121422] to-indigo-950/50 border border-rose-500/30 p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[0_12px_40px_rgba(244,63,94,0.12)]">
-        {/* Ambient Color Orbs */}
-        <div className="absolute -top-20 -left-20 w-64 h-64 bg-rose-500/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-violet-500/15 rounded-full blur-3xl pointer-events-none" />
+      {/* 1. Futuristic VIP Gaming Command Hero Card */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-rose-950/70 via-[#101426] to-indigo-950/70 border border-rose-500/35 p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[0_12px_40px_rgba(244,63,94,0.2)]">
+        {/* Ambient Glowing Orbs */}
+        <div className="absolute -top-24 -left-24 w-80 h-80 bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 space-y-2">
-          <div className="flex items-center gap-2 text-xs text-rose-300 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Available Wallet Balance</span>
-            <span aria-hidden="true" className="text-slate-500">·</span>
-            <span className="text-amber-300 font-semibold">{role} Tier</span>
+        {/* Background Visual Showcase */}
+        {!heroImgFailed && (
+          <img
+            src={heroBannerImg}
+            alt="Gaming Backdrop"
+            referrerPolicy="no-referrer"
+            onError={() => setHeroImgFailed(true)}
+            className="absolute inset-0 w-full h-full object-cover opacity-25 mix-blend-screen pointer-events-none select-none"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0a0d18]/95 via-[#0a0d18]/85 to-transparent pointer-events-none" />
+
+        <div className="relative z-10 space-y-2.5 max-w-2xl">
+          {/* Animated Status Pill */}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold shadow-inner">
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>KALAM FF VIP CLOUD ACTIVE</span>
+            <span aria-hidden="true" className="text-slate-600">·</span>
+            <span className="text-amber-400 font-bold">{role} TIER</span>
           </div>
 
-          <div className="flex items-baseline gap-1.5">
+          <div className="flex items-baseline gap-2 pt-1">
             <span className="text-2xl sm:text-3xl font-bold text-emerald-400 font-mono">
               {currency}
             </span>
-            <span className="font-mono text-3xl sm:text-5xl font-extrabold bg-gradient-to-r from-white via-emerald-100 to-emerald-300 bg-clip-text text-transparent tracking-tight tabular-nums">
+            <span className="font-mono text-4xl sm:text-6xl font-black bg-gradient-to-r from-emerald-300 via-teal-200 to-cyan-300 bg-clip-text text-transparent tracking-tight tabular-nums drop-shadow-[0_0_20px_rgba(16,185,129,0.4)]">
               {balance.toFixed(2)}
             </span>
           </div>
 
-          <p className="text-xs text-slate-300/90 pt-0.5">
-            {siteConfig.accountSafetyBalanceText || 'Instant automated key delivery and zero-fee UPI wallet top-ups.'}
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+            {siteConfig.accountSafetyBalanceText ||
+              'Instant automated Free Fire key delivery with zero-fee UPI wallet deposits and live reseller API synchronization.'}
           </p>
         </div>
 
-        {/* Vibrant Primary & Secondary Actions */}
-        <div className="relative z-10 flex items-center gap-3 shrink-0">
+        {/* Vibrant Glowing Action Buttons */}
+        <div className="relative z-10 flex flex-wrap sm:flex-nowrap items-center gap-3 shrink-0">
           <button
             type="button"
             onClick={() => onNavigate('deposit')}
-            className="px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-xs transition-all shadow-[0_4px_20px_rgba(16,185,129,0.35)] flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+            className="px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs sm:text-sm transition-all shadow-[0_4px_25px_rgba(16,185,129,0.4)] flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border border-emerald-300/40 hover:scale-105"
           >
-            <Wallet className="w-4 h-4 stroke-[2.5]" />
-            <span>Deposit</span>
+            <Wallet className="w-4 h-4 stroke-[2.8]" />
+            <span>+ Add Funds</span>
           </button>
 
           <button
             type="button"
             onClick={() => onNavigate('buy')}
-            className="px-5 py-3 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-bold text-xs transition-all shadow-[0_4px_20px_rgba(244,63,94,0.35)] flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+            className="px-5 py-3 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-black text-xs sm:text-sm transition-all shadow-[0_4px_25px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border border-rose-300/30 hover:scale-105"
           >
-            <ShoppingBag className="w-4 h-4" />
+            <Flame className="w-4 h-4 fill-white" />
             <span>Buy Key</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Multi-Hue Key Performance Metrics Row */}
+      {/* 2. 4 Multi-Hue Performance Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-rose-500/12 via-[#10121a] to-[#10121a] border border-rose-500/25 space-y-1.5 shadow-[0_4px_20px_rgba(244,63,94,0.06)]">
-          <div className="flex items-center justify-between text-xs text-rose-300 font-semibold">
-            <span>Today's Orders</span>
-            <ShoppingBag className="w-4 h-4 text-rose-400" />
+        {/* Card 1: Today's Orders (Ruby Flame) */}
+        <div className="p-5 rounded-2xl bg-gradient-to-br from-rose-500/15 via-[#121524] to-[#121524] border border-rose-500/35 space-y-1.5 shadow-[0_8px_25px_rgba(244,63,94,0.12)] hover:border-rose-500/60 transition-colors">
+          <div className="flex items-center justify-between text-xs font-bold text-rose-300">
+            <span>Today's Deliveries</span>
+            <div className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+              <ShoppingBag className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="font-mono text-2xl sm:text-3xl font-extrabold text-rose-400 tabular-nums">
+          <div className="font-mono text-3xl sm:text-4xl font-extrabold text-rose-400 tabular-nums drop-shadow-[0_0_12px_rgba(244,63,94,0.4)]">
             {summary.todaySales ?? 0}
           </div>
-          <div className="text-xs text-slate-400">Licenses delivered today</div>
+          <div className="text-[11px] text-slate-400 font-medium">Delivered to players today</div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-cyan-500/12 via-[#10121a] to-[#10121a] border border-cyan-500/25 space-y-1.5 shadow-[0_4px_20px_rgba(6,182,212,0.06)]">
-          <div className="flex items-center justify-between text-xs text-cyan-300 font-semibold">
+        {/* Card 2: 30-Day Volume (Cyber Cyan) */}
+        <div className="p-5 rounded-2xl bg-gradient-to-br from-cyan-500/15 via-[#121524] to-[#121524] border border-cyan-500/35 space-y-1.5 shadow-[0_8px_25px_rgba(6,182,212,0.12)] hover:border-cyan-500/60 transition-colors">
+          <div className="flex items-center justify-between text-xs font-bold text-cyan-300">
             <span>30-Day Volume</span>
-            <TrendingUp className="w-4 h-4 text-cyan-400" />
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+              <TrendingUp className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="font-mono text-2xl sm:text-3xl font-extrabold text-cyan-400 tabular-nums">
+          <div className="font-mono text-3xl sm:text-4xl font-extrabold text-cyan-400 tabular-nums drop-shadow-[0_0_12px_rgba(6,182,212,0.4)]">
             {summary.monthlySales ?? 0}
           </div>
-          <div className="text-xs text-slate-400">Monthly active licenses</div>
+          <div className="text-[11px] text-slate-400 font-medium">Monthly active licenses</div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500/12 via-[#10121a] to-[#10121a] border border-emerald-500/25 space-y-1.5 shadow-[0_4px_20px_rgba(16,185,129,0.06)]">
-          <div className="flex items-center justify-between text-xs text-emerald-300 font-semibold">
-            <span>Total Deposits</span>
-            <Wallet className="w-4 h-4 text-emerald-400" />
+        {/* Card 3: Total Deposits (Electric Emerald) */}
+        <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-[#121524] to-[#121524] border border-emerald-500/35 space-y-1.5 shadow-[0_8px_25px_rgba(16,185,129,0.12)] hover:border-emerald-500/60 transition-colors">
+          <div className="flex items-center justify-between text-xs font-bold text-emerald-300">
+            <span>Total UPI Deposits</span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+              <Wallet className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="font-mono text-2xl sm:text-3xl font-extrabold text-emerald-400 tabular-nums">
+          <div className="font-mono text-3xl sm:text-4xl font-extrabold text-emerald-400 tabular-nums drop-shadow-[0_0_12px_rgba(16,185,129,0.4)]">
             {currency}{(summary.totalDeposits ?? 0).toFixed(0)}
           </div>
-          <div className="text-xs text-slate-400">Verified UPI top-ups</div>
+          <div className="text-[11px] text-slate-400 font-medium">Instant automated credit</div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-500/12 via-[#10121a] to-[#10121a] border border-amber-500/25 space-y-1.5 shadow-[0_4px_20px_rgba(245,158,11,0.06)]">
-          <div className="flex items-center justify-between text-xs text-amber-300 font-semibold">
+        {/* Card 4: Partner Referrals (Royal Gold) */}
+        <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-500/15 via-[#121524] to-[#121524] border border-amber-500/35 space-y-1.5 shadow-[0_8px_25px_rgba(245,158,11,0.12)] hover:border-amber-500/60 transition-colors">
+          <div className="flex items-center justify-between text-xs font-bold text-amber-300">
             <span>Partner Referrals</span>
-            <Users className="w-4 h-4 text-amber-400" />
+            <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+              <Users className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="font-mono text-2xl sm:text-3xl font-extrabold text-amber-400 tabular-nums">
+          <div className="font-mono text-3xl sm:text-4xl font-extrabold text-amber-400 tabular-nums drop-shadow-[0_0_12px_rgba(245,158,11,0.4)]">
             {summary.referrals ?? 0}
           </div>
-          <div className="text-xs text-slate-400">5% lifetime commission</div>
+          <div className="text-[11px] text-slate-400 font-medium">5% lifetime commission</div>
         </div>
       </div>
 
-      {/* 3. Reseller Tier Status / Upgrade Callout */}
+      {/* 3. Wholesale Reseller Tier Spotlight */}
       {!isReseller ? (
-        <div className="rounded-2xl bg-gradient-to-r from-amber-500/15 via-[#131520] to-orange-500/10 border border-amber-500/35 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[0_8px_30px_rgba(245,158,11,0.1)]">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/15 via-[#151829] to-orange-500/15 border border-amber-500/40 p-6 sm:p-7 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[0_10px_35px_rgba(245,158,11,0.15)]">
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs text-amber-400 font-semibold">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>For Scaling Operations & Resellers</span>
-              <span aria-hidden="true">·</span>
-              <span className="text-orange-300">Wholesale Tier</span>
+            <div className="inline-flex items-center gap-2 text-xs font-bold text-amber-300">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
+              <span>WHOLESALE RESELLER PRIVILEGES</span>
+              <span aria-hidden="true" className="text-slate-600">·</span>
+              <span className="text-orange-400">UP TO 30% DISCOUNT</span>
             </div>
 
-            <h2 className="font-display font-bold text-lg bg-gradient-to-r from-amber-200 via-yellow-300 to-orange-300 bg-clip-text text-transparent">
-              Upgrade to Wholesale Reseller Account
+            <h2 className="font-display font-extrabold text-xl sm:text-2xl bg-gradient-to-r from-amber-200 via-yellow-200 to-orange-300 bg-clip-text text-transparent">
+              Upgrade to Official Wholesale Reseller Account
             </h2>
 
-            <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-              Unlock up to 30% wholesale discounts across all license durations, outbound REST API integration for external stores, and bulk key generation up to 100 units per request.
+            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+              Unlock wholesale pricing on all Free Fire durations, automated outbound REST API integration for your Telegram store or website, and bulk dispatch up to 100 keys per request.
             </p>
           </div>
 
           <div className="flex flex-col sm:items-end justify-center shrink-0 space-y-2">
             <div className="text-xs text-slate-300">
-              One-time activation: <span className="font-mono font-bold text-amber-300 tabular-nums text-sm">{currency}{Number(siteConfig.resellerUpgradePrice || 299).toFixed(2)}</span>
+              One-time activation: <span className="font-mono font-bold text-amber-300 tabular-nums text-base">{currency}{Number(siteConfig.resellerUpgradePrice || 299).toFixed(2)}</span>
             </div>
             <button
               type="button"
               onClick={onOpenUpgrade}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs transition-all shadow-[0_4px_20px_rgba(245,158,11,0.35)] flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs sm:text-sm transition-all shadow-[0_4px_25px_rgba(245,158,11,0.4)] flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 hover:scale-105"
             >
-              <span>Upgrade Account</span>
-              <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
+              <span>Upgrade to Reseller</span>
+              <ArrowUpRight className="w-4 h-4 stroke-[3]" />
             </button>
           </div>
         </div>
       ) : (
         <div
           onClick={() => onNavigate('api')}
-          className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-violet-950/40 via-[#121422] to-cyan-950/30 hover:from-violet-900/50 border border-violet-500/30 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group shadow-[0_8px_25px_rgba(139,92,246,0.1)]"
+          className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-violet-950/50 via-[#12162a] to-cyan-950/40 hover:from-violet-900/60 border border-violet-500/40 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group shadow-[0_10px_35px_rgba(139,92,246,0.15)]"
         >
           <div className="flex items-start sm:items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500/25 to-fuchsia-500/20 border border-violet-500/40 text-violet-300 flex items-center justify-center shrink-0">
-              <Terminal className="w-5 h-5" />
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500/30 to-fuchsia-500/20 border border-violet-500/50 text-violet-300 flex items-center justify-center shrink-0 shadow-lg shadow-violet-950/50">
+              <Terminal className="w-6 h-6" />
             </div>
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2 text-xs text-violet-300 font-semibold">
-                <span>Wholesale Reseller Active</span>
-                <span aria-hidden="true">·</span>
-                <span className="text-cyan-300">Outbound REST API</span>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs font-bold text-violet-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>WHOLESALE RESELLER ACTIVE</span>
+                <span aria-hidden="true" className="text-slate-600">·</span>
+                <span className="text-cyan-300">REST API & TELEGRAM BOT READY</span>
               </div>
-              <h3 className="font-display font-bold text-sm sm:text-base text-white group-hover:text-violet-300 transition-colors">
-                Connect External Stores & Automated Key Dispatch
+              <h3 className="font-display font-extrabold text-sm sm:text-base text-white group-hover:text-violet-300 transition-colors">
+                External Store API & Automated Provisioning Active
               </h3>
               <p className="text-xs text-slate-300">
-                Manage your API key, view numeric product IDs, and test automated license provisioning.
+                Generate keys from your Telegram bot or website. All orders reflect immediately in your wallet ledger.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs font-bold text-violet-300 group-hover:text-white shrink-0 whitespace-nowrap">
-            <span>API Console</span>
+          <div className="flex items-center gap-1.5 text-xs font-bold text-violet-300 group-hover:text-white shrink-0 whitespace-nowrap bg-violet-500/20 px-3.5 py-2 rounded-xl border border-violet-500/30">
+            <span>Open API Console</span>
             <ChevronRight className="w-4 h-4" />
           </div>
         </div>
       )}
 
-      {/* 4. Color-Coded Workspace Shortcuts */}
-      <div className="space-y-3">
+      {/* 4. Colorful Workspace Quick-Launch Modules */}
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-display font-bold text-base text-white">
-            Workspace Shortcuts
+          <h3 className="font-display font-bold text-lg text-white flex items-center gap-2">
+            <Flame className="w-4 h-4 text-rose-500" />
+            <span>Workspace Operations</span>
           </h3>
-          <span className="text-xs text-slate-400">
-            Quick access
+          <span className="text-xs text-rose-400 font-semibold">
+            Instant Access
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <button
-            type="button"
-            onClick={() => onNavigate('buy')}
-            className="p-4 rounded-2xl bg-gradient-to-br from-rose-500/12 via-[#10121a] to-[#10121a] hover:from-rose-500/20 border border-rose-500/25 hover:border-rose-500/45 transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/35 text-rose-400 flex items-center justify-center">
-              <ShoppingBag className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs group-hover:text-rose-300 transition-colors">
-                Buy Keys
-              </div>
-              <div className="text-[11px] text-rose-300/70 mt-0.5">License catalog</div>
-            </div>
-          </button>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          {quickModules.map(mod => {
+            const Icon = mod.icon;
+            return (
+              <button
+                key={mod.id}
+                type="button"
+                onClick={() => onNavigate(mod.id)}
+                className={`p-4 rounded-2xl bg-gradient-to-b ${mod.bgGlow} border transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer group shadow-lg hover:scale-105`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shadow-md ${mod.iconBg}`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <span className="font-mono text-[10px] font-bold text-slate-500 group-hover:text-white transition-colors">
+                    {mod.index}
+                  </span>
+                </div>
 
-          <button
-            type="button"
-            onClick={() => onNavigate('deposit')}
-            className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/12 via-[#10121a] to-[#10121a] hover:from-emerald-500/20 border border-emerald-500/25 hover:border-emerald-500/45 transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/35 text-emerald-400 flex items-center justify-center">
-              <Wallet className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs group-hover:text-emerald-300 transition-colors">
-                Add Funds
-              </div>
-              <div className="text-[11px] text-emerald-300/70 mt-0.5">Instant UPI QR</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigate('keys')}
-            className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/12 via-[#10121a] to-[#10121a] hover:from-amber-500/20 border border-amber-500/25 hover:border-amber-500/45 transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/35 text-amber-400 flex items-center justify-center">
-              <KeyRound className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs group-hover:text-amber-300 transition-colors">
-                My Keys
-              </div>
-              <div className="text-[11px] text-amber-300/70 mt-0.5">Delivered keys</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigate('history')}
-            className="p-4 rounded-2xl bg-gradient-to-br from-cyan-500/12 via-[#10121a] to-[#10121a] hover:from-cyan-500/20 border border-cyan-500/25 hover:border-cyan-500/45 transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-500/35 text-cyan-400 flex items-center justify-center">
-              <Clock className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs group-hover:text-cyan-300 transition-colors">
-                Transactions
-              </div>
-              <div className="text-[11px] text-cyan-300/70 mt-0.5">Order ledger</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigate('tickets')}
-            className="p-4 rounded-2xl bg-gradient-to-br from-violet-500/12 via-[#10121a] to-[#10121a] hover:from-violet-500/20 border border-violet-500/25 hover:border-violet-500/45 transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-violet-500/20 border border-violet-500/35 text-violet-400 flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs group-hover:text-violet-300 transition-colors">
-                Support Desk
-              </div>
-              <div className="text-[11px] text-violet-300/70 mt-0.5">24/7 resolution</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigate('refer')}
-            className="p-4 rounded-2xl bg-gradient-to-br from-pink-500/12 via-[#10121a] to-[#10121a] hover:from-pink-500/20 border border-pink-500/25 hover:border-pink-500/45 transition-all text-left flex flex-col justify-between space-y-3 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-pink-500/20 border border-pink-500/35 text-pink-400 flex items-center justify-center">
-              <Users className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs group-hover:text-pink-300 transition-colors">
-                Refer & Earn
-              </div>
-              <div className="text-[11px] text-pink-300/70 mt-0.5">5% commission</div>
-            </div>
-          </button>
+                <div>
+                  <div className="font-bold text-white text-xs sm:text-sm group-hover:text-rose-300 transition-colors">
+                    {mod.title}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                    {mod.desc}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* 5. Top Active Members Table */}
-      <div className="space-y-3">
+      {/* 5. Esports Leaderboard: Top Active Members */}
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-400" />
+            <h3 className="font-display font-bold text-lg text-white flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-400" />
               <span>Top Active Members</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Ranked by verified license volume
+              Live standings ranked by verified digital license volume
             </p>
           </div>
-          <span className="text-xs text-amber-400 font-mono font-bold tabular-nums">
-            Top {Math.min(5, leaderboard.length)}
+          <span className="text-xs text-amber-400 font-mono font-bold tabular-nums bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/25">
+            Top {Math.min(5, leaderboard.length || 5)}
           </span>
         </div>
 
-        <div className="bg-[#10121a] border border-white/[0.08] rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-[#0f121e]/90 border border-white/10 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
           {leaderboard.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400">
-              No license purchases recorded yet. Purchase your first license key to appear on the leaderboard.
+              No license purchases recorded yet. Purchase your first key to climb the leaderboard.
             </div>
           ) : (
-            <div className="divide-y divide-white/[0.06]">
+            <div className="divide-y divide-white/[0.08]">
               {leaderboard.slice(0, 5).map(u => {
                 const isFirst = u.rank === 1;
                 const isSecond = u.rank === 2;
                 const isThird = u.rank === 3;
+                const pct = Math.max(15, Math.min(100, Math.round(((u.keysCount || 1) / maxKeys) * 100)));
 
                 return (
                   <div
                     key={u.userId}
-                    className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-white/[0.03] transition-colors"
+                    className="px-5 py-4 flex items-center justify-between gap-4 hover:bg-white/[0.03] transition-colors"
                   >
-                    <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
                       <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-xs tabular-nums shrink-0 ${
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-mono font-black text-xs tabular-nums shrink-0 border ${
                           isFirst
-                            ? 'bg-gradient-to-br from-amber-400/25 to-orange-500/20 text-amber-300 border border-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                            ? 'bg-gradient-to-br from-amber-400/30 to-orange-500/20 text-amber-300 border-amber-400/50 shadow-[0_0_15px_rgba(245,158,11,0.35)]'
                             : isSecond
-                            ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
                             : isThird
-                            ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                            : 'bg-white/[0.04] text-slate-400 border border-white/[0.08]'
+                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_12px_rgba(244,63,94,0.25)]'
+                            : 'bg-white/[0.05] text-slate-400 border-white/[0.1]'
                         }`}
                       >
                         #{u.rank}
                       </div>
 
-                      <div className="min-w-0">
-                        <div className="text-xs sm:text-sm font-semibold text-white truncate">
-                          @{u.username}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs sm:text-sm font-bold text-white truncate">
+                            @{u.username}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                              u.role === 'RESELLER' || u.role === 'ADMIN'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}
+                          >
+                            {u.role === 'RESELLER' || u.role === 'ADMIN' ? 'VIP RESELLER' : 'VERIFIED'}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                          <span className="text-emerald-400 font-medium">Verified Member</span>
+                        <div className="w-full max-w-[200px] h-1.5 bg-white/[0.08] rounded-full overflow-hidden mt-1.5">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isFirst
+                                ? 'bg-gradient-to-r from-amber-400 to-orange-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
+                                : isSecond
+                                ? 'bg-gradient-to-r from-cyan-400 to-blue-500'
+                                : 'bg-gradient-to-r from-rose-500 to-pink-500'
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
                         </div>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <div className="font-mono text-xs sm:text-sm font-bold text-rose-300 tabular-nums">
+                      <div className="font-mono text-sm sm:text-base font-extrabold text-rose-300 tabular-nums drop-shadow-[0_0_8px_rgba(244,63,94,0.4)]">
                         {u.keysCount} Keys
                       </div>
                     </div>

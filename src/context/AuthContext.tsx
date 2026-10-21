@@ -14,6 +14,7 @@ import { doc, setDoc, getDoc, onSnapshot, collection } from 'firebase/firestore'
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../firebase.js';
 import { User, UserRole } from '../types/index.js';
 import { api } from '../services/api.js';
+import { SignOutModal } from '../components/SignOutModal.js';
 
 const ADMIN_EMAILS = [
   'kk7953926@gmail.com',
@@ -44,6 +45,8 @@ interface AuthContextValue {
   sendOtp: (email: string) => Promise<{ success: boolean; simulated: boolean; code?: string; message: string }>;
   loginWithOtp: (email: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
+  promptSignOut: (options?: { allDevices?: boolean }) => void;
+  closeSignOutModal: () => void;
   refreshUser: () => Promise<void>;
   updateBalanceLocally: (newBalance: number) => void;
   elevateToAdmin: (secretKey?: string) => Promise<boolean>;
@@ -878,6 +881,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const [isSignOutModalOpen, setIsSignOutModalOpen] = useState(false);
+  const [signOutDefaultAllDevices, setSignOutDefaultAllDevices] = useState(false);
+
+  const promptSignOut = useCallback((options?: { allDevices?: boolean }) => {
+    setSignOutDefaultAllDevices(!!options?.allDevices);
+    setIsSignOutModalOpen(true);
+  }, []);
+
+  const closeSignOutModal = useCallback(() => {
+    setIsSignOutModalOpen(false);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -896,12 +911,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendOtp,
         loginWithOtp,
         logout,
+        promptSignOut,
+        closeSignOutModal,
         refreshUser,
         updateBalanceLocally,
         elevateToAdmin,
       }}
     >
       {children}
+      <SignOutModal
+        isOpen={isSignOutModalOpen}
+        onClose={closeSignOutModal}
+        defaultAllDevices={signOutDefaultAllDevices}
+      />
     </AuthContext.Provider>
   );
 };

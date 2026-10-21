@@ -70,6 +70,7 @@ import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firesto
 import { db, handleFirestoreError, OperationType } from '../firebase.js';
 import { AdminStats, Product, ProductVariant, SiteCustomizationConfig } from '../types/index.js';
 import { PremiumLoadingModal } from '../components/PremiumLoader.js';
+import { AdminUserAnalytics } from '../components/AdminUserAnalytics.js';
 
 const ALBUM_PRESETS = [
   {
@@ -134,6 +135,8 @@ export const AdminPage: React.FC = () => {
     | 'backup'
     | 'logs'
   >('dashboard');
+
+  const [dashboardSection, setDashboardSection] = useState<'analytics' | 'financials' | 'all'>('all');
 
   // User Reseller API Management States
   const [editingPidMap, setEditingPidMap] = useState<Record<string, string>>({});
@@ -2890,16 +2893,73 @@ export const AdminPage: React.FC = () => {
       {/* TAB CONTENT: 1. DASHBOARD OVERVIEW */}
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
-          {/* 8 Stats Metrics Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase font-mono">Total Users</span>
-              <div className="font-mono text-2xl font-black text-white">{stats?.totalUsers ?? 0}</div>
-              <span className="text-[10px] text-emerald-400">{stats?.activeUsers ?? 0} active</span>
+          {/* Dashboard Sub-Section Switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-[#0d0d14] border border-white/5">
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#080a12] border border-white/[0.08] overflow-x-auto no-scrollbar">
+              <button
+                type="button"
+                onClick={() => setDashboardSection('all')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  dashboardSection === 'all'
+                    ? 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 text-white shadow-[0_0_12px_rgba(244,63,94,0.35)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ⚡ Unified Telemetry
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardSection('analytics')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  dashboardSection === 'analytics'
+                    ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                👥 User Growth & Recharts
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardSection('financials')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  dashboardSection === 'financials'
+                    ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                💰 Financial Throughput
+              </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#0d0d14] border border-emerald-500/20 bg-emerald-950/10 space-y-1">
-              <span className="text-[10px] text-emerald-400 uppercase font-mono font-bold">Today Sales</span>
+            <div className="flex items-center gap-2 text-xs font-mono text-slate-400 px-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{users.length} Registered Accounts Loaded</span>
+            </div>
+          </div>
+
+          {/* User Analytics View (Recharts: Active User Growth, Recent Sign-Ups, Cohorts) */}
+          {(dashboardSection === 'all' || dashboardSection === 'analytics') && (
+            <AdminUserAnalytics
+              users={users}
+              orders={orders}
+              deposits={deposits}
+              stats={stats}
+            />
+          )}
+
+          {/* Financials & Sales Metrics */}
+          {(dashboardSection === 'all' || dashboardSection === 'financials') && (
+            <>
+              {/* 8 Stats Metrics Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                <div className="p-4 rounded-2xl bg-[#0d0d14] border border-white/5 space-y-1">
+                  <span className="text-[10px] text-slate-400 uppercase font-mono">Total Users</span>
+                  <div className="font-mono text-2xl font-black text-white">{stats?.totalUsers ?? 0}</div>
+                  <span className="text-[10px] text-emerald-400">{stats?.activeUsers ?? 0} active</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-[#0d0d14] border border-emerald-500/20 bg-emerald-950/10 space-y-1">
+                  <span className="text-[10px] text-emerald-400 uppercase font-mono font-bold">Today Sales</span>
               <div className="font-mono text-2xl font-black text-emerald-400">₹{(Number(stats?.todaySales) || 0).toFixed(0)}</div>
               <span className="text-[10px] text-emerald-400 font-bold">{stats?.todayOrders ?? 0} orders today (Web &amp; API)</span>
             </div>
@@ -3039,6 +3099,8 @@ export const AdminPage: React.FC = () => {
               })}
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
 

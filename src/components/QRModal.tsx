@@ -12,6 +12,7 @@ import {
   Smartphone,
   ShieldCheck,
   AlertCircle,
+  Zap,
 } from 'lucide-react';
 import { triggerConfetti } from '../utils/confetti.js';
 import { Deposit } from '../types/index.js';
@@ -288,27 +289,27 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
         className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
       />
 
-      <div className="relative w-full max-w-sm bg-[#10121a] border border-white/10 rounded-2xl p-5 sm:p-6 shadow-2xl z-10 my-auto space-y-4">
+      <div className="relative w-full max-w-sm bg-gradient-to-b from-[#131628] via-[#0f111e] to-[#090b12] border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-[0_0_50px_rgba(16,185,129,0.25)] z-10 my-auto space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-              <QrCode className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+              <QrCode className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-display font-bold text-sm text-white flex items-center gap-1.5">
+              <h3 className="font-display font-black text-sm text-white flex items-center gap-1.5">
                 <span>Live UPI QR Payment</span>
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />
               </h3>
-              <p className="text-[11px] text-slate-400">
-                Real-Time Automated Bank Verification
+              <p className="text-[11px] text-emerald-300 font-medium">
+                Automated Bank Credit in Real Time
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-white/[0.04] text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg bg-white/[0.06] text-slate-300 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

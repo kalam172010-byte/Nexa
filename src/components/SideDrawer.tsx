@@ -24,7 +24,7 @@ interface SideDrawerProps {
 }
 
 export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, currentPage, onNavigate }) => {
-  const { user, role, balance, logout } = useAuth();
+  const { user, role, balance, promptSignOut } = useAuth();
   const { siteConfig } = useSite();
   const ADMIN_EMAILS = ['kk7953926@gmail.com', 'kalamkalam1234kd@gmail.com', 'kalam172010@gmail.com', 'admin@example.com'];
   const isAdmin =
@@ -48,14 +48,14 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
 
   const mainNav = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-rose-400' },
-    { id: 'buy', label: 'Buy Key', icon: ShoppingBag, color: 'text-amber-400' },
-    { id: 'keys', label: 'My Keys', icon: KeyRound, color: 'text-emerald-400' },
-    { id: 'deposit', label: 'Deposit', icon: Wallet, color: 'text-cyan-400' },
-    { id: 'api', label: isReseller ? 'Developer API' : 'Reseller API & VIP', icon: Terminal, color: 'text-violet-400' },
-    { id: 'history', label: 'Transactions', icon: History, color: 'text-sky-400' },
-    { id: 'tickets', label: 'Support Desk', icon: LifeBuoy, color: 'text-pink-400' },
-    { id: 'refer', label: 'Refer & Earn', icon: Share2, color: 'text-orange-400' },
+    { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+    { id: 'buy', label: 'License Catalog', icon: ShoppingBag },
+    { id: 'keys', label: 'My Keys', icon: KeyRound },
+    { id: 'deposit', label: 'Add Funds', icon: Wallet },
+    { id: 'api', label: isReseller ? 'Developer API' : 'Wholesale API', icon: Terminal },
+    { id: 'history', label: 'Transaction Ledger', icon: History },
+    { id: 'tickets', label: 'Support Desk', icon: LifeBuoy },
+    { id: 'refer', label: 'Partner Referrals', icon: Share2 },
   ];
 
   return (
@@ -67,11 +67,11 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
       />
 
       {/* Drawer Content */}
-      <div className="relative w-[280px] max-w-[85vw] h-full bg-[#0b0d14] border-r border-white/[0.08] flex flex-col z-10 shadow-2xl">
+      <div className="relative w-[280px] max-w-[85vw] h-full bg-[#080a0f] border-r border-white/[0.08] flex flex-col z-10 shadow-2xl">
         {/* Top Header */}
-        <div className="h-14 px-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="h-16 px-4 border-b border-white/[0.08] flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500 via-pink-600 to-amber-500 text-white flex items-center justify-center font-display font-bold text-xs shrink-0 overflow-hidden shadow-[0_0_15px_rgba(244,63,94,0.4)]">
+            <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center font-display font-bold text-xs shrink-0 overflow-hidden">
               {siteConfig.logoUrl ? (
                 <img
                   src={siteConfig.logoUrl}
@@ -83,14 +83,14 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
                 brandInitials
               )}
             </div>
-            <div className="font-display font-bold text-sm bg-gradient-to-r from-white via-rose-100 to-amber-200 bg-clip-text text-transparent truncate">
+            <div className="font-display font-bold text-sm text-white truncate">
               {siteConfig.siteTitle || 'Nexa Panel'}
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white flex items-center justify-center transition-colors border border-white/[0.08]"
+            className="w-9 h-9 rounded-xl bg-[#10131c] hover:bg-[#161a26] text-slate-300 hover:text-white flex items-center justify-center transition-colors border border-white/[0.08] cursor-pointer"
             aria-label="Close menu"
           >
             <X className="w-4 h-4" />
@@ -98,17 +98,17 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
         </div>
 
         {/* Account Summary */}
-        <div className="px-4 py-3.5 bg-gradient-to-r from-rose-950/40 via-[#10121a] to-indigo-950/40 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="px-4 py-3.5 bg-[#0c0e14] border-b border-white/[0.08] flex items-center justify-between">
           <div className="min-w-0">
             <div className="text-xs font-semibold text-white truncate">
               @{user?.username || 'user'}
             </div>
-            <div className="text-[11px] text-amber-400 font-medium mt-0.5">
+            <div className="text-[11px] text-slate-400 font-medium mt-0.5">
               {role} Account
             </div>
           </div>
           <div className="text-right shrink-0">
-            <div className="text-[10px] text-slate-400">Balance</div>
+            <div className="text-[10px] text-slate-500">Balance</div>
             <div className="text-xs font-mono font-bold text-emerald-400 tabular-nums">
               {siteConfig.currencySymbol || '₹'}{balance.toFixed(2)}
             </div>
@@ -118,10 +118,10 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
         {/* Navigation Links */}
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
           <div>
-            <div className="px-3 mb-1.5 text-[11px] font-semibold text-slate-500">
+            <div className="px-3 mb-1.5 text-[11px] font-medium text-slate-500">
               Workspace
             </div>
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {mainNav.map(item => {
                 const Icon = item.icon;
                 const isActive = currentPage === item.id;
@@ -130,15 +130,15 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
                   <button
                     key={item.id}
                     onClick={() => handleSelect(item.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
                       isActive
-                        ? 'bg-gradient-to-r from-rose-500/20 via-pink-500/15 to-amber-500/10 text-white border border-rose-500/35 font-semibold'
-                        : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                        ? 'bg-[#121622] text-white border-white/[0.1] font-semibold'
+                        : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border-transparent'
                     }`}
                   >
                     <Icon
                       className={`w-4 h-4 shrink-0 ${
-                        isActive ? item.color : `${item.color} opacity-80`
+                        isActive ? 'text-rose-500' : 'text-slate-400'
                       }`}
                     />
                     <span>{item.label}</span>
@@ -150,19 +150,19 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
 
           {isAdmin && (
             <div>
-              <div className="px-3 mb-1.5 text-[11px] font-semibold text-slate-500">
-                System Control
+              <div className="px-3 mb-1.5 text-[11px] font-medium text-slate-500">
+                Administration
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 <button
                   onClick={() => handleSelect('admin')}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
                     currentPage === 'admin'
-                      ? 'bg-gradient-to-r from-amber-500/20 to-rose-500/15 text-white border border-amber-500/35 font-semibold'
-                      : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                      ? 'bg-rose-500/15 text-white border-rose-500/35 font-semibold'
+                      : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border-transparent'
                   }`}
                 >
-                  <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-rose-400" />
                   <span>Admin Console</span>
                 </button>
               </div>
@@ -170,30 +170,30 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
           )}
 
           <div>
-            <div className="px-3 mb-1.5 text-[11px] font-semibold text-slate-500">
-              Account
+            <div className="px-3 mb-1.5 text-[11px] font-medium text-slate-500">
+              Preferences
             </div>
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               <button
                 onClick={() => handleSelect('profile')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
                   currentPage === 'profile'
-                    ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/15 text-white border border-indigo-500/35 font-semibold'
-                    : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                    ? 'bg-[#121622] text-white border-white/[0.1] font-semibold'
+                    : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border-transparent'
                 }`}
               >
-                <User className="w-4 h-4 shrink-0 text-indigo-400" />
+                <User className="w-4 h-4 shrink-0 text-slate-400" />
                 <span>Account Settings</span>
               </button>
 
               <button
                 onClick={() => {
-                  logout();
                   onClose();
+                  promptSignOut();
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/[0.08] transition-colors whitespace-nowrap shrink-0"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <LogOut className="w-4 h-4 shrink-0 text-rose-400/80" />
+                <LogOut className="w-4 h-4 shrink-0" />
                 <span>Sign Out</span>
               </button>
             </div>
@@ -201,7 +201,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({ isOpen, onClose, current
         </div>
 
         {/* Quiet Copyright Footer */}
-        <div className="p-3.5 border-t border-white/[0.06] text-center text-[11px] text-slate-500">
+        <div className="p-3.5 border-t border-white/[0.08] text-center text-[11px] text-slate-500">
           © {new Date().getFullYear()} {siteConfig.siteTitle || 'Nexa Panel'}
         </div>
       </div>

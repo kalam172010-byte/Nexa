@@ -17,7 +17,7 @@ import { api, getEffectiveOrigin } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
 
 export const ProfilePage: React.FC = () => {
-  const { user, role, balance, refreshUser, logout } = useAuth();
+  const { user, role, balance, refreshUser, promptSignOut } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -375,10 +375,7 @@ export const ProfilePage: React.FC = () => {
 
             <button
               type="button"
-              onClick={async () => {
-                showToastSuccess('Signing Out', 'Logging out of current account...');
-                await logout();
-              }}
+              onClick={() => promptSignOut({ allDevices: false })}
               className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600/30 via-red-600/20 to-pink-600/20 hover:from-rose-600/40 hover:to-pink-600/30 text-rose-300 hover:text-white text-xs font-semibold transition-all border border-rose-500/35 flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-rose-950/40"
             >
               <LogOut className="w-4 h-4 text-rose-400" />
@@ -387,9 +384,7 @@ export const ProfilePage: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => {
-                showToastSuccess('All other sessions terminated.');
-              }}
+              onClick={() => promptSignOut({ allDevices: true })}
               className="w-full py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium transition-colors border border-white/[0.08] cursor-pointer"
             >
               Sign Out Other Devices

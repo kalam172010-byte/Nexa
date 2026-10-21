@@ -8,12 +8,12 @@ import {
   Clock,
   AlertCircle,
   Eye,
+  ShoppingBag,
 } from 'lucide-react';
 import { api } from '../services/api.js';
 import { DigitalKey } from '../types/index.js';
 import { useToast } from '../context/ToastContext.js';
-
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useAuth } from '../context/AuthContext.js';
 
@@ -108,7 +108,6 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
     };
   }, []);
 
-  // Real-time Firestore onSnapshot listener for instant key delivery (matches by ID, Email, or API Key)
   useEffect(() => {
     if (!user?.id && !user?.email) return;
 
@@ -139,8 +138,11 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
               (myId && docUserId === myId) ||
               (myEmail && docEmail && docEmail === myEmail) ||
               (myApiKey && docApiKey && docApiKey === myApiKey) ||
-              ((myEmail === 'kalam172010@gmail.com' || user?.role === 'ADMIN' || user?.role === 'SUPER ADMIN') &&
-                (docUserId === 'USR-KALAM-172010' || docUserId === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2'));
+              ((myEmail === 'kalam172010@gmail.com' ||
+                user?.role === 'ADMIN' ||
+                user?.role === 'SUPER ADMIN') &&
+                (docUserId === 'USR-KALAM-172010' ||
+                  docUserId === 'tnqy7LYfgwgzYpoQGqljC4H6bKc2'));
 
             if (!belongsToUser) return;
 
@@ -195,7 +197,6 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
       console.warn('[MyKeysPage] Listener attach error:', err);
     }
 
-    // Periodic live polling every 2.5s to ensure backend sync
     const pollTimer = setInterval(() => {
       fetchKeys(true);
     }, 2500);
@@ -239,40 +240,68 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
   });
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       {/* Top Header & Search */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display font-bold text-xl sm:text-2xl bg-gradient-to-r from-white via-amber-100 to-rose-200 bg-clip-text text-transparent">
+          <h2 className="font-display font-bold text-xl sm:text-2xl text-white">
             My License Keys
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            View delivered software licenses, check whether each key was Buyed by Web or Buyed by API, and copy keys.
+            Manage delivered software licenses, inspect purchase channel, and copy credentials.
           </p>
         </div>
 
         <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-rose-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search key or product..."
+            placeholder="Search key code or product..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#10121a] border border-white/[0.1] rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
+            className="w-full pl-10 pr-4 py-2 bg-[#0c0e14] border border-white/[0.08] rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
           />
+        </div>
+      </div>
+
+      {/* Quick Summary Stats Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-cyan-500/15 via-[#0e111a] to-[#0c0e14] border border-cyan-500/30 space-y-1">
+          <div className="text-[11px] font-semibold text-cyan-300">Total Keys</div>
+          <div className="text-xl sm:text-2xl font-mono font-bold text-cyan-400 tabular-nums">
+            {keys.length}
+          </div>
+        </div>
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-[#0e111a] to-[#0c0e14] border border-emerald-500/30 space-y-1">
+          <div className="text-[11px] font-semibold text-emerald-300">Active Keys</div>
+          <div className="text-xl sm:text-2xl font-mono font-bold text-emerald-400 tabular-nums">
+            {keys.filter(k => k.status === 'ACTIVE').length}
+          </div>
+        </div>
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-[#0e111a] to-[#0c0e14] border border-amber-500/30 space-y-1">
+          <div className="text-[11px] font-semibold text-amber-300">Used Keys</div>
+          <div className="text-xl sm:text-2xl font-mono font-bold text-amber-400 tabular-nums">
+            {keys.filter(k => k.status === 'USED').length}
+          </div>
+        </div>
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-rose-500/15 via-[#0e111a] to-[#0c0e14] border border-rose-500/30 space-y-1">
+          <div className="text-[11px] font-semibold text-rose-300">Expired Keys</div>
+          <div className="text-xl sm:text-2xl font-mono font-bold text-rose-400 tabular-nums">
+            {keys.filter(k => k.status === 'EXPIRED').length}
+          </div>
         </div>
       </div>
 
       {/* Segmented Status & Purchase Source Filters */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 p-1 bg-[#10121a] border border-white/[0.08] rounded-xl w-fit max-w-full overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 p-1 bg-[#0c0e14] border border-white/[0.08] rounded-xl w-fit max-w-full overflow-x-auto no-scrollbar">
           {tabs.map(tab => (
             <button
               key={tab}
               onClick={() => setStatusFilter(tab)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                 statusFilter === tab
-                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold shadow-[0_2px_10px_rgba(244,63,94,0.3)]'
+                  ? 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 text-white font-bold shadow-[0_2px_12px_rgba(244,63,94,0.4)]'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -281,22 +310,18 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 p-1 bg-[#10121a] border border-white/[0.08] rounded-xl w-fit">
+        <div className="flex items-center gap-1 p-1 bg-[#0c0e14] border border-white/[0.08] rounded-xl w-fit">
           {(['ALL', 'WEB', 'API'] as const).map(src => (
             <button
               key={src}
               onClick={() => setSourceFilter(src)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 sourceFilter === src
-                  ? src === 'API'
-                    ? 'bg-purple-600 text-white shadow'
-                    : src === 'WEB'
-                    ? 'bg-emerald-600 text-white shadow'
-                    : 'bg-white/10 text-white'
+                  ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              {src === 'ALL' ? 'All Sources' : src === 'API' ? 'Buy from API' : 'Buy from Website'}
+              {src === 'ALL' ? 'All Sources' : src === 'API' ? '⚡ Buy from API' : '🌐 Buy from Website'}
             </button>
           ))}
         </div>
@@ -306,29 +331,31 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map(i => (
-            <div key={i} className="p-5 rounded-2xl bg-[#10121a] border border-white/[0.06] animate-pulse h-28" />
+            <div
+              key={i}
+              className="p-5 rounded-2xl bg-[#0c0e14] border border-white/[0.08] animate-pulse h-28"
+            />
           ))}
         </div>
       ) : filteredKeys.length === 0 ? (
-        <div className="p-12 rounded-2xl bg-[#10121a] border border-white/[0.08] text-center space-y-3">
-          <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
-            <KeyRound className="w-5 h-5" />
+        <div className="p-12 rounded-2xl bg-gradient-to-b from-[#10131d] to-[#0a0c12] border border-rose-500/20 text-center space-y-3 shadow-lg">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto shadow-md">
+            <KeyRound className="w-6 h-6" />
           </div>
-          <h4 className="font-display font-bold text-base text-white">
-            No License Keys Found
-          </h4>
+          <h4 className="font-display font-bold text-base text-white">No License Keys Found</h4>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             You have not purchased any licenses yet, or no keys match the active filter.
           </p>
           <button
             onClick={onNavigateBuy}
-            className="mt-1 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer"
+            className="mt-1 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer shadow-[0_4px_16px_rgba(244,63,94,0.35)]"
           >
-            <span>Buy Key</span>
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Browse License Catalog</span>
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {filteredKeys.map(key => {
             const isActive = key.status === 'ACTIVE';
             const isUsed = key.status === 'USED';
@@ -339,43 +366,53 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
             return (
               <div
                 key={key.id}
-                className="p-5 rounded-2xl bg-gradient-to-b from-[#131622] to-[#0f111a] border border-white/[0.08] hover:border-rose-500/30 transition-all space-y-3 shadow-md"
+                className={`p-5 rounded-2xl border transition-all space-y-3.5 relative overflow-hidden ${
+                  isActive
+                    ? 'border-l-4 border-l-emerald-400 bg-gradient-to-r from-emerald-950/20 via-[#0e111a] to-[#0a0c12] border-emerald-500/25 shadow-[0_4px_20px_rgba(16,185,129,0.06)]'
+                    : isUsed
+                    ? 'border-l-4 border-l-amber-400 bg-gradient-to-r from-amber-950/20 via-[#0e111a] to-[#0a0c12] border-amber-500/25'
+                    : 'border-l-4 border-l-rose-500 bg-gradient-to-r from-rose-950/20 via-[#0e111a] to-[#0a0c12] border-rose-500/25'
+                }`}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-display font-bold text-sm text-white">{key.productName}</h4>
+                    <h4 className="font-display font-bold text-sm sm:text-base text-white">
+                      {key.productName}
+                    </h4>
+                    {/* Vibrant Metadata tags */}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">
+                        {key.gameName}
+                      </span>
+                      <span className="text-cyan-300 font-medium bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20">
+                        {key.durationLabel}
+                      </span>
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold tracking-wide border ${
+                        className={`font-semibold px-2 py-0.5 rounded-md border ${
                           isApiPurchase
-                            ? 'bg-purple-500/15 text-purple-300 border-purple-500/35'
-                            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                            ? 'text-cyan-300 bg-cyan-500/15 border-cyan-500/30'
+                            : 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30'
                         }`}
                       >
                         {sourceLabel}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-cyan-400 font-semibold">{key.gameName}</span>
-                      <span aria-hidden="true" className="text-slate-600">·</span>
-                      <span className="text-amber-300 font-medium">{key.durationLabel}</span>
-                    </div>
                   </div>
 
-                  {/* Semantic Status with Icon + Label */}
-                  <div className="flex items-center gap-1.5 text-xs font-semibold">
+                  {/* Semantic Status with Icon + Glowing Label */}
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
                     {isActive ? (
-                      <span className="text-emerald-400 flex items-center gap-1">
+                      <span className="text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Active</span>
+                        <span>Active License</span>
                       </span>
                     ) : isUsed ? (
-                      <span className="text-amber-400 flex items-center gap-1">
+                      <span className="text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5" />
                         <span>Used</span>
                       </span>
                     ) : (
-                      <span className="text-rose-400 flex items-center gap-1">
+                      <span className="text-rose-400 bg-rose-500/15 border border-rose-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
                         <AlertCircle className="w-3.5 h-3.5" />
                         <span>Expired</span>
                       </span>
@@ -383,21 +420,21 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
                   </div>
                 </div>
 
-                {/* Key Code Block */}
-                <div className="p-3 rounded-xl bg-[#090a0f] border border-emerald-500/25 flex items-center justify-between gap-3">
-                  <div className="font-mono text-xs font-bold text-emerald-300 tracking-wider truncate select-all">
+                {/* Key Code Block with Glowing Cyber Look */}
+                <div className="p-3.5 rounded-xl bg-[#06080d] border border-white/[0.1] flex items-center justify-between gap-3 shadow-inner">
+                  <div className="font-mono text-xs sm:text-sm font-bold text-emerald-300 tracking-wider truncate select-all">
                     {key.keyCode}
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => handleCopy(key.keyCode, key.id)}
-                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 cursor-pointer shadow-[0_2px_10px_rgba(244,63,94,0.3)]"
                     >
                       {copiedKeyId === key.id ? (
                         <>
                           <Check className="w-3.5 h-3.5" />
-                          <span>Copied</span>
+                          <span>Copied!</span>
                         </>
                       ) : (
                         <>
@@ -409,9 +446,9 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
 
                     <button
                       onClick={() => setViewingKey(key)}
-                      className="px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-cyan-500/30 whitespace-nowrap shrink-0 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-[#141824] hover:bg-[#1a2030] text-slate-200 text-xs font-medium flex items-center gap-1.5 transition-colors border border-white/[0.1] whitespace-nowrap shrink-0 cursor-pointer"
                     >
-                      <Eye className="w-3.5 h-3.5" />
+                      <Eye className="w-3.5 h-3.5 text-cyan-400" />
                       <span>Details</span>
                     </button>
 
@@ -428,10 +465,10 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
                 </div>
 
                 {/* Timestamps */}
-                <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 font-mono tabular-nums pt-0.5">
+                <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 font-mono tabular-nums pt-1">
                   <span>Delivered: {new Date(key.assignedAt || 0).toLocaleString()}</span>
                   {key.expiresAt && (
-                    <span className={isActive ? 'text-amber-300' : 'text-slate-500'}>
+                    <span className={isActive ? 'text-emerald-300 font-medium' : 'text-slate-500'}>
                       Expires: {new Date(key.expiresAt).toLocaleString()}
                     </span>
                   )}
@@ -449,32 +486,28 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
             onClick={() => setViewingKey(null)}
             className="fixed inset-0 bg-black/75 backdrop-blur-sm"
           />
-          <div className="relative w-full max-w-sm bg-[#10121a] border border-cyan-500/30 rounded-2xl p-6 shadow-2xl z-10 space-y-4">
+          <div className="relative w-full max-w-sm bg-[#0c0e14] border border-white/[0.12] rounded-2xl p-6 shadow-2xl z-10 space-y-4">
             <h3 className="font-display font-bold text-base text-white">License Details</h3>
             <div className="space-y-3 text-xs">
-              <div className="p-3.5 rounded-xl bg-[#090a0f] border border-white/[0.06] space-y-1">
+              <div className="p-3.5 rounded-xl bg-[#080a0f] border border-white/[0.08] space-y-1">
                 <span className="text-slate-400">Product</span>
                 <div className="font-semibold text-white text-sm">{viewingKey.productName}</div>
-                <div className="text-cyan-400 font-medium">{viewingKey.gameName} · {viewingKey.durationLabel}</div>
+                <div className="text-slate-300">
+                  {viewingKey.gameName} · {viewingKey.durationLabel}
+                </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[#090a0f] border border-emerald-500/30 space-y-1">
+              <div className="p-3.5 rounded-xl bg-[#080a0f] border border-white/[0.08] space-y-1">
                 <span className="text-slate-400">License Key Code</span>
                 <div className="font-mono font-bold text-emerald-400 break-all select-all text-sm">
                   {viewingKey.keyCode}
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[#090a0f] border border-white/[0.06] space-y-1.5 font-mono tabular-nums">
+              <div className="p-3.5 rounded-xl bg-[#080a0f] border border-white/[0.08] space-y-1.5 font-mono tabular-nums">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 font-sans">Purchase Source</span>
-                  <span
-                    className={`font-sans font-bold px-2 py-0.5 rounded text-[11px] ${
-                      viewingKey.purchaseSource === 'API'
-                        ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
-                        : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                    }`}
-                  >
+                  <span className="font-sans font-semibold text-white">
                     {viewingKey.purchaseSourceLabel ||
                       (viewingKey.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website')}
                   </span>
@@ -485,12 +518,16 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400 font-sans">Purchased</span>
-                  <span className="text-slate-300">{new Date(viewingKey.assignedAt || 0).toLocaleString()}</span>
+                  <span className="text-slate-300">
+                    {new Date(viewingKey.assignedAt || 0).toLocaleString()}
+                  </span>
                 </div>
                 {viewingKey.expiresAt && (
                   <div className="flex justify-between">
                     <span className="text-slate-400 font-sans">Expires</span>
-                    <span className="text-amber-300">{new Date(viewingKey.expiresAt).toLocaleString()}</span>
+                    <span className="text-amber-300">
+                      {new Date(viewingKey.expiresAt).toLocaleString()}
+                    </span>
                   </div>
                 )}
               </div>
