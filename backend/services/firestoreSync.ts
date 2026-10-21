@@ -93,7 +93,10 @@ export class FirestoreSyncService {
         const edgeRes = await fetch(EDGE_SYNC_URL, { signal: controller.signal });
         clearTimeout(timer);
         if (edgeRes.ok) {
-          edgeState = await edgeRes.json();
+          const cType = edgeRes.headers.get('content-type') || '';
+          if (cType.includes('application/json')) {
+            edgeState = await edgeRes.json();
+          }
         }
       } catch {}
 

@@ -7,7 +7,7 @@
     "dev": "tsx server.ts",
     "build": "rm -f public/_redirects dist/_redirects && vite build && rm -f dist/_redirects",
     "deploy": "npm run build",
-    "start": "tsx server.ts",
+    "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"

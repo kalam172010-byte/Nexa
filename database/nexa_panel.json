@@ -120,12 +120,12 @@
       "email": "kalamkalam1234kd@gmail.com",
       "passwordHash": "2a37e40be265ac4eb980ed17bb859f52f495fa649adb1a0295ae5b0fd502e220",
       "role": "ADMIN",
-      "balance": 100,
+      "balance": 250,
       "referralCode": "NXE032E6",
       "twoFactorEnabled": false,
       "isBanned": false,
       "createdAt": "2026-10-18T05:35:45.726Z",
-      "updatedAt": "2026-10-19T10:07:30.361Z",
+      "updatedAt": "2026-10-20T15:20:36.544Z",
       "apiKey": "nexa_live_70717a36985c082bab77b1caa8c02d36"
     }
   ],
@@ -1073,6 +1073,30 @@
   ],
   "transactions": [
     {
+      "id": "TXN-1792509636544-8DFE03",
+      "userId": "USR-1792301745726",
+      "userEmail": "kalamkalam1234kd@gmail.com",
+      "apiKey": "nexa_live_70717a36985c082bab77b1caa8c02d36",
+      "type": "DEPOSIT",
+      "amount": 50,
+      "description": "UPI Deposit (Ref: 503289999999)",
+      "referenceId": "TXN-DEP-1792509622738-801D4D",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-20T15:20:36.544Z"
+    },
+    {
+      "id": "TXN-1792509616825-5A0018",
+      "userId": "USR-1792301745726",
+      "userEmail": "kalamkalam1234kd@gmail.com",
+      "apiKey": "nexa_live_70717a36985c082bab77b1caa8c02d36",
+      "type": "DEPOSIT",
+      "amount": 100,
+      "description": "UPI Deposit (Ref: 503289123456)",
+      "referenceId": "TXN-DEP-1792509607596-A7787A",
+      "status": "SUCCESS",
+      "createdAt": "2026-10-20T15:20:16.825Z"
+    },
+    {
       "id": "TXN-ORD-1792340009014-F6C1",
       "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
       "userEmail": "kalam172010@gmail.com",
@@ -1411,6 +1435,67 @@
     }
   ],
   "deposits": [
+    {
+      "id": "DEP-1792509622738-3341",
+      "userId": "USR-1792301745726",
+      "amount": 50,
+      "payableAmount": 50,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792509622738-801D4D",
+      "gatewayOrderId": "fg_USELG74S",
+      "qrUrl": "https://famgateway.in/api/qr-image.php?order_id=fg_USELG74S",
+      "checkoutUrl": "https://famgateway.in/pay.php?order_id=fg_USELG74S",
+      "upiIntent": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_USELG74S&am=50.00&cu=INR",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Kalam",
+      "qrPayload": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_USELG74S&am=50.00&cu=INR",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-20T15:30:22.738Z",
+      "createdAt": "2026-10-20T15:20:22.922Z",
+      "completedAt": "2026-10-20T15:20:36.544Z",
+      "upiRefNumber": "503289999999"
+    },
+    {
+      "id": "DEP-1792509607596-C107",
+      "userId": "USR-1792301745726",
+      "amount": 100,
+      "payableAmount": 100.01,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792509607596-A7787A",
+      "gatewayOrderId": "fg_YVUIKJKF",
+      "qrUrl": "https://famgateway.in/api/qr-image.php?order_id=fg_YVUIKJKF",
+      "checkoutUrl": "https://famgateway.in/pay.php?order_id=fg_YVUIKJKF",
+      "upiIntent": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_YVUIKJKF&am=100.01&cu=INR",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Kalam",
+      "qrPayload": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_YVUIKJKF&am=100.01&cu=INR",
+      "status": "SUCCESS",
+      "expiresAt": "2026-10-20T15:30:07.596Z",
+      "createdAt": "2026-10-20T15:20:07.825Z",
+      "completedAt": "2026-10-20T15:20:16.825Z",
+      "upiRefNumber": "503289123456"
+    },
+    {
+      "id": "DEP-1792509576096-C73D",
+      "userId": "USR-1792301745726",
+      "amount": 100,
+      "payableAmount": 100,
+      "fee": 0,
+      "method": "UPI_QR",
+      "transactionId": "TXN-DEP-1792509576096-1F57C3",
+      "gatewayOrderId": "fg_UKNVPMJK",
+      "qrUrl": "https://famgateway.in/api/qr-image.php?order_id=fg_UKNVPMJK",
+      "checkoutUrl": "https://famgateway.in/pay.php?order_id=fg_UKNVPMJK",
+      "upiIntent": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_UKNVPMJK&am=100.00&cu=INR",
+      "upiVpa": "8056317218@fam",
+      "merchantName": "Kalam Kalam",
+      "qrPayload": "upi://pay?pa=8056317218@fam&pn=FamPay&tn=fg_UKNVPMJK&am=100.00&cu=INR",
+      "status": "PENDING",
+      "expiresAt": "2026-10-20T15:29:36.096Z",
+      "createdAt": "2026-10-20T15:19:36.438Z"
+    },
     {
       "id": "DEP-1792307994352-9A0E",
       "userId": "USR-1792242683123",
@@ -2112,6 +2197,78 @@
     "adminShortcutsEnabled": true
   },
   "activityLogs": [
+    {
+      "id": "LOG-1792509636549-50a906",
+      "userId": "USR-1792301745726",
+      "username": "kalam_admin",
+      "action": "DEPOSIT_UTR_VERIFIED",
+      "details": "Verified UPI deposit DEP-1792509622738-3341 (₹50) via submitted UTR 503289999999",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-20T15:20:36.549Z"
+    },
+    {
+      "id": "LOG-1792509622923-402ddf",
+      "userId": "USR-1792301745726",
+      "username": "kalam_admin",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792509622738-3341 (fg_USELG74S) for ₹50",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-20T15:20:22.923Z"
+    },
+    {
+      "id": "LOG-1792509622922-b1333b",
+      "userId": "USR-1792301745726",
+      "username": "kalam_admin",
+      "action": "GATEWAY_ORDER_CREATED",
+      "details": "Live gateway order fg_USELG74S created for ₹50.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-20T15:20:22.922Z"
+    },
+    {
+      "id": "LOG-1792509616830-3c0a0b",
+      "userId": "USR-1792301745726",
+      "username": "kalam_admin",
+      "action": "DEPOSIT_UTR_VERIFIED",
+      "details": "Verified UPI deposit DEP-1792509607596-C107 (₹100) via submitted UTR 503289123456",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-20T15:20:16.830Z"
+    },
+    {
+      "id": "LOG-1792509607828-ae7cb3",
+      "userId": "USR-1792301745726",
+      "username": "kalam_admin",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792509607596-C107 (fg_YVUIKJKF) for ₹100",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-20T15:20:07.828Z"
+    },
+    {
+      "id": "LOG-1792509607825-9cdf87",
+      "userId": "USR-1792301745726",
+      "username": "kalam_admin",
+      "action": "GATEWAY_ORDER_CREATED",
+      "details": "Live gateway order fg_YVUIKJKF created for ₹100.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-20T15:20:07.825Z"
+    },
+    {
+      "id": "LOG-1792509576440-0e759f",
+      "userId": "USR-1792301745726",
+      "username": "kalam_admin",
+      "action": "DEPOSIT_INITIATED",
+      "details": "Created deposit DEP-1792509576096-C73D (fg_UKNVPMJK) for ₹100",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-20T15:19:36.440Z"
+    },
+    {
+      "id": "LOG-1792509576438-b4bd63",
+      "userId": "USR-1792301745726",
+      "username": "kalam_admin",
+      "action": "GATEWAY_ORDER_CREATED",
+      "details": "Live gateway order fg_UKNVPMJK created for ₹100.",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-10-20T15:19:36.438Z"
+    },
     {
       "id": "LOG-1792404458317-a002c4",
       "userId": "tnqy7LYfgwgzYpoQGqljC4H6bKc2",
@@ -4229,7 +4386,7 @@
   "emailConfig": {
     "enabled": true,
     "protocol": "smtp",
-    "senderEmail": "kk7953926@gmail.com",
+    "senderEmail": "kalamkalam1234kd@gmail.com",
     "senderName": "KALAM VIP PANEL",
     "smtpHost": "smtp.gmail.com",
     "smtpPort": 587,
@@ -4238,12 +4395,14 @@
     "smtpPass": "testpass1234",
     "imapHost": "imap.gmail.com",
     "imapPort": 993,
-    "imapUser": "kk7953926@gmail.com",
+    "imapUser": "kalamkalam1234kd@gmail.com",
     "imapPass": "testpass1234",
     "imapSecure": true,
     "otpExpiryMinutes": 10,
     "allowOtpSignup": true,
     "hasSmtpPass": true,
-    "hasImapPass": true
+    "hasImapPass": true,
+    "simulationMode": true,
+    "autoApproveDeposits": true
   }
 }

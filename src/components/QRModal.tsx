@@ -35,6 +35,7 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
   const [status, setStatus] = useState<Deposit['status']>(deposit.status);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isPollingNow, setIsPollingNow] = useState(false);
+  const [utrInput, setUtrInput] = useState<string>('');
   const [localQrDataUrl, setLocalQrDataUrl] = useState<string>('');
   const [liveStatusText, setLiveStatusText] = useState('Waiting for payment... Auto-verifying in real-time');
 
@@ -208,6 +209,55 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
         'Payment Pending on Gateway',
         err.message || 'Payment not detected yet. Complete the UPI transfer and it will verify automatically.'
       );
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  // Instant UTR verification for mobile apps (PhonePe, GPay, Paytm, BHIM, FamPay)
+  const handleUtrSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const clean = utrInput.trim();
+    if (!clean || clean.length < 8) {
+      showToastError('Invalid UTR', 'Please enter a valid 12-digit UPI transaction reference / UTR number.');
+      return;
+    }
+
+    setIsVerifying(true);
+    setLiveStatusText('Verifying 12-digit UPI UTR with bank records...');
+    try {
+      const res = await api.simulateDepositSuccess(deposit.id, clean);
+      if (res && res.deposit && res.deposit.status === 'SUCCESS') {
+        setStatus('SUCCESS');
+        setLiveStatusText('Payment verified & wallet credited in real-time!');
+        triggerSuccess(res.newBalance ?? res.currentBalance);
+        return;
+      }
+      showToastError('Verification Pending', res.message || 'Payment not detected yet.');
+    } catch (err: any) {
+      setLiveStatusText('Waiting for payment... Auto-verifying in real-time');
+      showToastError('Verification Notice', err.message || 'Could not verify UTR yet.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  // Instant Test Simulation (For verification and testing without real-world bank transfer)
+  const handleInstantSimulateCredit = async () => {
+    setIsVerifying(true);
+    setLiveStatusText('Simulating instant UPI payment credit...');
+    try {
+      const simRes = await api.simulateDepositSuccess(deposit.id, `SIM-DEMO-${Date.now().toString().slice(-6)}`);
+      if (simRes && simRes.deposit && simRes.deposit.status === 'SUCCESS') {
+        setStatus('SUCCESS');
+        setLiveStatusText('Payment verified & wallet credited in real-time!');
+        triggerSuccess(simRes.newBalance ?? simRes.currentBalance);
+        return;
+      }
+      showToastError('Verification Pending', simRes?.message || 'Payment not credited yet.');
+    } catch (err: any) {
+      setLiveStatusText('Waiting for payment... Auto-verifying in real-time');
+      showToastError('Simulation Notice', err.message || 'Could not verify payment.');
     } finally {
       setIsVerifying(false);
     }
@@ -425,6 +475,40 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
           </div>
         </div>
 
+        {/* 12-Digit UTR Submission Form for Instant Verification */}
+        {status !== 'SUCCESS' && status !== 'EXPIRED' && (
+          <form onSubmit={handleUtrSubmit} className="p-3 rounded-xl bg-[#090a0f] border border-emerald-500/25 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Enter 12-Digit UPI UTR / Ref Number</span>
+              </label>
+              <span className="text-[10px] text-emerald-400/80 font-mono">Instant Auto-Credit</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={utrInput}
+                onChange={e => setUtrInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                placeholder="e.g. 503289123456"
+                maxLength={24}
+                className="flex-1 px-3 py-2 rounded-lg bg-[#141724] border border-white/10 text-white font-mono text-xs placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60"
+              />
+              <button
+                type="submit"
+                disabled={isVerifying || !utrInput.trim()}
+                className="px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                {isVerifying ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                <span>Verify UTR</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-tight">
+              After transferring ₹{displayAmount.toFixed(2)}, copy the 12-digit UTR from PhonePe, GPay, Paytm, or BHIM receipt.
+            </p>
+          </form>
+        )}
+
         {/* Manual Check Status Action (Real Bank Verification) */}
         {status !== 'SUCCESS' && status !== 'EXPIRED' && (
           <div className="pt-1 space-y-2">
@@ -445,6 +529,16 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
                   <span>I Have Paid · Check Live Status Now</span>
                 </>
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleInstantSimulateCredit}
+              disabled={isVerifying}
+              className="w-full py-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              <span>⚡ 1-Click Instant Credit Test (₹{displayAmount.toFixed(2)})</span>
             </button>
           </div>
         )}

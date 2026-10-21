@@ -1,20 +1,36 @@
-import express from 'express';
+import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// If executed directly with native `node` without tsx loader, auto-spawn with tsx loader
+if (!process.env.TSX_ACTIVE && !process.execArgv.some(a => a.includes('tsx'))) {
+  const child = spawn(process.execPath, ['--import', 'tsx', __filename], {
+    stdio: 'inherit',
+    env: { ...process.env, TSX_ACTIVE: '1' },
+  });
+  child.on('exit', (code, signal) => {
+    if (signal) process.kill(process.pid, signal);
+    process.exit(code ?? 0);
+  });
+  // Prevent further execution in the parent process
+  await new Promise(() => {});
+}
+
+import express from 'express';
 import apiRouter from './backend/routes/api';
 import { seedDatabaseIfEmpty } from './backend/db/seed';
 import { FirestoreSyncService } from './backend/services/firestoreSync';
 import { emailService } from './backend/services/emailService';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 async function startServer() {
   const app = express();
   // Enable trust proxy so Express correctly detects https, x-forwarded-host, and custom domains behind reverse proxies
   app.set('trust proxy', true);
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   const isProduction = process.env.NODE_ENV === 'production';
 
   // Seed demo data on launch and start real-time Firestore + Edge two-way sync
@@ -74,6 +90,11 @@ async function startServer() {
     res.json({ status: 'ok', service: 'KALAM FF PANEL API', timestamp: new Date().toISOString() });
   });
 
+  // Ensure ALL unmatched /api routes return JSON 404 (NEVER fall through to index.html)
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+  });
+
   if (!isProduction) {
     // Development mode: dynamically mount Vite middleware
     const { createServer: createViteServer } = await import('vite');
@@ -89,11 +110,26 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     // Production mode: serve static files from dist
-    const distPath = path.resolve(__dirname, 'dist');
+    const distCandidates = [
+      path.resolve(__dirname, 'dist'),
+      path.resolve(process.cwd(), 'dist'),
+    ];
+    const distPath = distCandidates.find(p => fs.existsSync(p)) || distCandidates[0];
+
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get('*', (req, res) => {
-        res.sendFile(path.resolve(distPath, 'index.html'));
+        const indexPath = path.resolve(distPath, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          res.sendFile(indexPath);
+        } else {
+          res.status(404).send('App build index.html not found. Please run npm run build.');
+        }
+      });
+    } else {
+      console.warn('⚠️ Warning: dist folder not found at', distPath, '. Serving API mode only.');
+      app.get('*', (req, res) => {
+        res.status(503).json({ error: 'Production frontend not built. Please run npm run build.' });
       });
     }
   }
