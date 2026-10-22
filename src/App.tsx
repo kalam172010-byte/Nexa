@@ -177,25 +177,8 @@ const MainLayout: React.FC = () => {
     }
   }, [user, currentPage]);
 
-  const [isBootSplash, setIsBootSplash] = useState<boolean>(true);
-  const [isTransitionLoading, setIsTransitionLoading] = useState<boolean>(false);
-  const [transitionTitle, setTransitionTitle] = useState<string>('Loading Workspace...');
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsBootSplash(false);
-    }, 550);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (isLoading || isBootSplash) {
-    return (
-      <PremiumLoadingPage
-        siteTitle={siteConfig.siteTitle || 'KALAM FF PANEL'}
-        logoUrl={siteConfig.logoUrl}
-        subtitle={siteConfig.siteTagline || 'Initializing VIP License Infrastructure & Cloud Sync'}
-      />
-    );
+  if (isLoading) {
+    return <PremiumLoadingPage />;
   }
 
   // If user not authenticated, strictly show login/register screen only
@@ -203,11 +186,8 @@ const MainLayout: React.FC = () => {
     return (
       <AuthPage
         onSuccess={() => {
-          console.log('[MainLayout] AuthPage onSuccess callback invoked. Setting active page to dashboard...');
           setCurrentPage('dashboard');
-          if (window.location.hash === '#auth') {
-            window.location.hash = 'dashboard';
-          }
+          window.location.hash = 'dashboard';
         }}
       />
     );
@@ -219,32 +199,18 @@ const MainLayout: React.FC = () => {
       window.location.hash = 'auth';
       return;
     }
-    if (pageId !== currentPage && pageId !== 'keys') {
-      const targetName = PAGE_TITLES[pageId] || 'Workspace';
-      setTransitionTitle(`Loading ${targetName}...`);
-      setIsTransitionLoading(true);
-      setTimeout(() => {
-        setIsTransitionLoading(false);
-      }, 180);
-    }
     setCurrentPage(pageId);
     window.location.hash = pageId;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <div className="min-h-screen bg-[#06070a] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-rose-500/25 selection:text-rose-200">
-      <PremiumLoadingModal
-        isOpen={isTransitionLoading}
-        title={transitionTitle}
-        subtitle="Synchronizing real-time catalog and account state..."
-        badgeText="KALAM VIP CLOUD"
-      />
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#06070a] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-rose-500/25 selection:text-rose-200">
       {/* Desktop Sidebar */}
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 
       {/* Main Workspace Container */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-hidden">
         {/* Optional System Announcement Strip */}
         {siteConfig.isAnnouncementEnabled && siteConfig.announcementText && (
           <div className="w-full bg-[#0c0e14] border-b border-white/[0.08] text-slate-200 px-4 py-2 text-xs flex items-center justify-center gap-2.5 relative z-40">

@@ -5,8 +5,6 @@ import {
   ShoppingBag,
   AlertCircle,
   AlertTriangle,
-  Plus,
-  Minus,
   ExternalLink,
   ShieldCheck,
   X,
@@ -14,15 +12,21 @@ import {
   RefreshCw,
   Search,
   Sparkles,
-  Flame,
   Zap,
+  Flame,
+  KeyRound,
+  CheckCircle2,
+  Crosshair,
+  Eye,
+  Smartphone,
+  Cpu,
 } from 'lucide-react';
 import { Product, ProductVariant } from '../types/index.js';
 import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
+import { PurchaseModal } from '../components/PurchaseModal.js';
 import { KeySuccessModal } from '../components/KeySuccessModal.js';
-import { PremiumLoadingModal } from '../components/PremiumLoader.js';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 
@@ -37,8 +41,8 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   onNavigateKeys,
   onNavigateAdmin,
 }) => {
-  const { role, balance, updateBalanceLocally } = useAuth();
-  const { success: showToastSuccess, error: showToastError } = useToast();
+  const { role, balance } = useAuth();
+  const { success: showToastSuccess } = useToast();
 
   const [products, setProducts] = useState<Product[]>(() => api.getCachedProductsSync());
   const [isLoading, setIsLoading] = useState<boolean>(() => api.getCachedProductsSync().length === 0);
@@ -49,14 +53,21 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   const [gameFilter, setGameFilter] = useState<string>('ALL GAMES');
   const [deviceFilter, setDeviceFilter] = useState<string>('ALL SYSTEMS');
 
-  // Selected variant per product: { [productId]: variantId }
-  const [selectedVariantMap, setSelectedVariantMap] = useState<Record<string, string>>({});
+  // Track which product cards have their "Purchase Key" duration list expanded
+  const [expandedProductIds, setExpandedProductIds] = useState<Record<string, boolean>>({});
 
-  // Quantity per variant: { [variantId]: number }
-  const [quantityMap, setQuantityMap] = useState<Record<string, number>>({});
+  const toggleProductPurchaseList = (productId: string) => {
+    setExpandedProductIds(prev => ({
+      ...prev,
+      [productId]: !prev[productId],
+    }));
+  };
 
-  // Purchasing state
-  const [isBuyingId, setIsBuyingId] = useState<string | null>(null);
+  // Active purchase modal (with Android ID & Confirmation)
+  const [selectedPurchase, setSelectedPurchase] = useState<{
+    product: Product;
+    variant: ProductVariant;
+  } | null>(null);
 
   // Delivered key modal
   const [deliveredKey, setDeliveredKey] = useState<any | null>(null);
@@ -64,12 +75,6 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   // Info Modals
   const [activeFileModal, setActiveFileModal] = useState<Product | null>(null);
   const [activeVideoModal, setActiveVideoModal] = useState<Product | null>(null);
-
-  // Insufficient Balance Modal
-  const [insufficientModal, setInsufficientModal] = useState<{
-    required: number;
-    current: number;
-  } | null>(null);
 
   // Track broken product images to render clean CSS/SVG fallback
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -138,80 +143,26 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     };
   }, []);
 
-  const getActiveVariant = (product: Product): ProductVariant | null => {
-    if (!product.variants || product.variants.length === 0) return null;
-    const chosenId = selectedVariantMap[product.id];
-    if (chosenId) {
-      const found = product.variants.find(v => v.id === chosenId);
-      if (found) return found;
-    }
-    return product.variants[0];
-  };
+  const handlePurchaseSuccess = (deliveredKeyData: any) => {
+    const purchasedProduct = selectedPurchase?.product;
+    const purchasedVariant = selectedPurchase?.variant;
+    setSelectedPurchase(null);
 
-  const getQuantity = (variantId: string): number => {
-    return quantityMap[variantId] || 1;
-  };
+    showToastSuccess(
+      'Purchase Successful',
+      `${purchasedProduct?.name || 'License'} (${purchasedVariant?.durationLabel || 'Key'}) is ready for use.`
+    );
 
-  const updateQuantity = (variantId: string, delta: number) => {
-    setQuantityMap(prev => {
-      const current = prev[variantId] || 1;
-      const next = Math.max(1, Math.min(20, current + delta));
-      return { ...prev, [variantId]: next };
+    setDeliveredKey({
+      keyCode: deliveredKeyData?.keyCode || 'N/A',
+      productName: purchasedProduct?.name || deliveredKeyData?.productName || 'VIP Key',
+      durationLabel: purchasedVariant?.durationLabel || deliveredKeyData?.durationLabel || 'Standard',
+      expiresAt: deliveredKeyData?.expiresAt,
+      purchaseSource: deliveredKeyData?.purchaseSource || 'WEB',
+      purchaseSourceLabel: deliveredKeyData?.purchaseSourceLabel || 'Buy from Website',
     });
-  };
 
-  const handlePurchase = async (product: Product, variant: ProductVariant) => {
-    const qty = getQuantity(variant.id);
-    const unitPrice = Number(variant.price || variant.resellerPrice || 50);
-    const totalCost = unitPrice * qty;
-
-    if (balance < totalCost) {
-      setInsufficientModal({
-        required: totalCost,
-        current: balance,
-      });
-      return;
-    }
-
-    try {
-      setIsBuyingId(variant.id);
-      const res = await api.createOrder(variant.id, undefined, qty, {
-        productId: product.id,
-        productName: product.name,
-        game: product.game || 'FREEFIRE',
-        durationLabel: variant.durationLabel,
-        durationHours: variant.durationHours || 24,
-        price: unitPrice,
-      });
-
-      if (res?.deliveredKey || res?.key) {
-        const delivered = res.deliveredKey || res.key;
-        if (typeof res.newBalance === 'number') {
-          updateBalanceLocally(res.newBalance);
-        } else {
-          updateBalanceLocally(balance - totalCost);
-        }
-        showToastSuccess(
-          'Buy from Website',
-          `${product.name} (${variant.durationLabel}) key is ready to use.`
-        );
-
-        setDeliveredKey({
-          keyCode: delivered.keyCode,
-          productName: product.name,
-          durationLabel: variant.durationLabel,
-          expiresAt: delivered.expiresAt,
-          purchaseSource: delivered.purchaseSource || 'WEB',
-          purchaseSourceLabel: delivered.purchaseSourceLabel || 'Buy from Website',
-        });
-
-        fetchProducts(true);
-      }
-    } catch (err: any) {
-      showToastError('Purchase Failed', err.message || 'Could not complete key purchase.');
-    } finally {
-      setIsBuyingId(null);
-    }
+    fetchProducts(true);
   };
 
   // Dynamic filter lists
@@ -288,86 +239,93 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   });
 
   return (
-    <div className="space-y-6">
-      <PremiumLoadingModal
-        isOpen={Boolean(isBuyingId)}
-        title="Generating Instant License Key..."
-        subtitle="Allocating verified digital license key and updating your wallet ledger."
-        badgeText="AUTOMATED KEY DELIVERY"
-      />
-
-      {/* Page Header & Search / Refresh Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-display font-extrabold text-2xl sm:text-3xl bg-gradient-to-r from-white via-rose-100 to-amber-200 bg-clip-text text-transparent">
-            VIP License Catalog & Key Dispatch
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-300 mt-0.5">
-            Select your Free Fire or game duration plan below for instant automated key generation.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="w-4 h-4 text-rose-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search software package..."
-              className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-[#101424] border border-white/10 focus:border-rose-500 text-xs text-white placeholder:text-slate-500 focus:outline-none transition-colors shadow-inner"
-            />
+    <div className="space-y-6 w-full max-w-full overflow-x-hidden">
+      {/* Dynamic Cyber Hero Header */}
+      <div className="p-4 sm:p-6 rounded-3xl bg-gradient-to-r from-[#14182e] via-[#0e1224] to-[#151a33] border border-cyan-500/25 shadow-[0_4px_30px_rgba(6,182,212,0.15)] space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[10px] font-mono font-bold flex items-center gap-1.5 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span>OFFICIAL VIP KEY STORE</span>
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold">
+                ● 100% ANTI-BAN ACTIVE
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-mono font-bold">
+                ⚡ INSTANT DISPATCH
+              </span>
+            </div>
+            <h2 className="font-display font-black text-xl sm:text-3xl text-white tracking-tight">
+              VIP License Catalog & Key Dispatch
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300">
+              Click <span className="text-rose-400 font-bold">Purchase Key</span> on any product below to view all durations and tap <span className="text-emerald-400 font-bold">Buy Now</span>.
+            </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => fetchProducts(false)}
-            className="px-3.5 py-2.5 rounded-xl bg-[#12162a] hover:bg-[#1a2038] text-slate-200 hover:text-white text-xs font-bold border border-rose-500/30 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-md shadow-rose-950/30"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-rose-400 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-        </div>
-      </div>
+          <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+            <div className="relative flex-1 md:w-64 min-w-0">
+              <Search className="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search software package..."
+                className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-[#0a0d18] border border-white/10 focus:border-cyan-400 text-xs text-white placeholder:text-slate-500 focus:outline-none transition-colors shadow-inner font-medium"
+              />
+            </div>
 
-      {/* Interactive Segmented Filter Controls with Glowing Active Tabs */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-[#121629] via-[#0f1220] to-[#121629] border border-white/10 space-y-3 shadow-xl">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {gameFilters.map(tab => {
-            const isActive = gameFilter === tab;
-            return (
-              <button
-                key={tab}
-                onClick={() => setGameFilter(tab)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-                  isActive
-                    ? 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 text-white shadow-lg shadow-rose-950/60 border border-white/20 scale-105'
-                    : 'text-slate-400 hover:text-white hover:bg-white/[0.06] border border-transparent'
-                }`}
-              >
-                {tab === 'FREEFIRE' ? '🔥 FREE FIRE' : tab === 'CARROM POOL' ? '🎯 CARROM POOL' : tab}
-              </button>
-            );
-          })}
+            <button
+              type="button"
+              onClick={() => fetchProducts(false)}
+              className="px-3.5 py-2.5 rounded-xl bg-[#101428] hover:bg-[#181f3d] text-slate-200 hover:text-white text-xs font-bold border border-cyan-500/30 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-md"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+          </div>
         </div>
 
-        <div className="pt-2.5 border-t border-white/[0.08] flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {deviceFilters.map(dTab => {
-            const isActive = deviceFilter === dTab;
-            return (
-              <button
-                key={dTab}
-                onClick={() => setDeviceFilter(dTab)}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-                  isActive
-                    ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-400/50 shadow-md shadow-cyan-950/50'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent'
-                }`}
-              >
-                {dTab}
-              </button>
-            );
-          })}
+        {/* Colorful Segmented Filter Pills */}
+        <div className="pt-2 border-t border-white/[0.08] space-y-2.5">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+            {gameFilters.map(tab => {
+              const isActive = gameFilter === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setGameFilter(tab)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                    isActive
+                      ? 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 text-white shadow-lg shadow-rose-950/60 border border-white/30'
+                      : 'text-slate-400 hover:text-white bg-[#090c18] hover:bg-white/[0.08] border border-white/10'
+                  }`}
+                >
+                  {tab === 'FREEFIRE' ? '🔥 FREE FIRE VIP' : tab === 'CARROM POOL' ? '🎯 CARROM POOL' : tab}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {deviceFilters.map(dTab => {
+              const isActive = deviceFilter === dTab;
+              return (
+                <button
+                  key={dTab}
+                  onClick={() => setDeviceFilter(dTab)}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                    isActive
+                      ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-400/60 shadow-md shadow-cyan-950/50'
+                      : 'text-slate-400 hover:text-slate-200 bg-[#090c18]/80 hover:bg-white/[0.05] border border-white/5'
+                  }`}
+                >
+                  {dTab}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -379,7 +337,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           ))}
         </div>
       ) : products.length === 0 ? (
-        <div className="p-12 text-center rounded-3xl bg-[#101424] border border-white/10 space-y-4">
+        <div className="p-10 text-center rounded-3xl bg-[#101424] border border-white/10 space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-400 shadow-lg">
             <ShoppingBag className="w-7 h-7" />
           </div>
@@ -402,7 +360,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           )}
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="p-12 text-center rounded-3xl bg-[#101424] border border-white/10 space-y-3">
+        <div className="p-10 text-center rounded-3xl bg-[#101424] border border-white/10 space-y-3">
           <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
           <h4 className="text-white font-display font-bold text-base">No Matching Products</h4>
           <p className="text-slate-400 text-xs max-w-sm mx-auto">
@@ -420,7 +378,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {filteredProducts.map(product => {
             const features = product.features || [
               'Precision Auto Aim Assist',
@@ -429,27 +387,21 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
               'No Root Required (All Android/iOS)',
             ];
             const hasValidImage = Boolean(product.imageUrl && !failedImages[product.id]);
-            const activeVariant = getActiveVariant(product);
-            const activeQty = activeVariant ? getQuantity(activeVariant.id) : 1;
-            const activeUnitPrice = activeVariant
-              ? Number(activeVariant.price || activeVariant.resellerPrice || 50)
-              : 0;
-            const activeTotalPrice = activeUnitPrice * activeQty;
-            const isBuyingCurrent = activeVariant && isBuyingId === activeVariant.id;
+            const isExpanded = Boolean(expandedProductIds[product.id]);
 
             return (
               <div
                 key={product.id}
-                className="bg-gradient-to-b from-[#121628] via-[#0f1322] to-[#0c0f1c] border border-rose-500/25 hover:border-rose-500/50 rounded-3xl overflow-hidden flex flex-col justify-between transition-all shadow-[0_10px_35px_rgba(0,0,0,0.5)] hover:shadow-[0_10px_40px_rgba(244,63,94,0.18)]"
+                className="w-full min-w-0 bg-gradient-to-b from-[#13172e] via-[#0f1326] to-[#0a0d1a] border border-cyan-500/25 hover:border-cyan-400/60 rounded-3xl overflow-hidden flex flex-col justify-between transition-all duration-200 shadow-[0_10px_35px_rgba(0,0,0,0.6)] group"
               >
                 <div>
-                  {/* Product Media Header with Game Visual Banner */}
+                  {/* High-Impact Visual Banner */}
                   <div className="relative aspect-[16/8] w-full bg-[#080b14] overflow-hidden border-b border-white/10">
-                    <div className="absolute inset-0 bg-gradient-to-br from-rose-950/80 via-[#101424] to-indigo-950/80 flex flex-col items-center justify-center p-6 text-center select-none">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-500 to-amber-500 flex items-center justify-center mb-2 shadow-lg shadow-rose-950/50 border border-white/20">
-                        <ShieldCheck className="w-6 h-6 text-white" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-rose-950/80 via-[#101428] to-cyan-950/80 flex flex-col items-center justify-center p-4 text-center select-none">
+                      <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-cyan-500 via-rose-500 to-amber-500 flex items-center justify-center mb-2 shadow-lg shadow-cyan-950/50 border border-white/20">
+                        <ShieldCheck className="w-5 h-5 text-white" />
                       </div>
-                      <div className="font-display font-extrabold text-xl text-white tracking-tight">
+                      <div className="font-display font-extrabold text-base sm:text-xl text-white tracking-tight line-clamp-1">
                         {product.name}
                       </div>
                       <div className="text-xs text-cyan-300 font-semibold mt-1">
@@ -465,16 +417,26 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                         onError={() =>
                           setFailedImages(prev => ({ ...prev, [product.id]: true }))
                         }
-                        className="w-full h-full object-cover relative z-10"
+                        className="w-full h-full object-cover relative z-10 group-hover:scale-105 transition-transform duration-300"
                       />
                     )}
 
-                    {/* Gradient Scrim & Top Badge */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f1322] via-black/35 to-transparent z-20 pointer-events-none" />
+                    {/* Gradient Scrim & Badges */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f1326] via-black/35 to-transparent z-20 pointer-events-none" />
+
+                    <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 flex-wrap">
+                      <span className="px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-white/20 text-white text-[10px] font-mono font-bold shadow-lg uppercase">
+                        {product.game || 'FREE FIRE'}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-cyan-500/25 backdrop-blur-md border border-cyan-400/40 text-cyan-300 text-[10px] font-mono font-bold shadow-lg uppercase">
+                        {product.deviceType || 'NONROOT'}
+                      </span>
+                    </div>
 
                     <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
-                      <span className="px-3 py-1 rounded-full bg-emerald-500/20 backdrop-blur-md border border-emerald-400/40 text-emerald-300 text-[11px] font-extrabold shadow-lg">
-                        ⚡ INSTANT KEY
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/25 backdrop-blur-md border border-emerald-400/50 text-emerald-300 text-[10px] font-mono font-extrabold shadow-lg flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>INSTANT</span>
                       </span>
                     </div>
 
@@ -489,70 +451,71 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                     )}
                   </div>
 
-                  {/* Card Header & Specifications */}
-                  <div className="p-5 sm:p-6 space-y-4">
+                  {/* Card Content & Features */}
+                  <div className="p-4 sm:p-6 space-y-4">
                     <div className="space-y-1.5">
-                      {/* Colorful Badges */}
                       <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="px-2.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold">
-                          {product.game || 'FREE FIRE'}
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-bold">
-                          {product.deviceType || 'NON-ROOT'}
-                        </span>
                         {product.badge && (
                           <span className="px-2.5 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold flex items-center gap-1">
                             <Sparkles className="w-3 h-3" />
                             {product.badge}
                           </span>
                         )}
+                        <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold text-[10px] uppercase">
+                          OB55 VERIFIED
+                        </span>
                       </div>
 
-                      <h3 className="font-display font-extrabold text-xl sm:text-2xl text-white">
+                      <h3 className="font-display font-extrabold text-lg sm:text-2xl text-white break-words">
                         {product.name}
                       </h3>
+                      {product.description && (
+                        <p className="text-xs text-slate-400 line-clamp-2">
+                          {product.description}
+                        </p>
+                      )}
                     </div>
 
-                    {/* Specification Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 border-t border-white/[0.08]">
+                    {/* Feature Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-white/[0.08]">
                       {features.slice(0, 4).map((feat, idx) => (
                         <div
                           key={idx}
-                          className="flex items-center gap-2 text-xs text-slate-200 py-0.5"
+                          className="flex items-center gap-2 text-xs text-slate-200 py-0.5 min-w-0"
                         >
-                          <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                          <div className="w-4 h-4 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
                             <Check className="w-3 h-3 text-emerald-400 stroke-[3]" />
                           </div>
-                          <span className="truncate font-medium">{feat}</span>
+                          <span className="truncate font-semibold">{feat}</span>
                         </div>
                       ))}
                     </div>
 
-                    {/* Secondary Resource Buttons */}
-                    <div className="grid grid-cols-2 gap-2.5 pt-2">
+                    {/* Loader & Proof Buttons */}
+                    <div className="grid grid-cols-2 gap-2.5 pt-1">
                       <button
                         type="button"
                         onClick={() => setActiveFileModal(product)}
-                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500/15 to-teal-500/10 hover:from-emerald-500/25 hover:to-teal-500/20 border border-emerald-500/35 text-emerald-300 text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer shadow-md"
+                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500/15 to-teal-500/10 hover:from-emerald-500/25 hover:to-teal-500/20 border border-emerald-500/35 text-emerald-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 cursor-pointer shadow-md"
                       >
-                        <Download className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span className="truncate">Download Loader</span>
+                        <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">Download File</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setActiveVideoModal(product)}
-                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-violet-500/15 to-rose-500/10 hover:from-violet-500/25 hover:to-rose-500/20 border border-violet-500/35 text-violet-300 text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer shadow-md"
+                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-violet-500/15 to-rose-500/10 hover:from-violet-500/25 hover:to-rose-500/20 border border-violet-500/35 text-violet-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 cursor-pointer shadow-md"
                       >
-                        <PlaySquare className="w-4 h-4 text-violet-400 shrink-0" />
-                        <span className="truncate">Proof & Gameplay</span>
+                        <PlaySquare className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                        <span className="truncate">Feedback Video</span>
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* Interactive Duration Selection & Instant Checkout Bar */}
-                <div className="p-5 sm:p-6 pt-4 bg-[#090c18] border-t border-white/10 space-y-4">
+                {/* PURCHASE KEY Button & Expandable Duration Rows with BUY NOW on each row */}
+                <div className="p-4 sm:p-6 pt-3 bg-[#080b16] border-t border-white/10 space-y-3">
                   {product.isUnderMaintenance ? (
                     <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2.5">
                       <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
@@ -565,102 +528,80 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                       </div>
                     </div>
                   ) : product.variants && product.variants.length > 0 ? (
-                    <>
-                      {/* Duration Tier Selector Tiles */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-300 font-bold uppercase tracking-wider text-[10px]">Select Duration Tier</span>
-                          {activeVariant && (
-                            <span className="font-mono text-emerald-400 font-extrabold tabular-nums">
-                              ₹{activeUnitPrice.toFixed(2)} / key
-                            </span>
-                          )}
+                    <div className="space-y-3">
+                      {/* Primary "PURCHASE KEY" Toggle Button */}
+                      <button
+                        type="button"
+                        onClick={() => toggleProductPurchaseList(product.id)}
+                        className={`w-full py-3.5 px-4 rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase transition-all flex items-center justify-between gap-2 cursor-pointer border ${
+                          isExpanded
+                            ? 'bg-[#151a30] border-rose-500/50 text-white shadow-inner'
+                            : 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-[0_4px_25px_rgba(244,63,94,0.4)] border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <KeyRound className="w-4 h-4 shrink-0 text-white" />
+                          <span className="truncate">
+                            {isExpanded ? 'Hide Durations' : 'Purchase Key'}
+                          </span>
                         </div>
+                        <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-black/30 text-white shrink-0">
+                          {product.variants.length} Plans {isExpanded ? '▲' : '▼'}
+                        </span>
+                      </button>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {/* Expanded Duration Rows: Each Duration Row Has Its Own BUY NOW Button */}
+                      {isExpanded && (
+                        <div className="space-y-2 pt-1">
                           {product.variants.map(variant => {
-                            const isSelected = activeVariant?.id === variant.id;
-                            const vPrice = Number(variant.price || variant.resellerPrice || 50);
+                            const vPrice = Number(
+                              role === 'RESELLER' && variant.resellerPrice
+                                ? variant.resellerPrice
+                                : variant.price
+                            );
+                            const hasExternalApi = Boolean(
+                              (variant as any).externalPid || product.externalPid
+                            );
+                            const isOutOfStock = !hasExternalApi && (variant.stockCount ?? 15) <= 0;
 
                             return (
-                              <button
+                              <div
                                 key={variant.id}
-                                type="button"
-                                onClick={() =>
-                                  setSelectedVariantMap(prev => ({
-                                    ...prev,
-                                    [product.id]: variant.id,
-                                  }))
-                                }
-                                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                                  isSelected
-                                    ? 'bg-gradient-to-br from-rose-600/30 via-pink-600/20 to-amber-500/20 border-rose-500 text-white shadow-lg shadow-rose-950/50 scale-102 ring-1 ring-rose-500/50'
-                                    : 'bg-[#121628] border-white/10 hover:border-white/20 text-slate-300 hover:bg-[#161c33]'
-                                }`}
+                                className="p-3 rounded-2xl bg-[#101528] hover:bg-[#151c36] border border-white/10 hover:border-rose-500/40 transition-all flex items-center justify-between gap-2 sm:gap-3"
                               >
-                                <div className="text-xs font-bold truncate">
-                                  {variant.durationLabel}
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-xs sm:text-sm font-extrabold text-white truncate">
+                                    {variant.durationLabel}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="font-mono text-xs sm:text-sm font-black text-emerald-400 tabular-nums">
+                                      ₹{vPrice.toFixed(2)}
+                                    </span>
+                                    <span className="text-[10px] font-semibold text-slate-400">
+                                      • {isOutOfStock ? 'Out of Stock' : 'Instant Key'}
+                                    </span>
+                                  </div>
                                 </div>
-                                <div
-                                  className={`font-mono text-xs font-extrabold tabular-nums mt-0.5 ${
-                                    isSelected ? 'text-amber-300' : 'text-emerald-400'
+
+                                <button
+                                  type="button"
+                                  disabled={isOutOfStock}
+                                  onClick={() => setSelectedPurchase({ product, variant })}
+                                  className={`px-3.5 sm:px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                                    isOutOfStock
+                                      ? 'bg-white/5 text-slate-500 border border-white/10 cursor-not-allowed'
+                                      : 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-[0_4px_15px_rgba(244,63,94,0.35)] border border-white/20'
                                   }`}
                                 >
-                                  ₹{vPrice.toFixed(0)}
-                                </div>
-                              </button>
+                                  <Zap className="w-3.5 h-3.5 fill-white text-white shrink-0" />
+                                  <span>BUY NOW</span>
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
-                      </div>
-
-                      {/* Quantity Stepper + Instant Buy Button */}
-                      {activeVariant && (
-                        <div className="flex items-center gap-3 pt-1">
-                          <div className="flex items-center bg-[#121628] border border-white/15 rounded-xl px-2 py-1.5 shrink-0 shadow-inner">
-                            <button
-                              type="button"
-                              onClick={() => updateQuantity(activeVariant.id, -1)}
-                              className="p-1 text-slate-400 hover:text-white cursor-pointer"
-                              aria-label="Decrease quantity"
-                            >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <span className="w-8 text-center text-xs font-mono font-bold text-amber-300 tabular-nums">
-                              {activeQty}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => updateQuantity(activeVariant.id, 1)}
-                              className="p-1 text-slate-400 hover:text-white cursor-pointer"
-                              aria-label="Increase quantity"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handlePurchase(product, activeVariant)}
-                            disabled={Boolean(isBuyingCurrent)}
-                            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-black text-xs sm:text-sm transition-all shadow-[0_4px_25px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border border-white/20 hover:scale-102"
-                          >
-                            {isBuyingCurrent ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <>
-                                <Flame className="w-4 h-4 fill-white" />
-                                <span>Buy License Key</span>
-                                <span aria-hidden="true" className="opacity-60">·</span>
-                                <span className="font-mono font-extrabold tabular-nums">
-                                  ₹{activeTotalPrice.toFixed(2)}
-                                </span>
-                              </>
-                            )}
-                          </button>
-                        </div>
                       )}
-                    </>
+                    </div>
                   ) : (
                     <div className="text-center py-3 text-xs text-slate-500">
                       No duration plans configured for this package.
@@ -770,54 +711,18 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
         </div>
       )}
 
-      {/* Modal: Insufficient Balance */}
-      {insufficientModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            onClick={() => setInsufficientModal(null)}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
-          />
-          <div className="relative w-full max-w-sm bg-[#121628] border border-rose-500/40 rounded-3xl p-6 shadow-2xl z-10 space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto shadow-lg">
-              <ShoppingBag className="w-6 h-6" />
-            </div>
-
-            <div className="text-center space-y-1">
-              <h4 className="font-display font-extrabold text-lg text-white">Insufficient Wallet Balance</h4>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                This order requires{' '}
-                <span className="text-amber-300 font-extrabold font-mono tabular-nums">
-                  ₹{insufficientModal.required.toFixed(2)}
-                </span>
-                , but your available balance is{' '}
-                <span className="text-rose-400 font-extrabold font-mono tabular-nums">
-                  ₹{insufficientModal.current.toFixed(2)}
-                </span>
-                .
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setInsufficientModal(null)}
-                className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/15 text-slate-300 text-xs font-bold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setInsufficientModal(null);
-                  onNavigateDeposit();
-                }}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black cursor-pointer shadow-lg shadow-emerald-950/50"
-              >
-                + Add Funds
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Modernized Purchase Modal (with Android ID, Randomizer, Balance HUD & Key Confirmation) */}
+      {selectedPurchase && (
+        <PurchaseModal
+          product={selectedPurchase.product}
+          variant={selectedPurchase.variant}
+          onClose={() => setSelectedPurchase(null)}
+          onSuccess={handlePurchaseSuccess}
+          onNavigateDeposit={() => {
+            setSelectedPurchase(null);
+            onNavigateDeposit();
+          }}
+        />
       )}
 
       {/* Modal: Delivered Key Success */}

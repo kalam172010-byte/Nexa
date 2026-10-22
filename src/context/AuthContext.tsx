@@ -71,10 +71,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('nexa_auth_token'));
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    try {
+      const hasStoredUser = Boolean(localStorage.getItem('nexa_user_data') && localStorage.getItem('nexa_auth_token'));
+      const isLoggedOut = localStorage.getItem('nexa_logged_out') === 'true';
+      if (hasStoredUser && !isLoggedOut) return false;
+    } catch {}
+    return true;
+  });
+  const isInteractiveAuthRef = React.useRef<boolean>(false);
 
   const saveUserSession = useCallback((userData: User, userToken: string) => {
-    localStorage.removeItem('nexa_logged_out');
+    try {
+      localStorage.removeItem('nexa_logged_out');
+      sessionStorage.removeItem('nexa_explicit_logged_out');
+    } catch {}
     if (checkIsAdmin(userData.email, userData.username)) {
       userData.role = 'ADMIN';
     }
@@ -155,6 +166,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         USER: 1,
       };
 
+      const fallbackUsername =
+        customUsername ||
+        firebaseUser.displayName ||
+        firebaseUser.email?.split('@')[0] ||
+        `user_${String(firebaseUser.uid || '').slice(0, 6)}`;
+
+      const fallbackIsAdmin = checkIsAdmin(firebaseUser.email, fallbackUsername);
+      const fallbackToken = `fb_token_${firebaseUser.uid}`;
+      const immediateUser: User = {
+        id: firebaseUser.uid,
+        username: fallbackUsername,
+        email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
+        role: fallbackIsAdmin ? 'ADMIN' : 'USER',
+        balance: fallbackIsAdmin ? 5000.0 : 0.0,
+        apiKey: `nexa_live_${String(firebaseUser.uid || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Date.now().toString(36)}`,
+        referralCode: `REF_${String(firebaseUser.uid || '').slice(0, 6).toUpperCase()}`,
+        twoFactorEnabled: false,
+        isBanned: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
       try {
         const res = await api.firebaseSync({
           uid: firebaseUser.uid,
@@ -163,146 +196,105 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (res?.token && res?.user) {
-          // Check Firestore linked documents so we never overwrite an authoritative role or freshly deducted balance
-          try {
-            const candidateIds = new Set<string>([res.user.id]);
-            if (firebaseUser.uid) candidateIds.add(firebaseUser.uid);
-            if ((res.user.email || '').toLowerCase() === 'kalam172010@gmail.com') {
-              candidateIds.add('USR-KALAM-172010');
-              candidateIds.add('tnqy7LYfgwgzYpoQGqljC4H6bKc2');
-            }
-            const fsBalances: number[] = [];
-            const fsRoles: string[] = [];
-
-            for (const cid of candidateIds) {
-              const snap = await getDoc(doc(db, 'users', cid)).catch(() => null);
-              if (snap && snap.exists()) {
-                const d = snap.data();
-                if (typeof d.balance === 'number' && !Number.isNaN(d.balance)) {
-                  fsBalances.push(Number(d.balance));
-                }
-                if (d.role) {
-                  fsRoles.push(d.role);
-                }
-                if (d.apiKey && !res.user.apiKey) {
-                  res.user.apiKey = d.apiKey;
-                }
-              }
-            }
-            if (fsBalances.length > 0) {
-              const minFsBal = Math.min(...fsBalances);
-              if (minFsBal < Number(res.user.balance || 0)) {
-                res.user.balance = minFsBal;
-              }
-            }
-
-            // Real-time authoritative role resolution: never downgrade an upgraded RESELLER or ADMIN
-            let authoritativeRole = res.user.role || 'USER';
-            for (const r of fsRoles) {
-              if ((roleRank[r] || 1) > (roleRank[authoritativeRole] || 1)) {
-                authoritativeRole = r as any;
-              }
-            }
-            if (checkIsAdmin(res.user.email, res.user.username)) {
-              authoritativeRole = 'ADMIN';
-            }
-            res.user.role = authoritativeRole;
-
-            const profilePayload = {
-              id: res.user.id,
-              username: res.user.username,
-              email: res.user.email,
-              role: authoritativeRole,
-              balance: res.user.balance,
-              apiKey: res.user.apiKey,
-              referralCode: res.user.referralCode,
-              twoFactorEnabled: res.user.twoFactorEnabled || false,
-              isBanned: res.user.isBanned || false,
-              updatedAt: new Date().toISOString(),
-            };
-
-            for (const cid of candidateIds) {
-              await setDoc(doc(db, 'users', cid), { ...profilePayload, id: cid }, { merge: true });
-            }
-          } catch (firestoreErr) {
-            console.warn('Firestore user profile sync non-critical warning:', firestoreErr);
+          if (checkIsAdmin(res.user.email, res.user.username)) {
+            res.user.role = 'ADMIN';
           }
-
+          // Immediately save the session so login completes instantaneously on the first attempt
           saveUserSession(res.user, res.token);
+
+          // Synchronize Firestore user documents non-blockingly in the background
+          (async () => {
+            try {
+              const candidateIds = new Set<string>([res.user.id]);
+              if (firebaseUser.uid) candidateIds.add(firebaseUser.uid);
+              if ((res.user.email || '').toLowerCase() === 'kalam172010@gmail.com') {
+                candidateIds.add('USR-KALAM-172010');
+                candidateIds.add('tnqy7LYfgwgzYpoQGqljC4H6bKc2');
+              }
+              const fsBalances: number[] = [];
+              const fsRoles: string[] = [];
+
+              for (const cid of candidateIds) {
+                const snap = await getDoc(doc(db, 'users', cid)).catch(() => null);
+                if (snap && snap.exists()) {
+                  const d = snap.data();
+                  if (typeof d.balance === 'number' && !Number.isNaN(d.balance)) {
+                    fsBalances.push(Number(d.balance));
+                  }
+                  if (d.role) {
+                    fsRoles.push(d.role);
+                  }
+                  if (d.apiKey && !res.user.apiKey) {
+                    res.user.apiKey = d.apiKey;
+                  }
+                }
+              }
+              if (fsBalances.length > 0) {
+                const minFsBal = Math.min(...fsBalances);
+                if (minFsBal < Number(res.user.balance || 0)) {
+                  res.user.balance = minFsBal;
+                }
+              }
+
+              let authoritativeRole = res.user.role || 'USER';
+              for (const r of fsRoles) {
+                if ((roleRank[r] || 1) > (roleRank[authoritativeRole] || 1)) {
+                  authoritativeRole = r as any;
+                }
+              }
+              if (checkIsAdmin(res.user.email, res.user.username)) {
+                authoritativeRole = 'ADMIN';
+              }
+              res.user.role = authoritativeRole;
+              saveUserSession(res.user, res.token);
+
+              const profilePayload = {
+                id: res.user.id,
+                username: res.user.username,
+                email: res.user.email,
+                role: authoritativeRole,
+                balance: res.user.balance,
+                apiKey: res.user.apiKey,
+                referralCode: res.user.referralCode,
+                twoFactorEnabled: res.user.twoFactorEnabled || false,
+                isBanned: res.user.isBanned || false,
+                updatedAt: new Date().toISOString(),
+              };
+
+              for (const cid of candidateIds) {
+                await setDoc(doc(db, 'users', cid), { ...profilePayload, id: cid }, { merge: true }).catch(() => {});
+              }
+            } catch (firestoreErr) {
+              console.warn('Firestore user profile sync non-critical warning:', firestoreErr);
+            }
+          })();
+
           return res.user;
-        } else {
-          throw new Error('Backend sync did not return a valid user session.');
         }
       } catch (err: any) {
-        console.warn('Backend sync API failed, using client-side Firestore auth state fallback:', err);
+        console.warn('Backend sync API notice, using instant client session fallback:', err);
+      }
+
+      // Guarantee session is saved immediately even if backend sync is offline
+      saveUserSession(immediateUser, fallbackToken);
+
+      (async () => {
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
-
-          let clientUser: User;
-          if (userDocSnap.exists()) {
-            clientUser = userDocSnap.data() as User;
+          const userDocSnap = await getDoc(userDocRef).catch(() => null);
+          if (userDocSnap && userDocSnap.exists()) {
+            const clientUser = userDocSnap.data() as User;
             if (checkIsAdmin(clientUser.email, clientUser.username)) {
               clientUser.role = 'ADMIN';
             }
-            if (!(clientUser as any).apiKey) {
-              (clientUser as any).apiKey = `nexa_live_${firebaseUser.uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
-              await setDoc(userDocRef, { apiKey: (clientUser as any).apiKey }, { merge: true });
-            }
+            saveUserSession({ ...immediateUser, ...clientUser }, fallbackToken);
           } else {
-            const username =
-              customUsername ||
-              firebaseUser.displayName ||
-              firebaseUser.email?.split('@')[0] ||
-              `user_${firebaseUser.uid.slice(0, 6)}`;
-
-            const isAdmin = checkIsAdmin(firebaseUser.email, username);
-            const generatedApiKey = `nexa_live_${firebaseUser.uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
-
-            clientUser = {
-              id: firebaseUser.uid,
-              username,
-              email: firebaseUser.email || `${firebaseUser.uid}@firebase.user`,
-              role: isAdmin ? 'ADMIN' : 'USER',
-              balance: 0.0,
-              apiKey: generatedApiKey,
-              referralCode: `REF_${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
-              twoFactorEnabled: false,
-              isBanned: false,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-            await setDoc(userDocRef, clientUser, { merge: true });
+            await setDoc(userDocRef, immediateUser, { merge: true }).catch(() => {});
           }
+        } catch {}
+      })();
 
-          // Check linked docs for higher roles
-          const candidateIds = [firebaseUser.uid];
-          if ((clientUser.email || '').toLowerCase() === 'kalam172010@gmail.com') {
-            candidateIds.push('USR-KALAM-172010', 'tnqy7LYfgwgzYpoQGqljC4H6bKc2');
-          }
-          let highestRole = clientUser.role || 'USER';
-          for (const cid of candidateIds) {
-            const s = await getDoc(doc(db, 'users', cid)).catch(() => null);
-            if (s && s.exists()) {
-              const r = s.data().role;
-              if (r && (roleRank[r] || 1) > (roleRank[highestRole] || 1)) {
-                highestRole = r;
-              }
-            }
-          }
-          if (checkIsAdmin(clientUser.email, clientUser.username)) {
-            highestRole = 'ADMIN';
-          }
-          clientUser.role = highestRole;
-
-          const fallbackToken = `fb_token_${firebaseUser.uid}`;
-          saveUserSession(clientUser, fallbackToken);
-          return clientUser;
-        } catch (fallbackErr) {
-          console.error('Client auth fallback failed:', fallbackErr);
-          throw err;
-        }
-      }
+      return immediateUser;
     },
     [saveUserSession]
   );
@@ -319,7 +311,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {
       console.warn('Failed to refresh user auth state from API:', err);
-      // Keep cached session if present on static hosts
       if (!localStorage.getItem('nexa_user_data')) {
         clearUserSession();
       }
@@ -329,73 +320,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Listen to Firebase auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async firebaseUser => {
-      console.log(
-        '[AuthContext] onAuthStateChanged listener triggered. Firebase User:',
-        firebaseUser ? `${firebaseUser.uid} (${firebaseUser.email || 'no-email'})` : 'null'
-      );
       if (firebaseUser) {
-        localStorage.removeItem('nexa_logged_out');
         try {
-          console.log('[AuthContext] Syncing user session for Firebase UID:', firebaseUser.uid);
+          localStorage.removeItem('nexa_logged_out');
+          sessionStorage.removeItem('nexa_explicit_logged_out');
+        } catch {}
+
+        if (isInteractiveAuthRef.current) {
+          setIsLoading(false);
+          return;
+        }
+
+        try {
           await syncUserWithBackend(firebaseUser);
-          console.log('[AuthContext] User session synced successfully.');
-        } catch (err) {
-          console.error('[AuthContext] Error during Firebase auth state synchronization:', err);
+        } catch {
           const storedToken = localStorage.getItem('nexa_auth_token');
           const storedUserData = localStorage.getItem('nexa_user_data');
           if (storedToken && storedUserData) {
             try {
               const parsed = JSON.parse(storedUserData);
-              console.log('[AuthContext] Restored cached user profile from localStorage:', parsed.username);
               setUser(parsed);
               setToken(storedToken);
-            } catch {
-              clearUserSession();
-            }
+            } catch {}
           }
         }
       } else {
+        if (isInteractiveAuthRef.current) {
+          setIsLoading(false);
+          return;
+        }
+
         const isExplicitlyLoggedOut = localStorage.getItem('nexa_logged_out') === 'true';
-        // If no Firebase user, check if we have a valid cached session (e.g., username/password or static host)
         const storedToken = localStorage.getItem('nexa_auth_token');
         const storedUserData = localStorage.getItem('nexa_user_data');
+
         if (!storedToken || isExplicitlyLoggedOut) {
           clearUserSession();
           setIsLoading(false);
           return;
         }
 
-        console.log(
-          '[AuthContext] No Firebase user present. Local session check:',
-          storedToken ? 'Token present' : 'No token'
-        );
-        if (storedToken) {
+        if (storedUserData) {
           try {
-            const data = await api.getMe();
-            if (data?.user) {
-              console.log('[AuthContext] Restored user session from API:', data.user.id);
-              saveUserSession(data.user, storedToken);
-            } else if (storedUserData) {
-              console.log('[AuthContext] API returned empty, restoring cached user profile:', storedUserData);
-              const parsed = JSON.parse(storedUserData);
-              setUser(parsed);
-              setToken(storedToken);
-            }
-          } catch {
-            if (storedUserData) {
-              try {
-                console.log('[AuthContext] API check failed on static host, using cached user profile...');
-                const parsed = JSON.parse(storedUserData);
-                setUser(parsed);
-                setToken(storedToken);
-              } catch {
-                clearUserSession();
-              }
-            } else {
-              clearUserSession();
-            }
-          }
+            const parsed = JSON.parse(storedUserData);
+            setUser(parsed);
+            setToken(storedToken);
+          } catch {}
         }
+
+        setIsLoading(false);
+
+        api
+          .getMe()
+          .then(data => {
+            if (data?.user && !isInteractiveAuthRef.current && localStorage.getItem('nexa_logged_out') !== 'true') {
+              saveUserSession(data.user, localStorage.getItem('nexa_auth_token') || storedToken);
+            }
+          })
+          .catch(() => {});
+        return;
       }
       setIsLoading(false);
     });
@@ -611,40 +594,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   }, [syncUserWithBackend, saveUserSession]);
 
-  // Google Login via Firebase Popup (with automatic fallback to Redirect on mobile/blocked popups)
+  // Google Login via Firebase Popup
   const loginWithGoogle = async () => {
-    setIsLoading(true);
+    isInteractiveAuthRef.current = true;
     try {
       localStorage.removeItem('nexa_logged_out');
+      sessionStorage.removeItem('nexa_explicit_logged_out');
     } catch {}
-    console.log('[AuthContext] loginWithGoogle triggered...');
+
     try {
-      let result;
+      let result: any = null;
       try {
         result = await signInWithPopup(auth, googleProvider);
       } catch (popupErr: any) {
-        console.warn('[AuthContext] signInWithPopup blocked or failed:', popupErr?.code || popupErr?.message);
-        if (
-          popupErr?.code === 'auth/popup-blocked' ||
-          popupErr?.code === 'auth/popup-closed-by-user' ||
-          popupErr?.message?.includes('popup')
-        ) {
-          console.log('[AuthContext] Fallback to signInWithRedirect for mobile/blocked popup...');
-          await signInWithRedirect(auth, googleProvider);
-          return;
+        // Check if Firebase Auth actually populated auth.currentUser before throwing popup close
+        if (!auth.currentUser) {
+          if (popupErr?.code === 'auth/popup-blocked') {
+            await signInWithRedirect(auth, googleProvider);
+            return;
+          }
+          if (popupErr?.code === 'auth/popup-closed-by-user' || popupErr?.code === 'auth/cancelled-popup-request') {
+            throw new Error('Google sign-in popup was closed before completing login. Please try again.');
+          }
+          throw popupErr;
         }
-        throw popupErr;
       }
 
-      if (result?.user) {
-        console.log('[AuthContext] Google popup sign-in successful for:', result.user.email);
-        const fbUser = result.user;
+      const fbUser = result?.user || auth.currentUser;
+      if (fbUser) {
+        const isAdmin = checkIsAdmin(fbUser.email, fbUser.displayName || '');
         const initialUser: User = {
           id: fbUser.uid,
           username: fbUser.displayName || fbUser.email?.split('@')[0] || 'user',
           email: fbUser.email || `${fbUser.uid}@firebase.user`,
-          role: checkIsAdmin(fbUser.email, fbUser.displayName || '') ? 'ADMIN' : 'USER',
-          balance: 0.0,
+          role: isAdmin ? 'ADMIN' : 'USER',
+          balance: isAdmin ? 5000.0 : 0.0,
           apiKey: `nexa_live_${fbUser.uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${Date.now().toString(36)}`,
           referralCode: `REF_${fbUser.uid.slice(0, 6).toUpperCase()}`,
           twoFactorEnabled: false,
@@ -652,36 +636,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        // CRITICAL: Immediately establish user session so React re-renders with authenticated user on first click!
+
+        // Immediately establish authenticated session on the very first click
         saveUserSession(initialUser, `fb_token_${fbUser.uid}`);
+        if (typeof window !== 'undefined') {
+          window.location.hash = 'dashboard';
+        }
 
         const finalUser = await syncUserWithBackend(fbUser);
-        setIsLoading(false);
         return finalUser || initialUser;
       }
     } catch (err: any) {
       if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
-        console.warn('Google Sign-In notice: Current domain is not added to Firebase Authorized Domains list.');
-        throw new Error('Google Sign-In is not authorized for this domain yet. Please add kalamffpanel.kalamff.workers.dev in Firebase Console -> Authentication -> Settings -> Authorized Domains.');
+        throw new Error('Google Sign-In is not authorized for this domain yet. Please add this domain in Firebase Console -> Authentication -> Settings -> Authorized Domains.');
       }
-      console.warn('Google Sign-in notice:', err?.message || err);
       throw new Error(err?.message || 'Google sign-in failed. Please try again.');
     } finally {
-      setIsLoading(false);
+      isInteractiveAuthRef.current = false;
     }
   };
 
   // Direct secure application login (Supports username or email + password)
   const login = async (usernameOrEmail: string, password: string) => {
-    setIsLoading(true);
+    isInteractiveAuthRef.current = true;
     try {
       localStorage.removeItem('nexa_logged_out');
+      sessionStorage.removeItem('nexa_explicit_logged_out');
     } catch {}
     try {
       const res = await api.login({ usernameOrEmail: usernameOrEmail.trim(), password });
-      saveUserSession(res.user, res.token);
+      if (res?.user && res?.token) {
+        saveUserSession(res.user, res.token);
+        if (typeof window !== 'undefined') {
+          window.location.hash = 'dashboard';
+        }
+        return;
+      }
+      throw new Error('Invalid login response');
     } catch (err: any) {
-      console.warn('[AuthContext] Backend login API failed or unreachable, trying Firebase Auth fallback:', err);
       try {
         const cleanIdentifier = usernameOrEmail.trim();
         const email = cleanIdentifier.includes('@')
@@ -691,23 +683,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userCred = await signInWithEmailAndPassword(auth, email, password);
         if (userCred.user) {
           await syncUserWithBackend(userCred.user, cleanIdentifier);
+          if (typeof window !== 'undefined') {
+            window.location.hash = 'dashboard';
+          }
           return;
         }
       } catch (fbErr: any) {
-        console.error('[AuthContext] Firebase auth login fallback error:', fbErr);
         if (
           fbErr?.code === 'auth/invalid-credential' ||
           fbErr?.code === 'auth/user-not-found' ||
           fbErr?.code === 'auth/wrong-password' ||
           fbErr?.code === 'auth/invalid-email'
         ) {
-          throw new Error('Invalid username/email or password.');
+          throw new Error(err?.message || 'Invalid username/email or password.');
         }
-        throw new Error(fbErr.message || 'Authentication failed. Please check your credentials.');
+        throw new Error(err?.message || fbErr.message || 'Authentication failed. Please check your credentials.');
       }
-      throw new Error(err.message || 'Invalid username/email or password.');
+      throw new Error(err?.message || 'Invalid username/email or password.');
     } finally {
-      setIsLoading(false);
+      isInteractiveAuthRef.current = false;
     }
   };
 
@@ -718,7 +712,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string,
     referralCode?: string
   ) => {
-    setIsLoading(true);
+    isInteractiveAuthRef.current = true;
+    try {
+      localStorage.removeItem('nexa_logged_out');
+      sessionStorage.removeItem('nexa_explicit_logged_out');
+    } catch {}
     try {
       const res = await api.register({
         username: username.trim(),
@@ -726,30 +724,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         password,
         referralCode: referralCode?.trim() || undefined,
       });
-      saveUserSession(res.user, res.token);
+      if (res?.user && res?.token) {
+        saveUserSession(res.user, res.token);
+        if (typeof window !== 'undefined') {
+          window.location.hash = 'dashboard';
+        }
+        return;
+      }
+      throw new Error('Invalid registration response');
     } catch (err: any) {
-      console.warn('[AuthContext] Backend register API failed or unreachable, trying Firebase Auth fallback:', err);
       try {
         const cleanEmail = email.trim().toLowerCase();
         const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
         if (userCred.user) {
           await updateProfile(userCred.user, { displayName: username.trim() });
           await syncUserWithBackend(userCred.user, username.trim());
+          if (typeof window !== 'undefined') {
+            window.location.hash = 'dashboard';
+          }
           return;
         }
       } catch (fbErr: any) {
-        console.error('[AuthContext] Firebase auth register fallback error:', fbErr);
         if (fbErr?.code === 'auth/email-already-in-use') {
-          throw new Error('An account with this email address already exists. Please sign in instead.');
+          throw new Error(err?.message || 'An account with this email address already exists. Please sign in instead.');
         }
         if (fbErr?.code === 'auth/weak-password') {
           throw new Error('Password should be at least 6 characters.');
         }
-        throw new Error(fbErr.message || 'Registration failed. Please check your credentials.');
+        throw new Error(err?.message || fbErr.message || 'Registration failed. Please check your credentials.');
       }
-      throw new Error(err.message || 'Registration failed. Please check your credentials.');
+      throw new Error(err?.message || 'Registration failed. Please check your credentials.');
     } finally {
-      setIsLoading(false);
+      isInteractiveAuthRef.current = false;
     }
   };
 
@@ -769,32 +775,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Self-service password reset
   const resetPassword = async (usernameOrEmail: string, newPassword: string) => {
-    setIsLoading(true);
+    isInteractiveAuthRef.current = true;
     try {
       const res = await api.resetPassword({
         usernameOrEmail: usernameOrEmail.trim(),
         newPassword,
       });
-      localStorage.setItem('nexa_auth_token', res.token);
-      setToken(res.token);
-      setUser(res.user);
+      saveUserSession(res.user, res.token);
+      if (typeof window !== 'undefined') {
+        window.location.hash = 'dashboard';
+      }
     } catch (err: any) {
       throw new Error(err.message || 'Password reset failed. Please check your credentials.');
     } finally {
-      setIsLoading(false);
+      isInteractiveAuthRef.current = false;
     }
   };
 
   // Forgot password: send password reset email directly via Firebase Auth
   const sendPasswordReset = async (usernameOrEmail: string) => {
-    setIsLoading(true);
     try {
       const trimmed = usernameOrEmail.trim();
       const targetEmail = trimmed.includes('@')
         ? trimmed
         : `${trimmed.toLowerCase()}@kalamffpanel.app`;
 
-      // Try Firebase sendPasswordResetEmail directly (works 100% on client-side static hosts)
       try {
         await sendPasswordResetEmail(auth, targetEmail);
         return {
@@ -806,7 +811,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] Firebase sendPasswordResetEmail notice:', firebaseErr?.code || firebaseErr?.message);
       }
 
-      // Try backend Express API reset endpoint
       const res = await api.forgotPassword({
         usernameOrEmail: trimmed,
       });
@@ -821,8 +825,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
       throw new Error(err.message || 'Failed to send password reset email.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -836,18 +838,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithOtp = async (email: string, code: string) => {
-    setIsLoading(true);
+    isInteractiveAuthRef.current = true;
+    try {
+      localStorage.removeItem('nexa_logged_out');
+      sessionStorage.removeItem('nexa_explicit_logged_out');
+    } catch {}
     try {
       const res = await api.verifyOtp(email.trim(), code.trim());
       if (res?.token && res?.user) {
         saveUserSession(res.user, res.token);
+        if (typeof window !== 'undefined') {
+          window.location.hash = 'dashboard';
+        }
       } else {
         throw new Error('Invalid verification response from server.');
       }
     } catch (err: any) {
       throw new Error(err.message || 'OTP verification failed.');
     } finally {
-      setIsLoading(false);
+      isInteractiveAuthRef.current = false;
     }
   };
 

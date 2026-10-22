@@ -12,7 +12,6 @@ import {
   Smartphone,
   ShieldCheck,
   AlertCircle,
-  Zap,
 } from 'lucide-react';
 import { triggerConfetti } from '../utils/confetti.js';
 import { Deposit } from '../types/index.js';
@@ -238,27 +237,6 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
     } catch (err: any) {
       setLiveStatusText('Waiting for payment... Auto-verifying in real-time');
       showToastError('Verification Notice', err.message || 'Could not verify UTR yet.');
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  // Instant Test Simulation (For verification and testing without real-world bank transfer)
-  const handleInstantSimulateCredit = async () => {
-    setIsVerifying(true);
-    setLiveStatusText('Simulating instant UPI payment credit...');
-    try {
-      const simRes = await api.simulateDepositSuccess(deposit.id, `SIM-DEMO-${Date.now().toString().slice(-6)}`);
-      if (simRes && simRes.deposit && simRes.deposit.status === 'SUCCESS') {
-        setStatus('SUCCESS');
-        setLiveStatusText('Payment verified & wallet credited in real-time!');
-        triggerSuccess(simRes.newBalance ?? simRes.currentBalance);
-        return;
-      }
-      showToastError('Verification Pending', simRes?.message || 'Payment not credited yet.');
-    } catch (err: any) {
-      setLiveStatusText('Waiting for payment... Auto-verifying in real-time');
-      showToastError('Simulation Notice', err.message || 'Could not verify payment.');
     } finally {
       setIsVerifying(false);
     }
@@ -512,7 +490,7 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
 
         {/* Manual Check Status Action (Real Bank Verification) */}
         {status !== 'SUCCESS' && status !== 'EXPIRED' && (
-          <div className="pt-1 space-y-2">
+          <div className="pt-1">
             <button
               type="button"
               onClick={handleConfirmPayment}
@@ -530,16 +508,6 @@ export const QRModal: React.FC<QRModalProps> = ({ deposit, onClose, onSuccess })
                   <span>I Have Paid · Check Live Status Now</span>
                 </>
               )}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleInstantSimulateCredit}
-              disabled={isVerifying}
-              className="w-full py-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-emerald-400" />
-              <span>⚡ 1-Click Instant Credit Test (₹{displayAmount.toFixed(2)})</span>
             </button>
           </div>
         )}

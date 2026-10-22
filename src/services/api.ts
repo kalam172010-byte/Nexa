@@ -436,7 +436,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   // PRIORITY 1: If real backend returned 401 Unauthorized, automatically renew token and retry BEFORE any fallback!
-  if (!fetchFailed && !isHtml && response && response.status === 401 && !(options as any)._isRetry) {
+  const isPublicAuthEndpoint =
+    endpoint.includes('/auth/login') ||
+    endpoint.includes('/auth/register') ||
+    endpoint.includes('/auth/otp') ||
+    endpoint.includes('/auth/reset-password') ||
+    endpoint.includes('/auth/forgot-password') ||
+    endpoint.includes('/auth/token-refresh');
+
+  if (!fetchFailed && !isHtml && response && response.status === 401 && !isPublicAuthEndpoint && !(options as any)._isRetry) {
     try {
       let renewedToken: string | null = null;
       const refreshRes = await fetch(`${baseUrl}/auth/token-refresh`, {
@@ -748,14 +756,20 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   // PRIORITY 3: Stateful Fallback Handler for Static Hosting or Offline Backend
   if (fetchFailed || isHtml || (!fetchFailed && response && !response.ok)) {
-    // Surface real backend 400/401/403 validation errors (such as Insufficient wallet balance or Invalid API Key)
+    // Surface real backend 400/401/403/404 validation errors (such as Insufficient wallet balance, Invalid credentials, or Invalid API Key)
     if (
       !fetchFailed &&
       !isHtml &&
       response &&
       (response.status === 400 ||
-        ((response.status === 401 || response.status === 403) &&
-          (endpoint.includes('/reseller/buy') || endpoint.includes('reseller_v1.php')))) &&
+        ((response.status === 401 || response.status === 403 || response.status === 404) &&
+          (endpoint.includes('/reseller/buy') ||
+            endpoint.includes('reseller_v1.php') ||
+            endpoint.includes('/auth/login') ||
+            endpoint.includes('/auth/register') ||
+            endpoint.includes('/auth/otp') ||
+            endpoint.includes('/auth/reset-password') ||
+            endpoint.includes('/auth/change-password')))) &&
       (data?.error || data?.message)
     ) {
       throw new ApiError(data.error || data.message, response.status, data);

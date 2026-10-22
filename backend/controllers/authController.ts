@@ -316,21 +316,24 @@ export class AuthController {
         user.firebaseUid = uid;
         user.updatedAt = new Date().toISOString();
 
-        // Sync balance and role from Firestore if Firestore has a record for this user
-        try {
-          const liveBal = await FirestoreSyncService.getAuthoritativeBalance(user);
-          if (typeof liveBal === 'number' && !Number.isNaN(liveBal)) {
-            user.balance = liveBal;
-          }
-          const liveRole = await FirestoreSyncService.getAuthoritativeRole(user);
-          if (liveRole) {
-            user.role = liveRole;
-          }
-        } catch {}
-
         db.logActivity(user.id, user.username, 'FIREBASE_AUTH_LOGIN', `Logged in via Firebase: ${normalizedEmail}`);
         db.saveSync();
-        FirestoreSyncService.syncUserApiKey(user.id, user.apiKey).catch(() => {});
+
+        // Sync balance, role, and API key with Firestore non-blockingly in background
+        (async () => {
+          try {
+            const liveBal = await FirestoreSyncService.getAuthoritativeBalance(user!);
+            if (typeof liveBal === 'number' && !Number.isNaN(liveBal)) {
+              user!.balance = liveBal;
+            }
+            const liveRole = await FirestoreSyncService.getAuthoritativeRole(user!);
+            if (liveRole) {
+              user!.role = liveRole;
+            }
+            db.saveSync();
+            await FirestoreSyncService.syncUserApiKey(user!.id, user!.apiKey!);
+          } catch {}
+        })();
       }
 
       const token = generateToken(user);
@@ -423,7 +426,7 @@ export class AuthController {
       res.status(401).json({ error: 'Not authenticated.' });
       return;
     }
-    await FirestoreSyncService.pullAndMergeExternalState(false);
+    FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
 
     // Return latest user object from db
     const freshUser = db.users.find(u => u.id === req.user!.id || u.firebaseUid === req.user!.id);

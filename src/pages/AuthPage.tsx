@@ -27,7 +27,7 @@ interface AuthPageProps {
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
-  const { login, register, sendPasswordReset, loginWithGoogle, sendOtp, loginWithOtp } = useAuth();
+  const { user, login, register, sendPasswordReset, loginWithGoogle, sendOtp, loginWithOtp } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
   const { siteConfig } = useSite();
 
@@ -61,6 +61,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [logoImgError, setLogoImgError] = useState(false);
   const [heroImgError, setHeroImgError] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      onSuccess();
+    }
+  }, [user, onSuccess]);
 
   useEffect(() => {
     if (otpCountdown > 0) {
