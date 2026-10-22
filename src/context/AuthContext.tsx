@@ -16,6 +16,10 @@ import { User, UserRole } from '../types/index.js';
 import { api } from '../services/api.js';
 import { SignOutModal } from '../components/SignOutModal.js';
 
+export const INACTIVITY_TIMEOUT_MS = 120 * 60 * 1000; // 120 minutes (7,200,000 ms)
+export const ACTIVITY_STORAGE_KEY = 'nexa_last_active_timestamp';
+export const INACTIVITY_LOGOUT_NOTICE_KEY = 'nexa_inactivity_logout_notice';
+
 const ADMIN_EMAILS = [
   'kk7953926@gmail.com',
   'kalamkalam1234kd@gmail.com',
@@ -44,7 +48,7 @@ interface AuthContextValue {
   sendPasswordReset: (usernameOrEmail: string) => Promise<{ success: boolean; message: string; email?: string; simulated?: boolean; resetToken?: string }>;
   sendOtp: (email: string) => Promise<{ success: boolean; simulated: boolean; code?: string; message: string }>;
   loginWithOtp: (email: string, code: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (isAutoInactivity?: boolean) => Promise<void>;
   promptSignOut: (options?: { allDevices?: boolean }) => void;
   closeSignOutModal: () => void;
   refreshUser: () => Promise<void>;
@@ -85,6 +89,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       localStorage.removeItem('nexa_logged_out');
       sessionStorage.removeItem('nexa_explicit_logged_out');
+      localStorage.removeItem(INACTIVITY_LOGOUT_NOTICE_KEY);
+      sessionStorage.removeItem(INACTIVITY_LOGOUT_NOTICE_KEY);
+      localStorage.setItem(ACTIVITY_STORAGE_KEY, Date.now().toString());
     } catch {}
     if (checkIsAdmin(userData.email, userData.username)) {
       userData.role = 'ADMIN';
@@ -121,7 +128,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('nexa_user_data');
       localStorage.removeItem('nexa_current_user');
       localStorage.removeItem('nexa_user_outbound_api_key');
+      localStorage.removeItem(ACTIVITY_STORAGE_KEY);
+      const sessionNotice = sessionStorage.getItem(INACTIVITY_LOGOUT_NOTICE_KEY);
+      const localNotice = localStorage.getItem(INACTIVITY_LOGOUT_NOTICE_KEY);
       sessionStorage.clear();
+      if (sessionNotice) {
+        sessionStorage.setItem(INACTIVITY_LOGOUT_NOTICE_KEY, sessionNotice);
+      }
+      if (localNotice) {
+        localStorage.setItem(INACTIVITY_LOGOUT_NOTICE_KEY, localNotice);
+      }
     } catch {}
     setToken(null);
     setUser(null);
@@ -385,6 +401,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => unsubscribe();
   }, [syncUserWithBackend, saveUserSession, clearUserSession]);
+
+  // Fallback safety timeout: ensure isLoading is never permanently stuck
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Instant real-time Firestore listener for live wallet balance and role updates across all linked user documents
   useEffect(() => {
@@ -860,11 +884,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = async () => {
+  const logout = async (isAutoInactivity = false) => {
     try {
       localStorage.setItem('nexa_logged_out', 'true');
+      localStorage.removeItem(ACTIVITY_STORAGE_KEY);
+      if (isAutoInactivity) {
+        sessionStorage.setItem(INACTIVITY_LOGOUT_NOTICE_KEY, '1');
+        localStorage.setItem(INACTIVITY_LOGOUT_NOTICE_KEY, '1');
+      } else {
+        sessionStorage.removeItem(INACTIVITY_LOGOUT_NOTICE_KEY);
+        localStorage.removeItem(INACTIVITY_LOGOUT_NOTICE_KEY);
+      }
     } catch {}
     clearUserSession();
+    if (isAutoInactivity) {
+      try {
+        sessionStorage.setItem(INACTIVITY_LOGOUT_NOTICE_KEY, '1');
+        localStorage.setItem(INACTIVITY_LOGOUT_NOTICE_KEY, '1');
+      } catch {}
+    }
     try {
       await signOut(auth);
     } catch (e) {
@@ -878,6 +916,92 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {}
     }
   };
+
+  // 120-minute user inactivity auto-logout monitor
+  useEffect(() => {
+    if (!token && !user) return;
+
+    let lastRecordedActivity = Date.now();
+    try {
+      const stored = localStorage.getItem(ACTIVITY_STORAGE_KEY);
+      if (stored) {
+        const parsed = parseInt(stored, 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          lastRecordedActivity = parsed;
+        } else {
+          localStorage.setItem(ACTIVITY_STORAGE_KEY, Date.now().toString());
+        }
+      } else {
+        localStorage.setItem(ACTIVITY_STORAGE_KEY, Date.now().toString());
+      }
+    } catch {}
+
+    const recordActivity = () => {
+      const now = Date.now();
+      // Throttle localStorage updates to at most once every 15 seconds
+      if (now - lastRecordedActivity >= 15000) {
+        lastRecordedActivity = now;
+        try {
+          localStorage.setItem(ACTIVITY_STORAGE_KEY, now.toString());
+        } catch {}
+      }
+    };
+
+    const checkInactivity = async () => {
+      if (!localStorage.getItem('nexa_auth_token') && !localStorage.getItem('nexa_user_data')) {
+        return;
+      }
+      try {
+        const stored = localStorage.getItem(ACTIVITY_STORAGE_KEY);
+        const lastActive = stored ? parseInt(stored, 10) : lastRecordedActivity;
+        if (!Number.isNaN(lastActive) && lastActive > 0) {
+          const elapsed = Date.now() - lastActive;
+          if (elapsed >= INACTIVITY_TIMEOUT_MS) {
+            console.log('[AuthContext] 120 minutes of inactivity detected. Auto-logging out for security.');
+            await logout(true);
+          }
+        }
+      } catch (err) {
+        console.warn('[AuthContext] Inactivity check warning:', err);
+      }
+    };
+
+    // User activity events: mouse movement, clicks, typing, touch gestures, scrolling
+    const events: (keyof WindowEventMap)[] = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+    events.forEach(eventName => {
+      window.addEventListener(eventName, recordActivity, { passive: true });
+    });
+
+    // Cross-tab synchronization
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === ACTIVITY_STORAGE_KEY && e.newValue) {
+        const parsed = parseInt(e.newValue, 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          lastRecordedActivity = parsed;
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // Periodic check every 30 seconds
+    const interval = setInterval(checkInactivity, 30000);
+    // Instant check when window regains focus or becomes visible
+    window.addEventListener('focus', checkInactivity);
+    document.addEventListener('visibilitychange', checkInactivity);
+
+    // Initial check on mount in case user returns to a stale session
+    checkInactivity();
+
+    return () => {
+      events.forEach(eventName => {
+        window.removeEventListener(eventName, recordActivity);
+      });
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+      window.removeEventListener('focus', checkInactivity);
+      document.removeEventListener('visibilitychange', checkInactivity);
+    };
+  }, [token, user]);
 
   const updateBalanceLocally = (newBalance: number) => {
     setUser(prev => {

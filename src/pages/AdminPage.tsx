@@ -61,6 +61,7 @@ import {
   AtSign,
   Lock,
   Download,
+  ArrowUpRight,
 } from 'lucide-react';
 import { api, getEffectiveApiUrl, setCustomApiUrl } from '../services/api.js';
 import { useToast } from '../context/ToastContext.js';
@@ -151,6 +152,15 @@ export const AdminPage: React.FC = () => {
   const [adminCustomDomainInput, setAdminCustomDomainInput] = useState('');
   const [isSavingCustomDomain, setIsSavingCustomDomain] = useState(false);
   const [adminSnippetLang, setAdminSnippetLang] = useState<'php' | 'curl' | 'nodejs'>('php');
+
+  // Another Website & Multi-Site Admin States
+  const [externalWebsiteInput, setExternalWebsiteInput] = useState('');
+  const [secondaryWebsiteInput, setSecondaryWebsiteInput] = useState('');
+  const [secondaryWebsiteNameInput, setSecondaryWebsiteNameInput] = useState('External Website');
+  const [isSavingExternalSite, setIsSavingExternalSite] = useState(false);
+  const [isTestingExternalSite, setIsTestingExternalSite] = useState(false);
+  const [externalSitePingResult, setExternalSitePingResult] = useState<{ ok: boolean; status?: number; latencyMs?: number; message: string } | null>(null);
+  const [multiSiteSnippetTab, setMultiSiteSnippetTab] = useState<'standalone_html' | 'iframe' | 'php' | 'curl' | 'js'>('standalone_html');
 
   const { siteConfig: globalSiteConfig, updateSiteConfigLocally } = useSite();
   const siteConfig = globalSiteConfig;
@@ -309,6 +319,28 @@ export const AdminPage: React.FC = () => {
   const [passwordResetUser, setPasswordResetUser] = useState<any | null>(null);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [isResettingPasswordLoading, setIsResettingPasswordLoading] = useState(false);
+  // User Deletion Modal State (Eliminates blocked window.confirm in iframe)
+  const [userPendingDelete, setUserPendingDelete] = useState<any | null>(null);
+
+  // Admin Command Prompt & Interactive Console States
+  const [adminPromptInput, setAdminPromptInput] = useState('');
+  const [isAdminPromptOpen, setIsAdminPromptOpen] = useState(true);
+  const [isPromptRunning, setIsPromptRunning] = useState(false);
+  const [adminPromptLogs, setAdminPromptLogs] = useState<Array<{
+    id: string;
+    timestamp: string;
+    command: string;
+    output: string;
+    status: 'success' | 'error' | 'info';
+  }>>([
+    {
+      id: 'log-welcome',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      command: 'system:init',
+      output: '⚡ Kalam FF Master Admin Prompt & Console initialized. Type help or click quick action prompts below.',
+      status: 'info',
+    },
+  ]);
 
   // Modal / Form States
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -530,6 +562,9 @@ export const AdminPage: React.FC = () => {
       if (siteRes?.config) {
         setSiteForm(prev => ({ ...prev, ...siteRes.config }));
         updateSiteConfigLocally(siteRes.config);
+        if (siteRes.config.externalAdminUrl !== undefined) setExternalWebsiteInput(siteRes.config.externalAdminUrl || '');
+        if (siteRes.config.secondaryWebsiteUrl !== undefined) setSecondaryWebsiteInput(siteRes.config.secondaryWebsiteUrl || '');
+        if (siteRes.config.secondaryWebsiteName) setSecondaryWebsiteNameInput(siteRes.config.secondaryWebsiteName);
       }
       if (emailRes?.config && Object.keys(emailRes.config).length > 0) {
         setEmailConfig((prev: any) => ({ ...prev, ...emailRes.config }));
@@ -1633,6 +1668,232 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  // Delete user (modal-based, eliminates window.confirm block in iframes)
+  const handleDeleteUser = (u: any) => {
+    setUserPendingDelete(u);
+  };
+
+  const handleConfirmPermanentDelete = async () => {
+    if (!userPendingDelete) return;
+    const u = userPendingDelete;
+    setUserPendingDelete(null);
+    try {
+      try {
+        await deleteDoc(doc(db, 'users', u.id));
+      } catch (e) {
+        console.warn('Firestore user delete notice:', e);
+      }
+      await api.deleteUser(u.id);
+      showToastSuccess('User Deleted', `@${u.username} has been permanently deleted.`);
+      setUsers(prev => prev.filter(item => item.id !== u.id));
+    } catch (err: any) {
+      showToastError('Delete failed', err.message);
+    }
+  };
+
+  // Admin Prompt & Interactive Command Console Engine
+  const handleExecuteAdminPrompt = async (rawInput?: string) => {
+    const text = (rawInput !== undefined ? rawInput : adminPromptInput).trim();
+    if (!text) return;
+    setAdminPromptInput('');
+    setIsPromptRunning(true);
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const logId = `log-${Date.now()}`;
+
+    const addLog = (output: string, status: 'success' | 'error' | 'info') => {
+      setAdminPromptLogs(prev => [
+        { id: logId, timestamp: timeStr, command: text, output, status },
+        ...prev.slice(0, 49),
+      ]);
+    };
+
+    try {
+      const lower = text.toLowerCase();
+      const parts = text.split(/\s+/);
+      const cmd = parts[0]?.toLowerCase();
+
+      if (cmd === 'clear' || cmd === 'cls') {
+        setAdminPromptLogs([]);
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'help' || cmd === '?') {
+        addLog(
+          'Available Prompts:\n' +
+          '• credit <username/email> <amount> - Add balance to user\n' +
+          '• gen <count> <product> - Generate inventory keys\n' +
+          '• notice <text> / broadcast <text> - Set global store announcement\n' +
+          '• goto <tab> - Jump to dashboard, users, products, keys, backup, email, etc.\n' +
+          '• ban <username> / unban <username> - Toggle ban status\n' +
+          '• export / backup - Download database snapshot\n' +
+          '• ping / status - Check system health and counts\n' +
+          '• clear - Clear console logs',
+          'info'
+        );
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'ping' || cmd === 'status' || lower.includes('health') || lower.includes('stats')) {
+        const statsSummary = `System Online! Users: ${users.length} | Products: ${products.length} | Keys Inventory: ${keys.length} | Status: OPERATIONAL`;
+        addLog(statsSummary, 'success');
+        showToastSuccess('System Healthy', statsSummary);
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'goto' || cmd === 'open' || cmd === 'tab' || lower.startsWith('switch to')) {
+        const target = parts[parts.length - 1]?.toLowerCase() || '';
+        const validTabs: Record<string, any> = {
+          dashboard: 'dashboard',
+          user: 'users',
+          users: 'users',
+          prod: 'products',
+          product: 'products',
+          products: 'products',
+          duration: 'variants',
+          durations: 'variants',
+          variants: 'variants',
+          key: 'keys',
+          keys: 'keys',
+          deposit: 'deposits',
+          deposits: 'deposits',
+          order: 'orders',
+          orders: 'orders',
+          gateway: 'gateway',
+          email: 'email',
+          reseller: 'reseller',
+          backup: 'backup',
+          website: 'backup',
+          customization: 'customization',
+          logs: 'logs',
+        };
+        const resolved = validTabs[target] || (Object.values(validTabs).includes(target) ? target : null);
+        if (resolved) {
+          setActiveTab(resolved);
+          addLog(`Switched active view to [${resolved.toUpperCase()}] tab.`, 'success');
+          showToastSuccess(`Switched to ${resolved.toUpperCase()}`);
+        } else {
+          addLog(`Unknown tab "${target}". Valid tabs: dashboard, users, products, variants, keys, deposits, backup, email, customization`, 'error');
+        }
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'backup' || cmd === 'export' || lower.includes('download backup')) {
+        handleExportDatabaseBackup();
+        addLog('Database backup export triggered successfully.', 'success');
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'notice' || cmd === 'broadcast' || cmd === 'announcement' || lower.startsWith('say ')) {
+        const announcementContent = text.replace(/^(notice|broadcast|announcement|say)\s+/i, '').trim();
+        if (!announcementContent) {
+          addLog('Please provide announcement text. Example: notice Server maintenance at 11 PM', 'error');
+          setIsPromptRunning(false);
+          return;
+        }
+        setSiteForm(prev => ({
+          ...prev,
+          isAnnouncementEnabled: true,
+          announcementText: announcementContent,
+        }));
+        try {
+          await api.updateSiteSettings({
+            isAnnouncementEnabled: true,
+            announcementText: announcementContent,
+          });
+          updateSiteConfigLocally({
+            isAnnouncementEnabled: true,
+            announcementText: announcementContent,
+          });
+          addLog(`Broadcast published: "${announcementContent}"`, 'success');
+          showToastSuccess('Broadcast Announcement Updated!');
+        } catch (e: any) {
+          addLog(`Failed to update broadcast: ${e.message}`, 'error');
+        }
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'credit' || cmd === 'add' || cmd === 'topup' || lower.includes('balance')) {
+        const numbers = text.match(/\d+(\.\d+)?/g);
+        const amount = numbers ? parseFloat(numbers[0]) : 0;
+        let targetUser = users.find(u => {
+          const uname = (u.username || '').toLowerCase();
+          const uemail = (u.email || '').toLowerCase();
+          return parts.some(p => p.length > 2 && (uname.includes(p.toLowerCase()) || uemail.includes(p.toLowerCase())));
+        });
+
+        if (!targetUser && (lower.includes('kalam') || lower.includes('admin') || lower.includes('me'))) {
+          targetUser = users.find(u => (u.email || '').toLowerCase().includes('kalam') || (u.username || '').toLowerCase().includes('kalam')) || (authUser as any);
+        }
+
+        if (amount > 0 && targetUser) {
+          const res = await api.adjustUserBalance(targetUser.id, amount, `Admin Prompt Top-up: +₹${amount}`);
+          setUsers(prev => prev.map(u => u.id === targetUser?.id ? { ...u, balance: res.currentBalance } : u));
+          addLog(`Credited +₹${amount} to @${targetUser.username || 'user'}. New Balance: ₹${res.currentBalance.toFixed(2)}`, 'success');
+          showToastSuccess(`Credited +₹${amount} to @${targetUser.username}`);
+        } else {
+          addLog(`Could not parse credit prompt. Syntax: credit <username> <amount> (e.g. "credit kalam 500")`, 'error');
+        }
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'gen' || cmd === 'generate' || lower.includes('key')) {
+        const numbers = text.match(/\d+/g);
+        const count = numbers ? parseInt(numbers[0], 10) : 5;
+        const targetProd = products[0];
+        const targetVar = targetProd?.variants?.[0];
+        if (!targetProd || !targetVar) {
+          addLog('No products or variants available to generate keys for.', 'error');
+          setIsPromptRunning(false);
+          return;
+        }
+
+        const generatedKeys: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+          const rand2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+          generatedKeys.push(`KALAM-${targetProd.game || 'FF'}-${rand}-${rand2}`);
+        }
+
+        await api.bulkImportAdminKeys({
+          productId: targetProd.id,
+          variantId: targetVar.id,
+          rawKeys: generatedKeys.join('\n'),
+        });
+        addLog(`Generated ${count} keys for ${targetProd.name} (${targetVar.durationLabel}):\n` + generatedKeys.slice(0, 3).join('\n') + (count > 3 ? `\n...and ${count - 3} more` : ''), 'success');
+        showToastSuccess(`Generated ${count} keys!`);
+        await loadAllAdminData();
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'ban' || cmd === 'unban') {
+        const targetIdentifier = parts[1]?.toLowerCase().replace('@', '');
+        const targetUser = users.find(u => (u.username || '').toLowerCase() === targetIdentifier || (u.email || '').toLowerCase() === targetIdentifier);
+        if (targetUser) {
+          await handleToggleBan(targetUser.id);
+          addLog(`User @${targetUser.username} status toggled.`, 'success');
+        } else {
+          addLog(`User "${targetIdentifier}" not found.`, 'error');
+        }
+        setIsPromptRunning(false);
+        return;
+      }
+
+      addLog(`Prompt recognized: "${text}". Run "help" for a list of commands.`, 'info');
+    } catch (err: any) {
+      addLog(`Error executing prompt: ${err.message || 'Execution failed'}`, 'error');
+    } finally {
+      setIsPromptRunning(false);
+    }
+  };
+
   // Create Product
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2111,6 +2372,72 @@ export const AdminPage: React.FC = () => {
       showToastError('Failed to save domain', err.message);
     } finally {
       setIsSavingCustomDomain(false);
+    }
+  };
+
+  const handleSaveExternalWebsiteSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingExternalSite(true);
+    try {
+      let cleanedUrl = externalWebsiteInput.trim();
+      if (cleanedUrl && !cleanedUrl.startsWith('http://') && !cleanedUrl.startsWith('https://')) {
+        cleanedUrl = `https://${cleanedUrl}`;
+      }
+      let cleanedSecondary = secondaryWebsiteInput.trim();
+      if (cleanedSecondary && !cleanedSecondary.startsWith('http://') && !cleanedSecondary.startsWith('https://')) {
+        cleanedSecondary = `https://${cleanedSecondary}`;
+      }
+
+      const patch = {
+        externalAdminUrl: cleanedUrl,
+        secondaryWebsiteUrl: cleanedSecondary,
+        secondaryWebsiteName: secondaryWebsiteNameInput.trim() || 'External Website',
+      };
+
+      await api.updateSiteSettings(patch);
+      setSiteForm(prev => ({ ...prev, ...patch }));
+      updateSiteConfigLocally(patch);
+      showToastSuccess('Another Website Settings Saved!', 'External website configuration is active across the platform.');
+      await loadAllAdminData();
+    } catch (err: any) {
+      showToastError('Failed to save website settings', err.message);
+    } finally {
+      setIsSavingExternalSite(false);
+    }
+  };
+
+  const handleTestExternalWebsitePing = async (targetUrl?: string) => {
+    const urlToTest = (targetUrl || externalWebsiteInput || secondaryWebsiteInput || '').trim();
+    if (!urlToTest) {
+      showToastError('Validation Error', 'Please enter a website URL to test.');
+      return;
+    }
+    const fullUrl = urlToTest.startsWith('http') ? urlToTest : `https://${urlToTest}`;
+    setIsTestingExternalSite(true);
+    setExternalSitePingResult(null);
+    const start = performance.now();
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      await fetch(fullUrl, { mode: 'no-cors', signal: controller.signal });
+      clearTimeout(timer);
+      const latencyMs = Math.round(performance.now() - start);
+      setExternalSitePingResult({
+        ok: true,
+        latencyMs,
+        message: `Website reached successfully in ${latencyMs}ms! Connected and ready for integration.`,
+      });
+      showToastSuccess('Website Online', `Connected to ${fullUrl} (${latencyMs}ms)`);
+    } catch (err: any) {
+      const latencyMs = Math.round(performance.now() - start);
+      setExternalSitePingResult({
+        ok: false,
+        latencyMs,
+        message: err.name === 'AbortError' ? 'Connection timed out after 6000ms.' : `Connection notice: ${err.message}`,
+      });
+      showToastError('Ping Notice', `Could not reach ${fullUrl}: ${err.message}`);
+    } finally {
+      setIsTestingExternalSite(false);
     }
   };
 
@@ -2801,7 +3128,7 @@ export const AdminPage: React.FC = () => {
   const navTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Activity },
     { id: 'customization', label: 'Customization & Branding', icon: Palette },
-    { id: 'backup', label: 'Domain & Backup Migration', icon: Database },
+    { id: 'backup', label: '🌐 Another Website, Domain & Backup', icon: Globe },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'products', label: 'Products', icon: ShoppingBag },
     { id: 'variants', label: 'Durations', icon: Layers },
@@ -2852,19 +3179,226 @@ export const AdminPage: React.FC = () => {
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
+            type="button"
+            onClick={() => {
+              const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
+              window.open(url, '_blank');
+            }}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/30 to-orange-500/30 hover:from-amber-500/50 hover:to-orange-500/50 text-amber-300 text-xs font-bold border border-amber-500/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-950/30"
+            title="Open Admin Panel in Dedicated Website Window"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>Open in New Website</span>
+          </button>
+          <button
             onClick={() => setActiveTab('customization')}
             className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600/30 to-red-600/30 hover:from-rose-600/50 hover:to-red-600/50 text-rose-300 text-xs font-bold border border-rose-500/40 transition-all flex items-center gap-1.5"
           >
             <Palette className="w-3.5 h-3.5" />
-            <span>Customize Panel</span>
+            <span>Customize</span>
           </button>
           <button
             onClick={loadAllAdminData}
             className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-semibold flex items-center gap-2 border border-white/5 transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Refresh All</span>
+            <span>Refresh</span>
           </button>
+        </div>
+      </div>
+
+      {/* Another Website & Standalone Admin Website Quick Launcher Banner */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-[#0e111a] to-cyan-950/40 border border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <Globe className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-xs sm:text-sm text-white">
+                Admin Panel in Another Website &amp; Standalone Website Window
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                MULTI-WEBSITE READY
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300 mt-0.5">
+              Launch this Admin Panel as its own standalone website in a new window/tab, or embed and connect with an external website.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
+              window.open(url, '_blank');
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-extrabold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+            title="Open dedicated admin portal in fresh window"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>Open Admin in New Window</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('backup')}
+            className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white border border-white/10 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Settings className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Another Website Settings</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ⚡ ADMIN PANEL PROMPT & FAST COMMAND CONSOLE */}
+      <div className="rounded-3xl bg-gradient-to-r from-[#0d0f1b] via-[#090b14] to-[#140f1f] border border-rose-500/35 shadow-2xl overflow-hidden transition-all">
+        {/* Prompt Header */}
+        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.06] bg-black/25">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-500/20 via-purple-500/20 to-amber-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center shrink-0 shadow-lg shadow-rose-950/40">
+              <Terminal className="w-5 h-5 text-rose-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-black text-sm sm:text-base text-white tracking-wide flex items-center gap-1.5">
+                  <span>Admin Command Prompt &amp; Fast Terminal</span>
+                  <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                  LIVE PROMPT READY
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Type natural admin commands or click quick action chips to instantly credit balances, generate keys, or broadcast alerts.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsAdminPromptOpen(prev => !prev)}
+              className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 text-xs font-semibold border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Terminal className="w-3.5 h-3.5 text-rose-400" />
+              <span>{isAdminPromptOpen ? 'Hide Terminal Logs' : 'Show Terminal Logs'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Prompt Input & Quick Action Chips */}
+        <div className="p-4 sm:p-5 space-y-4">
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              handleExecuteAdminPrompt();
+            }}
+            className="flex flex-col sm:flex-row items-stretch gap-2"
+          >
+            <div className="relative flex-1">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-xs font-bold text-emerald-400 select-none hidden sm:inline">
+                admin@kalam:~$
+              </span>
+              <input
+                type="text"
+                value={adminPromptInput}
+                onChange={e => setAdminPromptInput(e.target.value)}
+                placeholder="Enter prompt (e.g. 'credit kalam 500', 'gen 5 keys', 'notice Server OB55 Ready', 'goto users')..."
+                className="w-full sm:pl-32 pl-3.5 pr-4 py-3 rounded-2xl bg-[#07090f] border border-white/15 focus:border-rose-500/70 text-white text-xs sm:text-sm font-mono placeholder:text-slate-600 focus:outline-none transition-all shadow-inner"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isPromptRunning || !adminPromptInput.trim()}
+              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 disabled:opacity-50 text-white text-xs sm:text-sm font-black tracking-wide transition-all shadow-lg shadow-rose-950/50 flex items-center justify-center gap-2 cursor-pointer shrink-0 active:scale-95"
+            >
+              {isPromptRunning ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Executing...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4 text-amber-300" />
+                  <span>Run Prompt</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Quick Action Prompt Chips */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mr-1">
+              ⚡ Quick Prompt Commands:
+            </span>
+            {[
+              { label: '💰 Credit ₹500 to Kalam', prompt: 'credit kalam 500' },
+              { label: '🔑 Generate 5 FF Keys', prompt: 'gen 5 freefire' },
+              { label: '📢 Post Global Notice', prompt: 'notice Kalam FF VIP Panel v5.0 Active! All keys online.' },
+              { label: '👥 Jump to Users', prompt: 'goto users' },
+              { label: '🛒 Jump to Products', prompt: 'goto products' },
+              { label: '🌐 Open Multi-Website', prompt: 'goto backup' },
+              { label: '💾 Export Backup', prompt: 'export' },
+              { label: '🟢 Status Ping', prompt: 'ping' },
+              { label: '❓ Help', prompt: 'help' },
+            ].map((chip, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleExecuteAdminPrompt(chip.prompt)}
+                className="px-2.5 py-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.09] border border-white/10 hover:border-rose-500/30 text-slate-300 hover:text-white font-mono text-[11px] transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-sm"
+              >
+                <span>{chip.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Collapsible Console Log Box */}
+          {isAdminPromptOpen && (
+            <div className="rounded-2xl bg-[#06070b] border border-white/10 p-3.5 space-y-2 font-mono text-xs max-h-48 overflow-y-auto no-scrollbar shadow-inner">
+              <div className="flex items-center justify-between text-[10px] text-slate-500 pb-1 border-b border-white/5">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>LIVE CONSOLE OUTPUT</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleExecuteAdminPrompt('clear')}
+                  className="text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                >
+                  Clear Console
+                </button>
+              </div>
+
+              {adminPromptLogs.length === 0 ? (
+                <div className="text-slate-600 italic py-1">Console is cleared. Type a command above.</div>
+              ) : (
+                adminPromptLogs.map(log => (
+                  <div key={log.id} className="space-y-0.5 leading-relaxed">
+                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                      <span>[{log.timestamp}]</span>
+                      <span className="text-rose-400 font-bold">&gt; {log.command}</span>
+                    </div>
+                    <div
+                      className={`pl-3 whitespace-pre-wrap break-words text-[11px] ${
+                        log.status === 'success'
+                          ? 'text-emerald-400'
+                          : log.status === 'error'
+                          ? 'text-rose-400'
+                          : 'text-cyan-300'
+                      }`}
+                    >
+                      {log.output}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -4370,6 +4904,14 @@ export const AdminPage: React.FC = () => {
                           }`}
                         >
                           {u.isBanned ? 'Unban' : 'Ban'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(u)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/30 text-xs font-semibold text-rose-400 hover:text-white transition-colors inline-flex items-center gap-1 cursor-pointer"
+                          title="Delete user account"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
                         </button>
                       </td>
                     </tr>
@@ -9561,6 +10103,454 @@ export const AdminPage: React.FC = () => {
       {/* TAB: DOMAIN & BACKUP MIGRATION */}
       {activeTab === 'backup' && (
         <div className="space-y-6">
+          {/* ======================================================== */}
+          {/* 🌐 ANOTHER WEBSITE & MULTI-SITE ADMIN PORTAL MANAGER      */}
+          {/* ======================================================== */}
+          <div className="p-6 rounded-3xl bg-gradient-to-br from-[#0c121e] via-[#090b14] to-[#140c1a] border border-cyan-500/40 shadow-2xl space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-white/10 gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/30 text-cyan-400 border border-cyan-500/40 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+                  <Globe className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider">
+                      ANOTHER WEBSITE &amp; MULTI-SITE ADMIN PORTAL MANAGER
+                    </h3>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
+                      CROSS-SITE READY
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Connect, embed, or host this Admin Panel on another website or external domain. Includes 1-click launch, live ping health check, and responsive embed codes.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
+                    window.open(url, '_blank');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Launch Admin in New Website Window</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Standalone Website URL Share Bar */}
+            <div className="p-4 rounded-2xl bg-black/60 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 block">
+                  STANDALONE DEDICATED ADMIN WEBSITE URL
+                </span>
+                <p className="text-xs text-slate-300 font-mono select-all break-all">
+                  {typeof window !== 'undefined' ? `${window.location.origin}/#admin?standalone=true` : '/#admin?standalone=true'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/#admin?standalone=true`;
+                    navigator.clipboard.writeText(url);
+                    showToastSuccess('Copied to Clipboard!', 'Standalone Admin Website URL copied.');
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 hover:text-white border border-white/10 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Copy Standalone URL</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/#admin?standalone=true`;
+                    window.open(url, '_blank');
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                  <span>Open URL Now</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Form: External Website Configuration & Health Ping */}
+            <form onSubmit={handleSaveExternalWebsiteSettings} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Field 1: Primary External Admin Website URL */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-300 block">
+                    EXTERNAL ADMIN WEBSITE URL (ANOTHER WEBSITE)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={externalWebsiteInput}
+                      onChange={e => setExternalWebsiteInput(e.target.value)}
+                      placeholder="https://admin.youranotherwebsite.com"
+                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-black/50 border border-cyan-500/30 text-white font-mono text-xs focus:border-cyan-400 focus:outline-none transition-colors"
+                    />
+                    {externalWebsiteInput && (
+                      <button
+                        type="button"
+                        onClick={() => window.open(externalWebsiteInput.startsWith('http') ? externalWebsiteInput : `https://${externalWebsiteInput}`, '_blank')}
+                        className="px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Visit External Website"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Visit</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    If configured, clicking Admin in the user app opens this external website domain.
+                  </p>
+                </div>
+
+                {/* Field 2: Secondary / Partner Website URL */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-rose-300 block">
+                    SECONDARY / PARTNER STORE WEBSITE URL
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={secondaryWebsiteInput}
+                      onChange={e => setSecondaryWebsiteInput(e.target.value)}
+                      placeholder="https://secondary-store.com"
+                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-black/50 border border-rose-500/30 text-white font-mono text-xs focus:border-rose-400 focus:outline-none transition-colors"
+                    />
+                    {secondaryWebsiteInput && (
+                      <button
+                        type="button"
+                        onClick={() => window.open(secondaryWebsiteInput.startsWith('http') ? secondaryWebsiteInput : `https://${secondaryWebsiteInput}`, '_blank')}
+                        className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Visit Secondary Website"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Visit</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Linked external storefront or consumer portal for easy cross-site navigation.
+                  </p>
+                </div>
+              </div>
+
+              {/* Ping Result Banner if active */}
+              {externalSitePingResult && (
+                <div
+                  className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 font-mono animate-in fade-in ${
+                    externalSitePingResult.ok
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {externalSitePingResult.ok ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    )}
+                    <span>{externalSitePingResult.message}</span>
+                  </div>
+                  {externalSitePingResult.latencyMs !== undefined && (
+                    <span className="font-bold text-white px-2 py-0.5 rounded bg-black/40">
+                      {externalSitePingResult.latencyMs}ms
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Actions: Save Settings & Test Ping */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/5">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingExternalSite}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingExternalSite ? 'Saving...' : 'Save Another Website Settings'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isTestingExternalSite || (!externalWebsiteInput && !secondaryWebsiteInput)}
+                    onClick={() => handleTestExternalWebsitePing()}
+                    className="px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 hover:text-white border border-white/10 text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingExternalSite ? 'animate-spin text-cyan-400' : ''}`} />
+                    <span>{isTestingExternalSite ? 'Pinging Website...' : 'Test Website Connection'}</span>
+                  </button>
+                </div>
+
+                {siteConfig.externalAdminUrl && (
+                  <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Active External Admin: {siteConfig.externalAdminUrl}
+                  </span>
+                )}
+              </div>
+            </form>
+
+            {/* Embed & Cross-Site Code Generator Tabs */}
+            <div className="space-y-3 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-display font-bold text-xs text-white uppercase tracking-wider">
+                    EMBED OR CONNECT THIS ADMIN PANEL ON ANOTHER WEBSITE
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Use these production snippets to embed this Admin Panel into another website or call APIs from external servers.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto no-scrollbar">
+                  {[
+                    { id: 'standalone_html', label: 'Standalone HTML Website (admin.html)' },
+                    { id: 'iframe', label: 'iFrame Embed' },
+                    { id: 'js', label: 'JavaScript API' },
+                    { id: 'php', label: 'PHP cURL' },
+                    { id: 'curl', label: 'cURL Terminal' },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setMultiSiteSnippetTab(tab.id as any)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
+                        multiSiteSnippetTab === tab.id
+                          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tab 0: Standalone HTML Website (admin.html) */}
+              {multiSiteSnippetTab === 'standalone_html' && (
+                <div className="space-y-4">
+                  <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#0c0f1d] via-[#090b14] to-cyan-950/30 border border-cyan-500/30 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 uppercase">
+                          STANDALONE ADMIN WEBSITE FILE
+                        </span>
+                        <h5 className="font-bold text-sm text-white mt-1">
+                          Deploy This Admin Panel as an Independent Website on Any Domain / Host
+                        </h5>
+                        <p className="text-xs text-slate-300 mt-0.5">
+                          A complete, single-file responsive admin website portal (<code className="text-amber-300 font-mono">admin.html</code>) pre-configured with your backend REST APIs and CORS support.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <a
+                          href="/admin.html"
+                          download="kalam-ff-admin-website.html"
+                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs transition-all shadow-lg flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download admin.html</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => window.open(`${window.location.origin}/admin.html`, '_blank')}
+                          className="px-3.5 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-200 hover:text-white border border-white/10 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Open /admin.html</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
+                      <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                        <div className="font-bold text-cyan-400 flex items-center gap-1.5">
+                          <span>1. Upload to Any Host</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Drop <code className="text-slate-300">admin.html</code> into WordPress root, cPanel <code className="text-slate-300">public_html</code>, Netlify, Cloudflare Pages, or Vercel.
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                        <div className="font-bold text-emerald-400 flex items-center gap-1.5">
+                          <span>2. Zero Backend Setup</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Pre-configured to talk directly to your live API at <code className="text-slate-300 font-mono text-[10px]">{window.location.origin}</code> with full CORS headers.
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                        <div className="font-bold text-amber-400 flex items-center gap-1.5">
+                          <span>3. Master Key Auth</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Uses your Master Admin Key (<code className="text-amber-300 font-mono">kalam_admin_master_secret_2026</code>) for 100% unrestricted admin permissions.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 1: iFrame Embed */}
+              {multiSiteSnippetTab === 'iframe' && (
+                <div className="space-y-2">
+                  <div className="p-3.5 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs text-slate-300 relative group">
+                    <pre className="overflow-x-auto whitespace-pre-wrap select-all text-cyan-300">
+{`<!-- Embed Kalam FF Admin Panel in Another Website -->
+<iframe
+  src="${typeof window !== 'undefined' ? `${window.location.origin}/#admin?standalone=true` : 'https://your-domain.com/#admin?standalone=true'}"
+  width="100%"
+  height="960px"
+  frameborder="0"
+  style="border: none; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);"
+  allow="clipboard-read; clipboard-write"
+></iframe>`}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snippet = `<!-- Embed Kalam FF Admin Panel in Another Website -->\n<iframe\n  src="${window.location.origin}/#admin?standalone=true"\n  width="100%"\n  height="960px"\n  frameborder="0"\n  style="border: none; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);"\n  allow="clipboard-read; clipboard-write"\n></iframe>`;
+                        navigator.clipboard.writeText(snippet);
+                        showToastSuccess('Copied to Clipboard!', 'iFrame embed code copied.');
+                      }}
+                      className="absolute top-3 right-3 p-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      title="Copy iFrame Code"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Paste this iframe into WordPress, Webflow, Shopify, or any HTML/PHP page on another website to display this admin panel.
+                  </p>
+                </div>
+              )}
+
+              {/* Tab 2: JavaScript Fetch */}
+              {multiSiteSnippetTab === 'js' && (
+                <div className="space-y-2">
+                  <div className="p-3.5 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs text-slate-300 relative group">
+                    <pre className="overflow-x-auto whitespace-pre-wrap select-all text-purple-300">
+{`// Connect to Admin Panel from JavaScript on Another Website
+const API_BASE = "${typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}";
+
+// 1. Fetch Users Roster
+const usersRes = await fetch(\`\${API_BASE}/api/admin/users\`, {
+  headers: {
+    "x-admin-key": "kalam_admin_master_secret_2026",
+    "x-user-email": "kalam172010@gmail.com"
+  }
+});
+const { users } = await usersRes.json();
+console.log("Users:", users);
+
+// 2. Adjust User Balance (+₹500)
+await fetch(\`\${API_BASE}/api/admin/users/\${users[0].id}/adjust-balance\`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "x-admin-key": "kalam_admin_master_secret_2026",
+    "x-user-email": "kalam172010@gmail.com"
+  },
+  body: JSON.stringify({ amount: 500, reason: "Credit from External Admin Website" })
+});`}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snippet = `// Connect to Admin Panel from JavaScript on Another Website\nconst API_BASE = "${window.location.origin}";\n\n// 1. Fetch Users Roster\nconst usersRes = await fetch(\`\${API_BASE}/api/admin/users\`, {\n  headers: {\n    "x-admin-key": "kalam_admin_master_secret_2026",\n    "x-user-email": "kalam172010@gmail.com"\n  }\n});\nconst { users } = await usersRes.json();\nconsole.log("Users:", users);\n\n// 2. Adjust User Balance (+₹500)\nawait fetch(\`\${API_BASE}/api/admin/users/\${users[0].id}/adjust-balance\`, {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "x-admin-key": "kalam_admin_master_secret_2026",\n    "x-user-email": "kalam172010@gmail.com"\n  },\n  body: JSON.stringify({ amount: 500, reason: "Credit from External Admin Website" })\n});`;
+                        navigator.clipboard.writeText(snippet);
+                        showToastSuccess('Copied to Clipboard!', 'JavaScript snippet copied.');
+                      }}
+                      className="absolute top-3 right-3 p-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      title="Copy JS Snippet"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: PHP cURL */}
+              {multiSiteSnippetTab === 'php' && (
+                <div className="space-y-2">
+                  <div className="p-3.5 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs text-slate-300 relative group">
+                    <pre className="overflow-x-auto whitespace-pre-wrap select-all text-emerald-300">
+{`<?php
+// Connect to Kalam FF Panel from Another Website using PHP
+$apiUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/admin/users";
+$ch = curl_init($apiUrl);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    "x-admin-key: kalam_admin_master_secret_2026",
+    "x-user-email: kalam172010@gmail.com",
+    "Content-Type: application/json"
+]);
+$response = curl_exec($ch);
+curl_close($ch);
+$data = json_decode($response, true);
+print_r($data);
+?>`}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snippet = `<?php\n// Connect to Kalam FF Panel from Another Website using PHP\n$apiUrl = "${window.location.origin}/api/admin/users";\n$ch = curl_init($apiUrl);\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\ncurl_setopt($ch, CURLOPT_HTTPHEADER, [\n    "x-admin-key: kalam_admin_master_secret_2026",\n    "x-user-email: kalam172010@gmail.com",\n    "Content-Type: application/json"\n]);\n$response = curl_exec($ch);\ncurl_close($ch);\n$data = json_decode($response, true);\nprint_r($data);\n?>`;
+                        navigator.clipboard.writeText(snippet);
+                        showToastSuccess('Copied to Clipboard!', 'PHP code copied.');
+                      }}
+                      className="absolute top-3 right-3 p-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      title="Copy PHP Code"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: cURL Command */}
+              {multiSiteSnippetTab === 'curl' && (
+                <div className="space-y-2">
+                  <div className="p-3.5 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs text-slate-300 relative group">
+                    <pre className="overflow-x-auto whitespace-pre-wrap select-all text-amber-300">
+{`# Query live stats from another server or terminal
+curl -X GET "${typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/admin/stats" \\
+     -H "x-admin-key: kalam_admin_master_secret_2026" \\
+     -H "x-user-email: kalam172010@gmail.com" \\
+     -H "Content-Type: application/json"`}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snippet = `curl -X GET "${window.location.origin}/api/admin/stats" -H "x-admin-key: kalam_admin_master_secret_2026" -H "x-user-email: kalam172010@gmail.com" -H "Content-Type: application/json"`;
+                        navigator.clipboard.writeText(snippet);
+                        showToastSuccess('Copied to Clipboard!', 'cURL command copied.');
+                      }}
+                      className="absolute top-3 right-3 p-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      title="Copy cURL Command"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Reassurance Hero Banner */}
           <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-950/40 via-[#0d0d14] to-cyan-950/40 border border-emerald-500/40 shadow-2xl space-y-4">
             <div className="flex items-start gap-3">
@@ -11964,6 +12954,46 @@ export const AdminPage: React.FC = () => {
                     <span>Delete</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM PERMANENT USER DELETE */}
+      {userPendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={() => setUserPendingDelete(null)} className="fixed inset-0 bg-black/85 backdrop-blur-md" />
+          <div className="relative w-full max-w-sm bg-[#0d0d14] border border-rose-500/50 rounded-2xl p-6 shadow-2xl z-10 space-y-4 text-xs">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center mx-auto shadow-lg shadow-rose-950/40">
+              <Trash2 className="w-6 h-6 text-rose-400" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                PERMANENTLY DELETE USER?
+              </h3>
+              <p className="text-slate-300 text-xs">
+                Are you sure you want to delete <strong className="text-rose-400 font-mono">@{userPendingDelete.username}</strong> ({userPendingDelete.email || 'No Email'})?
+              </p>
+              <p className="text-[10px] text-slate-500 pt-1">
+                This will remove the user account, wallet balance (₹{Number(userPendingDelete.balance || 0).toFixed(2)}), and credentials from Firestore and database.
+              </p>
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setUserPendingDelete(null)}
+                className="w-1/2 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPermanentDelete}
+                className="w-1/2 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950/50 cursor-pointer active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Now</span>
               </button>
             </div>
           </div>

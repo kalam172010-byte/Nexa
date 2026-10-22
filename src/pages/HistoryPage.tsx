@@ -10,19 +10,27 @@ import {
   AlertCircle,
   Copy,
   Check,
+  Download,
+  RefreshCw,
 } from 'lucide-react';
 import { api } from '../services/api.js';
 import { Transaction } from '../types/index.js';
 import { useToast } from '../context/ToastContext.js';
+import { useAuth } from '../context/AuthContext.js';
+import { useSite } from '../context/SiteContext.js';
+import { generateTransactionReportPdf } from '../utils/pdfReport.js';
 
 export const HistoryPage: React.FC = () => {
-  const { success: showToastSuccess } = useToast();
+  const { user } = useAuth();
+  const { siteConfig } = useSite();
+  const { success: showToastSuccess, error: showToastError } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'ALL' | 'DEPOSITS' | 'PURCHASES' | 'REFUNDS'>('ALL');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUCCESS' | 'PENDING' | 'FAILED'>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const fetchTransactions = async () => {
     try {
@@ -49,6 +57,40 @@ export const HistoryPage: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleDownloadReport = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      // Fetch user's complete transaction history for accounting purposes
+      const fullRes = await api.getTransactions('ALL', '', 'ALL');
+      const allTxns =
+        fullRes?.transactions && Array.isArray(fullRes.transactions) && fullRes.transactions.length > 0
+          ? fullRes.transactions
+          : transactions;
+
+      generateTransactionReportPdf({
+        user,
+        siteTitle: siteConfig.siteTitle || 'Nexa Panel',
+        transactions: allTxns,
+      });
+
+      showToastSuccess('Report Downloaded', 'Financial transaction PDF report generated successfully.');
+    } catch (err: any) {
+      console.error('Failed to generate report PDF:', err);
+      try {
+        generateTransactionReportPdf({
+          user,
+          siteTitle: siteConfig.siteTitle || 'Nexa Panel',
+          transactions,
+        });
+        showToastSuccess('Report Downloaded', 'Financial transaction PDF report generated.');
+      } catch (fallbackErr: any) {
+        showToastError('Download Failed', 'Could not generate transaction PDF report. Please try again.');
+      }
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   const tabs: { id: 'ALL' | 'DEPOSITS' | 'PURCHASES' | 'REFUNDS'; label: string }[] = [
     { id: 'ALL', label: 'All Activity' },
     { id: 'DEPOSITS', label: 'Deposits' },
@@ -59,7 +101,7 @@ export const HistoryPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h2 className="font-display font-bold text-xl sm:text-2xl text-white">
             Transaction Ledger
@@ -69,15 +111,32 @@ export const HistoryPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search reference ID or description..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#0c0e14] border border-white/[0.08] rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
-          />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search reference ID or description..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-[#0c0e14] border border-white/[0.08] rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDownloadReport}
+            disabled={isGeneratingPdf}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs transition-all shadow-md shadow-rose-950/40 cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+            title="Download complete transaction ledger PDF report for accounting"
+          >
+            {isGeneratingPdf ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download Report'}</span>
+          </button>
         </div>
       </div>
 

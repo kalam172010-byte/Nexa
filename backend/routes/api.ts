@@ -95,6 +95,9 @@ router.patch('/admin/users/:id/role', ...adminGuard, AdminController.updateUserR
 router.post('/admin/users/:id/adjust-balance', ...adminGuard, AdminController.adjustUserBalance as any);
 router.patch('/admin/users/:id/ban', ...adminGuard, AdminController.toggleUserBan as any);
 router.patch('/admin/users/:id/password', ...adminGuard, AdminController.resetUserPassword as any);
+router.delete('/admin/users/:id', ...adminGuard, AdminController.deleteUser as any);
+router.delete('/admin/top-active-users/:id', ...adminGuard, AdminController.removeTopActiveUser as any);
+router.delete('/top-active-users/:id', ...adminGuard, AdminController.removeTopActiveUser as any);
 
 router.post('/admin/products', ...adminGuard, AdminController.createProduct as any);
 router.post('/admin/products/auto-assign-pids', ...adminGuard, AdminController.autoAssignPids as any);

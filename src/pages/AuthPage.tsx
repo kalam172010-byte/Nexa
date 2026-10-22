@@ -17,7 +17,7 @@ import {
   Zap,
   Terminal,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext.js';
+import { useAuth, INACTIVITY_LOGOUT_NOTICE_KEY } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { useSite } from '../context/SiteContext.js';
 import heroBannerImg from '../assets/images/hero_vip_gaming_panel_1792510058753.jpg';
@@ -61,6 +61,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [logoImgError, setLogoImgError] = useState(false);
   const [heroImgError, setHeroImgError] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [inactivityNotice, setInactivityNotice] = useState(false);
+
+  useEffect(() => {
+    try {
+      const noticed =
+        sessionStorage.getItem(INACTIVITY_LOGOUT_NOTICE_KEY) === '1' ||
+        localStorage.getItem(INACTIVITY_LOGOUT_NOTICE_KEY) === '1';
+      if (noticed) {
+        setInactivityNotice(true);
+        sessionStorage.removeItem(INACTIVITY_LOGOUT_NOTICE_KEY);
+        localStorage.removeItem(INACTIVITY_LOGOUT_NOTICE_KEY);
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -224,7 +238,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     : 'NX';
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-8 sm:p-8 bg-[#06080e] text-slate-100 font-sans relative overflow-hidden">
+    <div className="min-h-screen w-full flex items-center justify-center px-4 py-8 sm:p-8 bg-[#06080e] text-slate-100 font-sans relative overflow-y-auto">
       {/* Ambient background glows */}
       <div className="absolute top-1/4 -left-40 w-96 h-96 bg-rose-600/15 rounded-full blur-[130px] pointer-events-none" />
       <div className="absolute bottom-1/4 -right-40 w-96 h-96 bg-cyan-600/15 rounded-full blur-[130px] pointer-events-none" />
@@ -370,6 +384,31 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 : 'Recover access via a verification email link.'}
             </p>
           </div>
+
+          {/* Inactivity Security Logout Notice Banner */}
+          {inactivityNotice && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-3 shadow-lg">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-display font-bold text-amber-100 text-sm flex items-center justify-between">
+                  <span>Session Timed Out</span>
+                  <button
+                    type="button"
+                    onClick={() => setInactivityNotice(false)}
+                    className="text-amber-300 hover:text-white p-0.5 rounded cursor-pointer"
+                    aria-label="Dismiss notice"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-amber-200/90 text-xs mt-1 leading-relaxed">
+                  You were automatically logged out after <strong>120 minutes</strong> of inactivity to protect your account. Please sign in again.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Segmented Control Tabs */}
           {mode !== 'reset' && (

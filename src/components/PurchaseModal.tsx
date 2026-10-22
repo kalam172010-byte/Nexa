@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   RefreshCw,
   ArrowRight,
-  Smartphone,
   Sparkles,
   ShieldCheck,
   Zap,
@@ -37,21 +36,10 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
   const { user, balance, role, updateBalanceLocally } = useAuth();
   const { error: showToastError } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [androidId, setAndroidId] = useState<string>('0b9b969bc2e7997b');
-
   const isReseller = role === 'RESELLER';
   const price = isReseller && variant.resellerPrice ? variant.resellerPrice : variant.price;
   const hasEnoughBalance = balance >= price;
   const remainingBalance = balance - price;
-
-  const handleRandomizeAndroidId = () => {
-    const chars = '0123456789abcdef';
-    let res = '';
-    for (let i = 0; i < 16; i++) {
-      res += chars[Math.floor(Math.random() * chars.length)];
-    }
-    setAndroidId(res);
-  };
 
   const handleConfirm = async () => {
     if (!user) {
@@ -69,7 +57,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const res = await api.createOrder(variant.id, androidId.trim() || undefined);
+      const res = await api.createOrder(variant.id);
       updateBalanceLocally(res.newBalance);
       onSuccess(res.key, res.newBalance);
     } catch (err: any) {
@@ -146,34 +134,6 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
               <Zap className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span className="text-[11px]">Instant Key Activation</span>
             </div>
-          </div>
-        </div>
-
-        {/* Android Device ID Input (Device-bound / V1 support) */}
-        <div className="p-3.5 rounded-2xl bg-[#0a0d18] border border-white/10 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Smartphone className="w-3.5 h-3.5 text-rose-400" />
-              <span>Target Android Device ID</span>
-            </label>
-            <button
-              type="button"
-              onClick={handleRandomizeAndroidId}
-              className="px-2 py-0.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-[10px] text-rose-300 hover:text-white flex items-center gap-1 font-mono font-bold transition-colors cursor-pointer"
-            >
-              <Sparkles className="w-2.5 h-2.5 text-rose-400" />
-              <span>Randomize</span>
-            </button>
-          </div>
-          <input
-            type="text"
-            value={androidId}
-            onChange={e => setAndroidId(e.target.value)}
-            placeholder="0b9b969bc2e7997b"
-            className="w-full px-3.5 py-2 bg-black/60 border border-white/15 focus:border-cyan-400 rounded-xl text-xs font-mono text-cyan-300 focus:outline-none transition-colors shadow-inner"
-          />
-          <div className="text-[10px] text-slate-400 leading-tight">
-            Auto-generated for instant binding. Compatible with all Android Non-Root/Root & V1/V2 loaders.
           </div>
         </div>
 

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kalam FF — Standalone Admin Website Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #06070a;
+      color: #f1f5f9;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090a10;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #f43f5e;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-rose-500/30 selection:text-rose-200">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-50 bg-[#090b14]/95 backdrop-blur-xl border-b border-rose-500/30 px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 shadow-[0_4px_30px_rgba(244,63,94,0.15)]">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-amber-500 to-purple-600 flex items-center justify-center text-white font-black text-lg shadow-lg shadow-rose-950/50 border border-white/20">
+        ⚡
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-black text-sm sm:text-base text-white tracking-wide">
+            KALAM FF — EXTERNAL ADMIN WEBSITE
+          </h1>
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase">
+            REMOTE CONTROL
+          </span>
+        </div>
+        <p class="text-[10px] sm:text-xs text-slate-400 font-mono">
+          Standalone Web Portal · Running on Independent Domain / Hosting
+        </p>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-2 sm:gap-3">
+      <button onclick="toggleConfigModal()" class="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white border border-white/10 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer">
+        <span>⚙️ Server Settings</span>
+      </button>
+      <button onclick="fetchAllData()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
+        <span id="refresh-spinner">🔄</span>
+        <span>Refresh Live</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Server Connection Status Bar -->
+  <div class="bg-[#0b0e1a] border-b border-white/[0.06] px-4 sm:px-8 py-2 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+    <div class="flex items-center gap-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" id="status-dot"></span>
+      <span class="text-slate-400">Target Server:</span>
+      <span class="text-cyan-400 font-bold" id="display-target-url">Loading...</span>
+    </div>
+    <div class="flex items-center gap-3 text-slate-400">
+      <span>Auth Role: <strong class="text-rose-400">SUPER ADMIN</strong></span>
+      <span>Admin: <strong class="text-white">kalam172010@gmail.com</strong></span>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+    <!-- KPI Metric Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div class="p-4 sm:p-5 rounded-2xl bg-[#0d0f1b] border border-white/10 shadow-lg space-y-1">
+        <div class="text-[11px] font-mono text-slate-400 uppercase">Total Users</div>
+        <div class="text-2xl sm:text-3xl font-black text-white" id="stat-users">0</div>
+        <div class="text-[10px] text-emerald-400 font-mono">Active in database</div>
+      </div>
+
+      <div class="p-4 sm:p-5 rounded-2xl bg-[#0d0f1b] border border-white/10 shadow-lg space-y-1">
+        <div class="text-[11px] font-mono text-slate-400 uppercase">Digital Keys</div>
+        <div class="text-2xl sm:text-3xl font-black text-amber-400" id="stat-keys">0</div>
+        <div class="text-[10px] text-slate-400 font-mono">In inventory pool</div>
+      </div>
+
+      <div class="p-4 sm:p-5 rounded-2xl bg-[#0d0f1b] border border-white/10 shadow-lg space-y-1">
+        <div class="text-[11px] font-mono text-slate-400 uppercase">Products Active</div>
+        <div class="text-2xl sm:text-3xl font-black text-cyan-400" id="stat-products">0</div>
+        <div class="text-[10px] text-slate-400 font-mono">Cheats & mod menus</div>
+      </div>
+
+      <div class="p-4 sm:p-5 rounded-2xl bg-[#0d0f1b] border border-white/10 shadow-lg space-y-1">
+        <div class="text-[11px] font-mono text-slate-400 uppercase">Completed Orders</div>
+        <div class="text-2xl sm:text-3xl font-black text-emerald-400" id="stat-orders">0</div>
+        <div class="text-[10px] text-emerald-400 font-mono">Instant key delivery</div>
+      </div>
+    </div>
+
+    <!-- Quick Action Bar -->
+    <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-950/40 via-[#0d0e1a] to-amber-950/40 border border-rose-500/30 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+      <div>
+        <h2 class="font-bold text-white text-sm sm:text-base flex items-center gap-2">
+          <span>⚡ Quick Remote Actions</span>
+        </h2>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Execute instant admin operations across this external website and your live database.
+        </p>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <button onclick="quickTopupKalam()" class="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer">
+          <span>💰 Add ₹500 to Kalam</span>
+        </button>
+        <button onclick="quickGenerateKeys()" class="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer">
+          <span>🔑 Quick Gen 5 Keys</span>
+        </button>
+        <button onclick="quickBroadcastNotice()" class="px-3.5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer">
+          <span>📢 Broadcast Alert</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Users Management Section -->
+    <div class="rounded-2xl bg-[#090b14] border border-white/10 overflow-hidden shadow-2xl">
+      <div class="p-4 sm:p-5 border-b border-white/[0.06] flex flex-wrap items-center justify-between gap-3 bg-black/20">
+        <div>
+          <h3 class="font-bold text-sm sm:text-base text-white">Users &amp; Wallet Balances</h3>
+          <p class="text-xs text-slate-400">All registered member accounts and real-time balances</p>
+        </div>
+        <div class="w-full sm:w-64">
+          <input type="text" id="search-input" oninput="filterUsersTable()" placeholder="Search username or email..." class="w-full px-3 py-1.5 rounded-xl bg-[#06070a] border border-white/15 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-rose-500 font-mono">
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-[#0e111d] text-slate-400 font-mono text-[10px] uppercase border-b border-white/5">
+            <tr>
+              <th class="p-3.5">User</th>
+              <th class="p-3.5">Role</th>
+              <th class="p-3.5">Balance</th>
+              <th class="p-3.5">Status</th>
+              <th class="p-3.5 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-table-body" class="divide-y divide-white/[0.04]">
+            <tr>
+              <td colspan="5" class="p-8 text-center text-slate-500 font-mono">
+                Connecting to backend server...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Server Config Modal -->
+  <div id="config-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="fixed inset-0 bg-black/85 backdrop-blur-md" onclick="toggleConfigModal()"></div>
+    <div class="relative w-full max-w-md bg-[#0d0f1b] border border-rose-500/40 rounded-3xl p-6 shadow-2xl z-10 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-black text-sm text-white uppercase tracking-wider">
+          ⚙️ Target Server &amp; API Configuration
+        </h3>
+        <button onclick="toggleConfigModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-300">
+        Configure where this external Admin Website sends its requests.
+      </p>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-mono text-slate-400 mb-1">Backend Server URL</label>
+          <input type="text" id="cfg-server-url" class="w-full px-3 py-2 rounded-xl bg-[#06070a] border border-white/15 text-white font-mono focus:outline-none focus:border-rose-500">
+          <p class="text-[10px] text-slate-500 mt-1">Example: https://your-primary-domain.com</p>
+        </div>
+
+        <div>
+          <label class="block font-mono text-slate-400 mb-1">Master Admin Key</label>
+          <input type="password" id="cfg-admin-key" class="w-full px-3 py-2 rounded-xl bg-[#06070a] border border-white/15 text-white font-mono focus:outline-none focus:border-rose-500">
+          <p class="text-[10px] text-slate-500 mt-1">Default key: kalam_admin_master_secret_2026</p>
+        </div>
+
+        <div>
+          <label class="block font-mono text-slate-400 mb-1">Admin Email</label>
+          <input type="text" id="cfg-admin-email" class="w-full px-3 py-2 rounded-xl bg-[#06070a] border border-white/15 text-white font-mono focus:outline-none focus:border-rose-500">
+        </div>
+      </div>
+
+      <div class="pt-2 flex gap-2">
+        <button onclick="toggleConfigModal()" class="w-1/2 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs">
+          Cancel
+        </button>
+        <button onclick="saveServerConfig()" class="w-1/2 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs shadow-lg">
+          Save Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configuration Management
+    const STORAGE_SERVER = 'kalam_remote_server_url';
+    const STORAGE_KEY = 'kalam_remote_admin_key';
+    const STORAGE_EMAIL = 'kalam_remote_admin_email';
+
+    function getServerUrl() {
+      return localStorage.getItem(STORAGE_SERVER) || window.location.origin;
+    }
+
+    function getAdminKey() {
+      return localStorage.getItem(STORAGE_KEY) || 'kalam_admin_master_secret_2026';
+    }
+
+    function getAdminEmail() {
+      return localStorage.getItem(STORAGE_EMAIL) || 'kalam172010@gmail.com';
+    }
+
+    function toggleConfigModal() {
+      const modal = document.getElementById('config-modal');
+      const isHidden = modal.classList.contains('hidden');
+      if (isHidden) {
+        document.getElementById('cfg-server-url').value = getServerUrl();
+        document.getElementById('cfg-admin-key').value = getAdminKey();
+        document.getElementById('cfg-admin-email').value = getAdminEmail();
+        modal.classList.remove('hidden');
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+
+    function saveServerConfig() {
+      const url = document.getElementById('cfg-server-url').value.trim().replace(/\/$/, '');
+      const key = document.getElementById('cfg-admin-key').value.trim();
+      const email = document.getElementById('cfg-admin-email').value.trim();
+      localStorage.setItem(STORAGE_SERVER, url);
+      localStorage.setItem(STORAGE_KEY, key);
+      localStorage.setItem(STORAGE_EMAIL, email);
+      toggleConfigModal();
+      updateStatusHeader();
+      fetchAllData();
+    }
+
+    function updateStatusHeader() {
+      document.getElementById('display-target-url').textContent = getServerUrl();
+    }
+
+    let globalUsers = [];
+
+    async function apiRequest(endpoint, options = {}) {
+      const baseUrl = getServerUrl();
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-admin-key': getAdminKey(),
+        'x-user-email': getAdminEmail(),
+        'Authorization': `Bearer ${getAdminKey()}`,
+        ...(options.headers || {})
+      };
+      const res = await fetch(`${baseUrl}${endpoint}`, { ...options, headers });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      return await res.json();
+    }
+
+    async function fetchAllData() {
+      const spinner = document.getElementById('refresh-spinner');
+      spinner.classList.add('animate-spin');
+      try {
+        updateStatusHeader();
+        const [usersRes, statsRes, productsRes] = await Promise.all([
+          apiRequest('/api/admin/users').catch(() => ({ users: [] })),
+          apiRequest('/api/admin/stats').catch(() => ({ stats: {} })),
+          apiRequest('/api/products').catch(() => ({ products: [] })),
+        ]);
+
+        globalUsers = usersRes.users || [];
+        renderUsers(globalUsers);
+
+        // Update KPIs
+        document.getElementById('stat-users').textContent = globalUsers.length;
+        document.getElementById('stat-keys').textContent = statsRes.stats?.availableKeysCount || 0;
+        document.getElementById('stat-products').textContent = (productsRes.products || []).length;
+        document.getElementById('stat-orders').textContent = statsRes.stats?.totalOrdersCount || 0;
+
+        document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+      } catch (err) {
+        console.error('Remote Fetch Error:', err);
+        document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+      } finally {
+        spinner.classList.remove('animate-spin');
+      }
+    }
+
+    function renderUsers(users) {
+      const tbody = document.getElementById('users-table-body');
+      if (!users.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500 font-mono">No users found.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = users.map(u => `
+        <tr class="hover:bg-white/[0.02] transition-colors">
+          <td class="p-3.5">
+            <div class="font-bold text-white">@${u.username}</div>
+            <div class="text-[10px] text-slate-400 font-mono">${u.email || 'No Email'}</div>
+          </td>
+          <td class="p-3.5">
+            <span class="px-2 py-0.5 rounded font-mono text-[9px] font-bold ${u.role === 'ADMIN' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-slate-300'}">
+              ${u.role}
+            </span>
+          </td>
+          <td class="p-3.5 font-mono font-bold text-emerald-400">
+            ₹${Number(u.balance || 0).toFixed(2)}
+          </td>
+          <td class="p-3.5">
+            <span class="text-[10px] font-mono ${u.isBanned ? 'text-rose-400' : 'text-emerald-400'}">
+              ${u.isBanned ? '● SUSPENDED' : '● ACTIVE'}
+            </span>
+          </td>
+          <td class="p-3.5 text-right space-x-1">
+            <button onclick="creditUser('${u.id}', 100)" class="px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">+₹100</button>
+            <button onclick="creditUser('${u.id}', 500)" class="px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">+₹500</button>
+            <button onclick="toggleBanUser('${u.id}')" class="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 text-[10px]">${u.isBanned ? 'Unban' : 'Ban'}</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function filterUsersTable() {
+      const q = document.getElementById('search-input').value.toLowerCase();
+      const filtered = globalUsers.filter(u =>
+        (u.username && u.username.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q))
+      );
+      renderUsers(filtered);
+    }
+
+    async function creditUser(userId, amount) {
+      try {
+        await apiRequest(`/api/admin/users/${userId}/adjust-balance`, {
+          method: 'POST',
+          body: JSON.stringify({ amount, reason: `External Website Credit +₹${amount}` })
+        });
+        alert(`Credited +₹${amount} successfully!`);
+        fetchAllData();
+      } catch (e) {
+        alert(`Credit Error: ${e.message}`);
+      }
+    }
+
+    async function toggleBanUser(userId) {
+      try {
+        await apiRequest(`/api/admin/users/${userId}/ban`, { method: 'PATCH' });
+        fetchAllData();
+      } catch (e) {
+        alert(`Ban Toggle Error: ${e.message}`);
+      }
+    }
+
+    async function quickTopupKalam() {
+      const kalam = globalUsers.find(u => (u.email && u.email.includes('kalam')) || (u.username && u.username.includes('kalam')));
+      if (kalam) {
+        await creditUser(kalam.id, 500);
+      } else {
+        alert('User kalam not found.');
+      }
+    }
+
+    async function quickGenerateKeys() {
+      try {
+        const prodRes = await apiRequest('/api/products');
+        const prod = prodRes.products?.[0];
+        const v = prod?.variants?.[0];
+        if (!prod || !v) {
+          alert('No products configured to generate keys.');
+          return;
+        }
+        const rawKeys = Array.from({ length: 5 }, () => `KALAM-FF-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`).join('\n');
+        await apiRequest('/api/admin/keys/bulk-import', {
+          method: 'POST',
+          body: JSON.stringify({ productId: prod.id, variantId: v.id, rawKeys })
+        });
+        alert('Generated 5 FreeFire Keys successfully!');
+        fetchAllData();
+      } catch (e) {
+        alert(`Gen Keys Error: ${e.message}`);
+      }
+    }
+
+    async function quickBroadcastNotice() {
+      const text = prompt('Enter global broadcast announcement:', 'Kalam FF Panel v5.0 Active! All VIP Keys Operational.');
+      if (!text) return;
+      try {
+        await apiRequest('/api/admin/settings/site', {
+          method: 'PATCH',
+          body: JSON.stringify({ isAnnouncementEnabled: true, announcementText: text })
+        });
+        alert('Broadcast Announcement Published to Live Website!');
+      } catch (e) {
+        alert(`Broadcast Error: ${e.message}`);
+      }
+    }
+
+    // Initial load
+    updateStatusHeader();
+    fetchAllData();
+  </script>
+</body>
+</html>

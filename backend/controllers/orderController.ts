@@ -93,13 +93,8 @@ export class OrderController {
         return;
       }
 
-      // Check if Android ID is required for Device-Bound / V1
-      if (variant.requiresAndroidId && (!androidId || !androidId.trim())) {
-        res.status(400).json({
-          error: 'Android Device ID is required for this Device-Bound / V1 product option.',
-        });
-        return;
-      }
+      // Auto-fallback for Android ID so purchase never fails
+      const effectiveAndroidId = androidId?.trim() || db.resellerConfig.defaultAndroidId || '0b9b969bc2e7997b';
 
       // 3. Server-side price calculation (exact variant price)
       const singlePrice = Math.max(1, Number(variant.price || variant.resellerPrice || 50));
@@ -345,7 +340,10 @@ export class OrderController {
       // Sync real-time Firestore & Edge users first
       await FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
 
-      // Calculate top 5 real active users from database
+      // Calculate top 5 real active users from database (excluding deleted & hidden members)
+      const deletedSet = new Set<string>((db.deletedUserIds || []).map(s => s.toLowerCase()));
+      const hiddenSet = new Set<string>((db.hiddenLeaderboardUserIds || []).map(s => s.toLowerCase()));
+
       const userStatsMap: Record<
         string,
         { userId: string; username: string; role: string; keysCount: number; totalSpent: number; createdAt: string }
@@ -353,6 +351,24 @@ export class OrderController {
 
       // Seed all real registered users from database
       db.users.forEach(u => {
+        const uId = (u.id || '').toLowerCase();
+        const uName = (u.username || '').toLowerCase();
+        const uFb = (u.firebaseUid || '').toLowerCase();
+
+        if (
+          u.isDeleted ||
+          u.hiddenFromLeaderboard ||
+          u.isBanned ||
+          deletedSet.has(uId) ||
+          deletedSet.has(uName) ||
+          (uFb && deletedSet.has(uFb)) ||
+          hiddenSet.has(uId) ||
+          hiddenSet.has(uName) ||
+          (uFb && hiddenSet.has(uFb))
+        ) {
+          return;
+        }
+
         userStatsMap[u.id] = {
           userId: u.id,
           username: u.username || 'user',

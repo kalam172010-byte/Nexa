@@ -7,6 +7,8 @@ import {
   Plus,
   Flame,
   Palette,
+  ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useSite } from '../context/SiteContext.js';
@@ -170,6 +172,34 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate, curren
             />
           ))}
         </div>
+
+        {/* Admin Website Quick Access Launcher */}
+        {(() => {
+          const ADMIN_EMAILS = ['kk7953926@gmail.com', 'kalamkalam1234kd@gmail.com', 'kalam172010@gmail.com', 'admin@example.com'];
+          const isAdmin =
+            user?.role === 'ADMIN' ||
+            user?.role === 'SUPER ADMIN' ||
+            (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) ||
+            (user?.username && ['kalam', 'kalam_admin', 'nexa_admin', 'admin'].includes(user.username.toLowerCase()));
+
+          if (!isAdmin) return null;
+
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
+                window.open(url, '_blank');
+              }}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md shadow-amber-950/40 cursor-pointer"
+              title="Open Admin Panel in Dedicated Website Window / Tab"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden lg:inline">Admin Website</span>
+              <ExternalLink className="w-3 h-3 text-amber-400/80" />
+            </button>
+          );
+        })()}
 
         {/* Vibrant Wallet Deposit Button */}
         <button

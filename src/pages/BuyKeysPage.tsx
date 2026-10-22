@@ -239,7 +239,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   });
 
   return (
-    <div className="space-y-6 w-full max-w-full overflow-x-hidden">
+    <div className="space-y-6 w-full max-w-full">
       {/* Dynamic Cyber Hero Header */}
       <div className="p-4 sm:p-6 rounded-3xl bg-gradient-to-r from-[#14182e] via-[#0e1224] to-[#151a33] border border-cyan-500/25 shadow-[0_4px_30px_rgba(6,182,212,0.15)] space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

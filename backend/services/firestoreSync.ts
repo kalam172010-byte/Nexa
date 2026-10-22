@@ -234,8 +234,17 @@ export class FirestoreSyncService {
       }
 
       // Merge newly discovered Firestore users into db.users so they appear in real-time in the admin panel and leaderboard
+      const deletedSet = new Set<string>((db.deletedUserIds || []).map(s => s.toLowerCase()));
+
       for (const fu of parsedFsUsers) {
         if (!fu.id && !fu.email) continue;
+        const uId = (fu.id || '').toLowerCase();
+        const uName = (fu.username || '').toLowerCase();
+        const uFb = (fu.firebaseUid || '').toLowerCase();
+        if (fu.isDeleted || deletedSet.has(uId) || deletedSet.has(uName) || (uFb && deletedSet.has(uFb))) {
+          continue;
+        }
+
         const linkedIds = new Set(this.getLinkedUserIds(fu));
         const existing = db.users.find(
           u =>
@@ -267,6 +276,11 @@ export class FirestoreSyncService {
       if (Array.isArray(edgeState?.users)) {
         for (const eu of edgeState.users) {
           if (!eu || (!eu.id && !eu.email)) continue;
+          const euId = (eu.id || '').toLowerCase();
+          const euName = (eu.username || '').toLowerCase();
+          if (eu.isDeleted || deletedSet.has(euId) || deletedSet.has(euName)) {
+            continue;
+          }
           const cleanEmail = (eu.email || '').toLowerCase().trim();
           const existing = db.users.find(
             u =>

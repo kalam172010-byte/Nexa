@@ -244,6 +244,36 @@ export class AdminController {
     }
   }
 
+  public static async deleteUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ error: 'User ID is required.' });
+        return;
+      }
+      db.permanentlyDeleteUser(id);
+      db.logActivity(req.user?.id, req.user?.username, 'ADMIN_DELETE_USER', `Permanently deleted user: ${id}`);
+      res.json({ success: true, message: `User ${id} permanently deleted.` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete user.' });
+    }
+  }
+
+  public static async removeTopActiveUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ error: 'User ID is required.' });
+        return;
+      }
+      db.hideUserFromLeaderboard(id);
+      db.logActivity(req.user?.id, req.user?.username, 'ADMIN_REMOVE_LEADERBOARD', `Removed user ${id} from Top Active Members`);
+      res.json({ success: true, message: `User ${id} removed from Top Active Members.` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to remove user from leaderboard.' });
+    }
+  }
+
   public static async resetUserPassword(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;

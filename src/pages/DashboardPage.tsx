@@ -14,11 +14,15 @@ import {
   Sparkles,
   Flame,
   Zap,
+  Trash2,
+  X,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useSite } from '../context/SiteContext.js';
+import { useToast } from '../context/ToastContext.js';
 import { api } from '../services/api.js';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase.js';
 import heroBannerImg from '../assets/images/hero_vip_gaming_panel_1792510058753.jpg';
 
@@ -42,6 +46,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 }) => {
   const { user, balance, role } = useAuth();
   const { siteConfig } = useSite();
+  const { success: showToastSuccess, error: showToastError } = useToast();
   const [summary, setSummary] = useState<any>({
     todaySales: 0,
     monthlySales: 0,
@@ -50,6 +55,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   });
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
   const [heroImgFailed, setHeroImgFailed] = useState(false);
+  const [deletingMember, setDeletingMember] = useState<LeaderboardUser | null>(null);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
+
+  let storedUserRole = '';
+  let storedUserEmail = '';
+  let storedUsername = '';
+  try {
+    const rawStored = localStorage.getItem('nexa_user_data');
+    if (rawStored) {
+      const parsed = JSON.parse(rawStored);
+      storedUserRole = parsed.role || '';
+      storedUserEmail = parsed.email || '';
+      storedUsername = parsed.username || '';
+    }
+  } catch {}
+
+  const currentEmail = (user?.email || storedUserEmail).toLowerCase();
+  const currentUsername = (user?.username || storedUsername).toLowerCase();
+  const currentRole = role || storedUserRole;
+
+  const isAdmin =
+    currentRole === 'ADMIN' ||
+    currentRole === 'SUPER ADMIN' ||
+    ['kk7953926@gmail.com', 'kalamkalam1234kd@gmail.com', 'kalam172010@gmail.com', 'admin@example.com'].includes(currentEmail) ||
+    ['kalam', 'kalam_admin', 'nexa_admin', 'admin', 'super_admin'].includes(currentUsername);
 
   const loadDashboardData = async () => {
     try {
@@ -76,9 +106,39 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       unsubscribeUsers = onSnapshot(
         usersColRef,
         snapshot => {
+          const hiddenSet = new Set<string>();
+          try {
+            const rawHidden = localStorage.getItem('nexa_hidden_leaderboard_users');
+            if (rawHidden) {
+              JSON.parse(rawHidden).forEach((x: string) => {
+                hiddenSet.add(x);
+                hiddenSet.add(x.toLowerCase());
+              });
+            }
+            const rawDel = localStorage.getItem('nexa_deleted_user_ids');
+            if (rawDel) {
+              JSON.parse(rawDel).forEach((x: string) => {
+                hiddenSet.add(x);
+                hiddenSet.add(x.toLowerCase());
+              });
+            }
+          } catch {}
+
           const liveUsers: any[] = [];
           snapshot.forEach(docSnap => {
             const data = docSnap.data();
+            const docId = docSnap.id.toLowerCase();
+            const uName = (data.username || data.displayName || '').toLowerCase();
+            if (
+              hiddenSet.has(docSnap.id) ||
+              hiddenSet.has(docId) ||
+              hiddenSet.has(data.username) ||
+              hiddenSet.has(uName) ||
+              data.isDeleted ||
+              data.hiddenFromLeaderboard
+            ) {
+              return;
+            }
             liveUsers.push({
               userId: docSnap.id,
               username: data.username || data.displayName || 'user',
@@ -107,10 +167,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 totalSpent: u.totalSpent,
               }));
 
-            setLeaderboard(prev => {
-              if (sorted.length > 0) return sorted;
-              return prev;
-            });
+            setLeaderboard(sorted);
           }
         },
         err => {
@@ -125,7 +182,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       api
         .getTopActiveUsers()
         .then(res => {
-          if (res?.leaderboard && res.leaderboard.length > 0) {
+          if (res?.leaderboard) {
             setLeaderboard(res.leaderboard);
           }
         })
@@ -144,6 +201,84 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       clearInterval(interval);
     };
   }, []);
+
+  const handleConfirmDelete = async (action: 'hide' | 'delete') => {
+    if (!deletingMember) return;
+    setIsDeletingMember(true);
+    const target = deletingMember;
+
+    // 1. Immediately persist exclusion in localStorage to prevent any snapshot flicker
+    try {
+      const rawHidden = localStorage.getItem('nexa_hidden_leaderboard_users') || '[]';
+      const hiddenList: string[] = JSON.parse(rawHidden);
+      [target.userId, target.username].forEach(item => {
+        if (item && !hiddenList.includes(item)) hiddenList.push(item);
+      });
+      localStorage.setItem('nexa_hidden_leaderboard_users', JSON.stringify(hiddenList));
+
+      if (action === 'delete') {
+        const rawDel = localStorage.getItem('nexa_deleted_user_ids') || '[]';
+        const delList: string[] = JSON.parse(rawDel);
+        [target.userId, target.username].forEach(item => {
+          if (item && !delList.includes(item)) delList.push(item);
+        });
+        localStorage.setItem('nexa_deleted_user_ids', JSON.stringify(delList));
+      }
+    } catch {}
+
+    // 2. Immediately remove from local state and dismiss modal
+    setLeaderboard(prev => prev.filter(m => m.userId !== target.userId && m.username !== target.username));
+    setDeletingMember(null);
+
+    // 3. Perform backend API and Firestore operations asynchronously
+    try {
+      // Update/delete in Firestore
+      try {
+        if (action === 'delete') {
+          await deleteDoc(doc(db, 'users', target.userId)).catch(() => {});
+          await setDoc(
+            doc(db, 'users', target.userId),
+            {
+              isDeleted: true,
+              hiddenFromLeaderboard: true,
+              keysCount: 0,
+              totalSpent: 0,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch(() => {});
+        } else {
+          await setDoc(
+            doc(db, 'users', target.userId),
+            {
+              keysCount: 0,
+              totalSpent: 0,
+              hiddenFromLeaderboard: true,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch(() => {});
+        }
+      } catch (fsErr) {
+        console.warn('Firestore update note:', fsErr);
+      }
+
+      // Call API
+      if (action === 'delete') {
+        await api.deleteUser(target.userId);
+        showToastSuccess('User Deleted', `@${target.username} has been permanently deleted from the system.`);
+      } else {
+        await api.removeTopActiveUser(target.userId);
+        showToastSuccess('Member Removed', `@${target.username} has been removed from Top Active Members.`);
+      }
+    } catch (err: any) {
+      console.warn('Backend user removal note:', err);
+      // Still show success since local removal and exclusion are persisted
+      showToastSuccess('Member Removed', `@${target.username} has been removed from Top Active Members.`);
+    } finally {
+      setIsDeletingMember(false);
+    }
+  };
 
   const isReseller = role === 'RESELLER' || role === 'ADMIN' || role === 'SUPER ADMIN';
   const currency = siteConfig.currencySymbol || '₹';
@@ -530,10 +665,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="font-mono text-sm sm:text-base font-extrabold text-rose-300 tabular-nums drop-shadow-[0_0_8px_rgba(244,63,94,0.4)]">
-                        {u.keysCount} Keys
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <div className="font-mono text-sm sm:text-base font-extrabold text-rose-300 tabular-nums drop-shadow-[0_0_8px_rgba(244,63,94,0.4)]">
+                          {u.keysCount} Keys
+                        </div>
                       </div>
+
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingMember(u)}
+                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/20 hover:border-rose-500/50 text-rose-400 hover:text-white transition-all cursor-pointer group shrink-0"
+                          title={`Admin: Delete or remove @${u.username} from Top Active Members`}
+                          aria-label={`Delete @${u.username}`}
+                        >
+                          <Trash2 className="w-4 h-4 transition-transform group-hover:scale-110" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -542,6 +691,92 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           )}
         </div>
       </div>
+
+      {/* Admin Top Active Member Delete / Remove Modal */}
+      {deletingMember && (
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0f111d] border border-rose-500/30 rounded-2xl p-6 max-w-md w-full space-y-5 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => !isDeletingMember && setDeletingMember(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0 shadow-md">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">
+                  Admin Member Control
+                </span>
+                <h3 className="font-display font-bold text-base text-white">
+                  Remove from Top Active Members
+                </h3>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[#080910] border border-white/[0.08] flex items-center justify-between">
+              <div>
+                <div className="font-bold text-white text-sm">@{deletingMember.username}</div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  Rank #{deletingMember.rank} · {deletingMember.role}
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="font-mono font-bold text-rose-400 text-sm">
+                  {deletingMember.keysCount} Keys
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Select an action for <strong className="text-white">@{deletingMember.username}</strong>. You can remove them from the Top Active Members standings or permanently delete the user account.
+            </p>
+
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isDeletingMember}
+                onClick={() => handleConfirmDelete('hide')}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs transition-all shadow-md shadow-amber-950/40 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingMember ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trophy className="w-4 h-4" />
+                )}
+                <span>Remove from Top Members (Reset Standings)</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeletingMember}
+                onClick={() => handleConfirmDelete('delete')}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs transition-all shadow-md shadow-rose-950/40 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingMember ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                <span>Permanently Delete User Account</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeletingMember}
+                onClick={() => setDeletingMember(null)}
+                className="w-full py-2 text-slate-400 hover:text-white text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

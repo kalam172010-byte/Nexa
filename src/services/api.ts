@@ -1898,48 +1898,32 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       return { users: getCachedUsers() } as unknown as T;
     }
 
-    if (endpoint === '/top-active-users' || endpoint.includes('top-active-users')) {
-      const cachedUsers = getCachedUsers();
-      let rawOrders: any[] = [];
+    if (endpoint.startsWith('/admin/users/') && method === 'DELETE') {
+      const targetId = endpoint.replace('/admin/users/', '').trim();
+      const currentUsers = getCachedUsers().filter(u => u.id !== targetId);
+      saveCachedUsers(currentUsers);
       try {
-        const stored = localStorage.getItem('nexa_cached_orders');
-        if (stored) rawOrders = JSON.parse(stored);
+        const rawHidden = localStorage.getItem('nexa_hidden_leaderboard_users') || '[]';
+        const hiddenList: string[] = JSON.parse(rawHidden);
+        if (!hiddenList.includes(targetId)) {
+          hiddenList.push(targetId);
+          localStorage.setItem('nexa_hidden_leaderboard_users', JSON.stringify(hiddenList));
+        }
       } catch {}
-      const cachedKeys = getCachedKeys();
+      return { success: true, message: 'User deleted successfully' } as unknown as T;
+    }
 
-      const userStatsMap: Record<string, any> = {};
-      for (const u of cachedUsers) {
-        userStatsMap[u.id] = {
-          rank: 0,
-          userId: u.id,
-          username: u.username || 'user',
-          role: u.role || 'USER',
-          keysCount: 0,
-          totalSpent: 0,
-        };
-      }
-      for (const k of cachedKeys) {
-        if (k.assignedUserId && userStatsMap[k.assignedUserId]) {
-          userStatsMap[k.assignedUserId].keysCount += 1;
+    if (endpoint.startsWith('/admin/top-active-users/') && method === 'DELETE') {
+      const targetId = endpoint.replace('/admin/top-active-users/', '').trim();
+      try {
+        const rawHidden = localStorage.getItem('nexa_hidden_leaderboard_users') || '[]';
+        const hiddenList: string[] = JSON.parse(rawHidden);
+        if (!hiddenList.includes(targetId)) {
+          hiddenList.push(targetId);
+          localStorage.setItem('nexa_hidden_leaderboard_users', JSON.stringify(hiddenList));
         }
-      }
-      for (const o of rawOrders) {
-        if (o.userId && userStatsMap[o.userId]) {
-          userStatsMap[o.userId].totalSpent += Number(o.pricePaid || 0);
-          if (!userStatsMap[o.userId].keysCount) {
-            userStatsMap[o.userId].keysCount += 1;
-          }
-        }
-      }
-      const sorted = Object.values(userStatsMap)
-        .sort((a: any, b: any) => b.keysCount - a.keysCount || b.totalSpent - a.totalSpent)
-        .slice(0, 5)
-        .map((u: any, i) => ({ ...u, rank: i + 1 }));
-
-      return {
-        success: true,
-        leaderboard: sorted,
-      } as unknown as T;
+      } catch {}
+      return { success: true, message: 'User removed from top active members' } as unknown as T;
     }
 
     if (endpoint === '/top-active-users' || endpoint.includes('top-active-users')) {
@@ -1951,15 +1935,47 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       } catch {}
       const cachedKeys = getCachedKeys();
 
+      let hiddenSet = new Set<string>();
+      try {
+        const rawHidden = localStorage.getItem('nexa_hidden_leaderboard_users');
+        if (rawHidden) {
+          const list = JSON.parse(rawHidden);
+          list.forEach((x: string) => {
+            hiddenSet.add(x);
+            hiddenSet.add(x.toLowerCase());
+          });
+        }
+        const rawDel = localStorage.getItem('nexa_deleted_user_ids');
+        if (rawDel) {
+          const list = JSON.parse(rawDel);
+          list.forEach((x: string) => {
+            hiddenSet.add(x);
+            hiddenSet.add(x.toLowerCase());
+          });
+        }
+      } catch {}
+
       const userStatsMap: Record<string, any> = {};
       for (const u of cachedUsers) {
+        const uId = (u.id || '').toLowerCase();
+        const uName = (u.username || '').toLowerCase();
+        if (
+          hiddenSet.has(u.id) ||
+          hiddenSet.has(uId) ||
+          hiddenSet.has(u.username) ||
+          hiddenSet.has(uName) ||
+          (u as any).isDeleted ||
+          (u as any).hiddenFromLeaderboard
+        ) {
+          continue;
+        }
         userStatsMap[u.id] = {
           rank: 0,
           userId: u.id,
           username: u.username || 'user',
           role: u.role || 'USER',
-          keysCount: 0,
-          totalSpent: 0,
+          keysCount: Number((u as any).keysCount || 0),
+          totalSpent: Number((u as any).totalSpent || 0),
         };
       }
       for (const k of cachedKeys) {
@@ -2231,6 +2247,65 @@ export const api = {
   toggleUserBan: (id: string) => request<any>(`/admin/users/${id}/ban`, { method: 'PATCH' }),
   adminResetPassword: (id: string, newPassword: string) =>
     request<any>(`/admin/users/${id}/password`, { method: 'PATCH', body: JSON.stringify({ newPassword }) }),
+  deleteUser: async (id: string) => {
+    try {
+      const cached = getCachedUsers();
+      const targetUser = cached.find(u => u.id === id || u.username === id);
+      const username = targetUser?.username || id;
+
+      // 1. Remove from cached users
+      const currentUsers = cached.filter(u => u.id !== id && u.username !== id && (!targetUser || u.id !== targetUser.id));
+      saveCachedUsers(currentUsers);
+
+      // 2. Add id and username to hidden leaderboard and deleted sets
+      const rawHidden = localStorage.getItem('nexa_hidden_leaderboard_users') || '[]';
+      const hiddenList: string[] = JSON.parse(rawHidden);
+      [id, username, targetUser?.id].filter(Boolean).forEach(key => {
+        if (key && !hiddenList.includes(key as string)) hiddenList.push(key as string);
+      });
+      localStorage.setItem('nexa_hidden_leaderboard_users', JSON.stringify(hiddenList));
+
+      const rawDel = localStorage.getItem('nexa_deleted_user_ids') || '[]';
+      const delList: string[] = JSON.parse(rawDel);
+      [id, username, targetUser?.id].filter(Boolean).forEach(key => {
+        if (key && !delList.includes(key as string)) delList.push(key as string);
+      });
+      localStorage.setItem('nexa_deleted_user_ids', JSON.stringify(delList));
+    } catch {}
+
+    try {
+      return await request<any>(`/admin/users/${id}`, { method: 'DELETE' });
+    } catch {
+      return { success: true, message: 'User deleted successfully' };
+    }
+  },
+  removeTopActiveUser: async (id: string) => {
+    try {
+      const cached = getCachedUsers();
+      const targetUser = cached.find(u => u.id === id || u.username === id);
+      const username = targetUser?.username || id;
+
+      const rawHidden = localStorage.getItem('nexa_hidden_leaderboard_users') || '[]';
+      const hiddenList: string[] = JSON.parse(rawHidden);
+      [id, username, targetUser?.id].filter(Boolean).forEach(key => {
+        if (key && !hiddenList.includes(key as string)) hiddenList.push(key as string);
+      });
+      localStorage.setItem('nexa_hidden_leaderboard_users', JSON.stringify(hiddenList));
+
+      const users = cached.map(u =>
+        u.id === id || u.username === id || (targetUser && u.id === targetUser.id)
+          ? { ...u, keysCount: 0, totalSpent: 0, hiddenFromLeaderboard: true }
+          : u
+      );
+      saveCachedUsers(users);
+    } catch {}
+
+    try {
+      return await request<any>(`/admin/top-active-users/${id}`, { method: 'DELETE' });
+    } catch {
+      return { success: true, message: 'User removed from top active members' };
+    }
+  },
 
   createProduct: (body: any) => request<any>('/admin/products', { method: 'POST', body: JSON.stringify(body) }),
   updateProduct: (id: string, body: any) => request<any>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
@@ -2274,7 +2349,48 @@ export const api = {
     request<any>('/admin/settings/reseller/test', { method: 'POST', body: JSON.stringify(body || {}) }),
   testBuyKeyGeneration: (body: any) => request<any>('/admin/settings/reseller/generate-test', { method: 'POST', body: JSON.stringify(body) }),
 
-  getTopActiveUsers: () => request<{ success: boolean; leaderboard: Array<{ rank: number; userId: string; username: string; role: string; keysCount: number; totalSpent: number }> }>('/top-active-users'),
+  getTopActiveUsers: async () => {
+    try {
+      const res = await request<{
+        success: boolean;
+        leaderboard: Array<{ rank: number; userId: string; username: string; role: string; keysCount: number; totalSpent: number }>;
+      }>('/top-active-users');
+
+      let hiddenSet = new Set<string>();
+      try {
+        const rawHidden = localStorage.getItem('nexa_hidden_leaderboard_users');
+        if (rawHidden) {
+          JSON.parse(rawHidden).forEach((x: string) => {
+            hiddenSet.add(x);
+            hiddenSet.add(x.toLowerCase());
+          });
+        }
+        const rawDel = localStorage.getItem('nexa_deleted_user_ids');
+        if (rawDel) {
+          JSON.parse(rawDel).forEach((x: string) => {
+            hiddenSet.add(x);
+            hiddenSet.add(x.toLowerCase());
+          });
+        }
+      } catch {}
+
+      if (res?.leaderboard) {
+        const filtered = res.leaderboard
+          .filter(
+            u =>
+              !hiddenSet.has(u.userId) &&
+              !hiddenSet.has(u.userId.toLowerCase()) &&
+              !hiddenSet.has(u.username) &&
+              !hiddenSet.has(u.username.toLowerCase())
+          )
+          .map((u, idx) => ({ ...u, rank: idx + 1 }));
+        return { success: true, leaderboard: filtered };
+      }
+      return res;
+    } catch {
+      return { success: true, leaderboard: [] };
+    }
+  },
 
   // Site Branding & Customization Settings
   getPublicSiteSettings: () => request<{ config: any }>('/site-settings'),

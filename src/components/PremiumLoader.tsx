@@ -47,3 +47,18 @@ export const PremiumLoadingPage: React.FC<PremiumLoadingPageProps> = () => {
     </div>
   );
 };
+
+export const PageLoadingFallback: React.FC = () => {
+  return (
+    <div className="w-full min-h-[45vh] flex flex-col items-center justify-center py-16 select-none">
+      <div className="flex flex-col items-center justify-center gap-3.5">
+        <div className="relative w-10 h-10 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-full border-[3px] border-white/10 border-t-rose-500 animate-spin" />
+        </div>
+        <span className="font-display font-black text-xs tracking-[0.24em] text-slate-300 uppercase">
+          FF PANEL
+        </span>
+      </div>
+    </div>
+  );
+};

@@ -22,6 +22,8 @@ import {
 interface DatabaseSchema {
   hasSeededProducts?: boolean;
   deletedProductIds?: string[];
+  deletedUserIds?: string[];
+  hiddenLeaderboardUserIds?: string[];
   users: User[];
   products: Product[];
   productVariants: ProductVariant[];
@@ -203,6 +205,10 @@ export class Database {
       adminStatusBadge: 'SUPER PRIVILEGES',
       adminThemePreset: 'crimson-admin',
       adminShortcutsEnabled: true,
+      externalAdminUrl: '',
+      secondaryWebsiteUrl: '',
+      secondaryWebsiteName: 'External Website',
+      standaloneAdminEnabled: true,
     };
   }
 
@@ -333,6 +339,62 @@ export class Database {
   public get deletedProductIds(): string[] {
     if (!this.data.deletedProductIds) this.data.deletedProductIds = [];
     return this.data.deletedProductIds;
+  }
+
+  public get deletedUserIds(): string[] {
+    if (!this.data.deletedUserIds) this.data.deletedUserIds = [];
+    return this.data.deletedUserIds;
+  }
+
+  public get hiddenLeaderboardUserIds(): string[] {
+    if (!this.data.hiddenLeaderboardUserIds) this.data.hiddenLeaderboardUserIds = [];
+    return this.data.hiddenLeaderboardUserIds;
+  }
+
+  public permanentlyDeleteUser(idOrUsername: string): void {
+    if (!this.data.deletedUserIds) this.data.deletedUserIds = [];
+    if (!this.data.hiddenLeaderboardUserIds) this.data.hiddenLeaderboardUserIds = [];
+
+    const key = idOrUsername.trim();
+    if (!this.data.deletedUserIds.includes(key)) this.data.deletedUserIds.push(key);
+    if (!this.data.hiddenLeaderboardUserIds.includes(key)) this.data.hiddenLeaderboardUserIds.push(key);
+
+    const user = this.data.users.find(
+      u => u.id === key || u.firebaseUid === key || u.username === key || (u.email && u.email.toLowerCase() === key.toLowerCase())
+    );
+
+    if (user) {
+      user.isDeleted = true;
+      user.hiddenFromLeaderboard = true;
+      if (user.id && !this.data.deletedUserIds.includes(user.id)) this.data.deletedUserIds.push(user.id);
+      if (user.firebaseUid && !this.data.deletedUserIds.includes(user.firebaseUid)) this.data.deletedUserIds.push(user.firebaseUid);
+      if (user.username && !this.data.deletedUserIds.includes(user.username)) this.data.deletedUserIds.push(user.username);
+      if (user.id && !this.data.hiddenLeaderboardUserIds.includes(user.id)) this.data.hiddenLeaderboardUserIds.push(user.id);
+      if (user.username && !this.data.hiddenLeaderboardUserIds.includes(user.username)) this.data.hiddenLeaderboardUserIds.push(user.username);
+    }
+
+    this.data.users = this.data.users.filter(
+      u => u.id !== key && u.firebaseUid !== key && u.username !== key && (!user || u.id !== user.id)
+    );
+    this.saveSync();
+  }
+
+  public hideUserFromLeaderboard(idOrUsername: string): void {
+    if (!this.data.hiddenLeaderboardUserIds) this.data.hiddenLeaderboardUserIds = [];
+    const key = idOrUsername.trim();
+    if (!this.data.hiddenLeaderboardUserIds.includes(key)) this.data.hiddenLeaderboardUserIds.push(key);
+
+    const user = this.data.users.find(
+      u => u.id === key || u.firebaseUid === key || u.username === key || (u.email && u.email.toLowerCase() === key.toLowerCase())
+    );
+
+    if (user) {
+      user.hiddenFromLeaderboard = true;
+      if (user.id && !this.data.hiddenLeaderboardUserIds.includes(user.id)) this.data.hiddenLeaderboardUserIds.push(user.id);
+      if (user.username && !this.data.hiddenLeaderboardUserIds.includes(user.username)) this.data.hiddenLeaderboardUserIds.push(user.username);
+      if (user.firebaseUid && !this.data.hiddenLeaderboardUserIds.includes(user.firebaseUid)) this.data.hiddenLeaderboardUserIds.push(user.firebaseUid);
+    }
+    this.saveSync();
   }
 
   public get users(): User[] {

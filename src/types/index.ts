@@ -242,6 +242,12 @@ export interface SiteCustomizationConfig {
   adminStatusBadge?: string;
   adminThemePreset?: 'crimson-admin' | 'cyber-admin' | 'emerald-admin' | 'gold-admin' | 'obsidian-admin';
   adminShortcutsEnabled?: boolean;
+
+  // Another Website & Multi-Site Admin Configuration
+  externalAdminUrl?: string;
+  secondaryWebsiteUrl?: string;
+  secondaryWebsiteName?: string;
+  standaloneAdminEnabled?: boolean;
 }
 
 export interface PaymentGatewayConfig {
