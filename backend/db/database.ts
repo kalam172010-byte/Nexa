@@ -421,6 +421,7 @@ export class Database {
   public get gatewayConfig(): PaymentGatewayConfig { return this.data.gatewayConfig; }
   public get resellerConfig(): ResellerApiConfig { return this.data.resellerConfig; }
   public get siteConfig(): SiteCustomizationConfig { return this.data.siteConfig; }
+  public get siteSettings(): SiteCustomizationConfig { return this.data.siteConfig; }
   public get emailConfig(): EmailConfig {
     if (!this.data.emailConfig) {
       this.data.emailConfig = this.getDefaultEmailConfig();

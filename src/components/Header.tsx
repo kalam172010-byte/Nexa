@@ -173,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate, curren
           ))}
         </div>
 
-        {/* Admin Website Quick Access Launcher */}
+        {/* Admin Console Quick Access Button */}
         {(() => {
           const ADMIN_EMAILS = ['kk7953926@gmail.com', 'kalamkalam1234kd@gmail.com', 'kalam172010@gmail.com', 'admin@example.com'];
           const isAdmin =
@@ -187,16 +187,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer, onNavigate, curren
           return (
             <button
               type="button"
-              onClick={() => {
-                const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
-                window.open(url, '_blank');
-              }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md shadow-amber-950/40 cursor-pointer"
-              title="Open Admin Panel in Dedicated Website Window / Tab"
+              onClick={() => onNavigate('admin')}
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                currentPage === 'admin'
+                  ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md shadow-amber-500/30'
+                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/35'
+              }`}
+              title="Open Admin Control Panel"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden lg:inline">Admin Website</span>
-              <ExternalLink className="w-3 h-3 text-amber-400/80" />
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Admin Panel</span>
             </button>
           );
         })()}

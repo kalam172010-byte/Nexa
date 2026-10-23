@@ -98,7 +98,7 @@ export interface Transaction {
   userId: string;
   userEmail?: string;
   apiKey?: string;
-  type: 'DEPOSIT' | 'PURCHASE' | 'REFUND' | 'REFERRAL_BONUS' | 'ADMIN_ADJUST';
+  type: 'DEPOSIT' | 'PURCHASE' | 'REFUND' | 'REFERRAL_BONUS' | 'REFERRAL_COMMISSION' | 'ADMIN_ADJUST';
   amount: number;
   description: string;
   referenceId?: string;
@@ -158,6 +158,7 @@ export interface ReferralRecord {
   referrerId: string;
   referredUserId: string;
   referredUsername: string;
+  referralCode?: string;
   rewardEarned: number;
   hasPurchased: boolean;
   createdAt: string;
@@ -250,6 +251,9 @@ export interface SiteCustomizationConfig {
   minDepositAmount: number;
   resellerUpgradePrice: number;
   referralCommissionPct: number;
+  referralSignupBonus?: number;
+  minReferralWithdrawal?: number;
+  isReferralEnabled?: boolean;
   accountSafetyBalanceText: string;
 
   // Custom Admin Panel Personalization

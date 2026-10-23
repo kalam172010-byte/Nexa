@@ -2222,6 +2222,13 @@ export const api = {
 
   // Referrals
   getReferrals: () => request<any>('/referrals'),
+  getAdminReferrals: () => request<any>('/admin/referrals'),
+  updateReferralSettings: (body: any) =>
+    request<any>('/admin/referrals/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+  manualAssignReferral: (body: { userId: string; sponsorCodeOrUser: string }) =>
+    request<any>('/admin/referrals/assign', { method: 'POST', body: JSON.stringify(body) }),
+  creditReferralCommission: (body: { userId: string; amount: number; note?: string }) =>
+    request<any>('/admin/referrals/credit', { method: 'POST', body: JSON.stringify(body) }),
   getResellerApiCredentials: () => request<any>('/reseller/api-credentials'),
   regenerateResellerApiKey: () => request<any>('/reseller/api-credentials/regenerate', { method: 'POST' }),
 

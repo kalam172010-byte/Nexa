@@ -99,6 +99,12 @@ router.delete('/admin/users/:id', ...adminGuard, AdminController.deleteUser as a
 router.delete('/admin/top-active-users/:id', ...adminGuard, AdminController.removeTopActiveUser as any);
 router.delete('/top-active-users/:id', ...adminGuard, AdminController.removeTopActiveUser as any);
 
+// --- Admin Referral System Routes ---
+router.get('/admin/referrals', ...adminGuard, ReferralController.getAdminReferrals as any);
+router.patch('/admin/referrals/settings', ...adminGuard, ReferralController.updateReferralSettings as any);
+router.post('/admin/referrals/assign', ...adminGuard, ReferralController.manualAssignReferral as any);
+router.post('/admin/referrals/credit', ...adminGuard, ReferralController.creditReferralCommission as any);
+
 router.post('/admin/products', ...adminGuard, AdminController.createProduct as any);
 router.post('/admin/products/auto-assign-pids', ...adminGuard, AdminController.autoAssignPids as any);
 router.patch('/admin/products/:id/pid', ...adminGuard, AdminController.updateProductPid as any);

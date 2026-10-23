@@ -135,6 +135,7 @@ export const AdminPage: React.FC = () => {
     | 'reseller'
     | 'backup'
     | 'logs'
+    | 'referrals'
   >('dashboard');
 
   const [dashboardSection, setDashboardSection] = useState<'analytics' | 'financials' | 'all'>('all');
@@ -284,6 +285,137 @@ export const AdminPage: React.FC = () => {
   });
   const [isTestingBackend, setIsTestingBackend] = useState<boolean>(false);
   const [backendTestStatus, setBackendTestStatus] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Referral & Partner Program Management States
+  const [adminReferralsData, setAdminReferralsData] = useState<{
+    stats: {
+      totalReferredUsers: number;
+      totalCommissionsPaid: number;
+      activePartners: number;
+      currentCommissionPct: number;
+      signupBonus: number;
+      isEnabled: boolean;
+      minWithdrawal: number;
+    };
+    referrals: any[];
+    topReferrers: any[];
+    settings: any;
+  }>({
+    stats: {
+      totalReferredUsers: 0,
+      totalCommissionsPaid: 0,
+      activePartners: 0,
+      currentCommissionPct: 5,
+      signupBonus: 0,
+      isEnabled: true,
+      minWithdrawal: 100,
+    },
+    referrals: [],
+    topReferrers: [],
+    settings: {},
+  });
+  const [isReferralsLoading, setIsReferralsLoading] = useState(false);
+  const [referralsSearchQuery, setReferralsSearchQuery] = useState('');
+  const [referralSettingsForm, setReferralSettingsForm] = useState({
+    commissionPct: 5,
+    signupBonus: 0,
+    isEnabled: true,
+    minWithdrawal: 100,
+  });
+  const [isSavingReferralSettings, setIsSavingReferralSettings] = useState(false);
+
+  const [assignUserId, setAssignUserId] = useState('');
+  const [assignSponsorCode, setAssignSponsorCode] = useState('');
+  const [isAssigningReferral, setIsAssigningReferral] = useState(false);
+
+  const [creditUserId, setCreditUserId] = useState('');
+  const [creditAmount, setCreditAmount] = useState('');
+  const [creditNote, setCreditNote] = useState('');
+  const [isCreditingReferral, setIsCreditingReferral] = useState(false);
+
+  const fetchAdminReferrals = async () => {
+    setIsReferralsLoading(true);
+    try {
+      const res = await api.getAdminReferrals();
+      if (res && res.stats) {
+        setAdminReferralsData(res);
+        setReferralSettingsForm({
+          commissionPct: res.stats.currentCommissionPct ?? 5,
+          signupBonus: res.stats.signupBonus ?? 0,
+          isEnabled: res.stats.isEnabled ?? true,
+          minWithdrawal: res.stats.minWithdrawal ?? 100,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[AdminPage] fetchAdminReferrals note:', err);
+    } finally {
+      setIsReferralsLoading(false);
+    }
+  };
+
+  const handleSaveReferralSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingReferralSettings(true);
+    try {
+      await api.updateReferralSettings(referralSettingsForm);
+      showToastSuccess('Referral Settings Saved!', 'Global program settings updated successfully.');
+      await fetchAdminReferrals();
+    } catch (err: any) {
+      showToastError('Failed to save settings', err.message);
+    } finally {
+      setIsSavingReferralSettings(false);
+    }
+  };
+
+  const handleManualAssignReferral = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignUserId.trim() || !assignSponsorCode.trim()) {
+      showToastError('Validation Error', 'Please select a user and enter a sponsor referral code or username.');
+      return;
+    }
+    setIsAssigningReferral(true);
+    try {
+      const res = await api.manualAssignReferral({
+        userId: assignUserId.trim(),
+        sponsorCodeOrUser: assignSponsorCode.trim(),
+      });
+      showToastSuccess('User Linked to Sponsor!', res.message || 'Sponsor assigned successfully.');
+      setAssignUserId('');
+      setAssignSponsorCode('');
+      await fetchAdminReferrals();
+    } catch (err: any) {
+      showToastError('Assignment Failed', err.message);
+    } finally {
+      setIsAssigningReferral(false);
+    }
+  };
+
+  const handleCreditReferralCommission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(creditAmount);
+    if (!creditUserId.trim() || isNaN(amt) || amt <= 0) {
+      showToastError('Validation Error', 'Please select a partner user and enter a positive credit amount.');
+      return;
+    }
+    setIsCreditingReferral(true);
+    try {
+      const res = await api.creditReferralCommission({
+        userId: creditUserId.trim(),
+        amount: amt,
+        note: creditNote.trim() || 'Admin manual commission credit',
+      });
+      showToastSuccess('Commission Credited!', res.message || `₹${amt} credited to wallet.`);
+      setCreditUserId('');
+      setCreditAmount('');
+      setCreditNote('');
+      await fetchAdminReferrals();
+      await loadAllAdminData();
+    } catch (err: any) {
+      showToastError('Credit Failed', err.message);
+    } finally {
+      setIsCreditingReferral(false);
+    }
+  };
 
   const handleSaveCustomApiUrl = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -504,6 +636,7 @@ export const AdminPage: React.FC = () => {
         siteRes,
         emailRes,
         logsRes,
+        refRes,
       ] = await Promise.all([
         api.getAdminStats().catch(() => null),
         api.getAdminUsers().catch(() => ({ users: [] })),
@@ -516,7 +649,18 @@ export const AdminPage: React.FC = () => {
         api.getSiteSettings().catch(() => ({ config: null })),
         api.getEmailSettings().catch(() => ({ config: null })),
         api.getAdminLogs().catch(() => ({ logs: [] })),
+        api.getAdminReferrals().catch(() => null),
       ]);
+
+      if (refRes && refRes.stats) {
+        setAdminReferralsData(refRes);
+        setReferralSettingsForm({
+          commissionPct: refRes.stats.currentCommissionPct ?? 5,
+          signupBonus: refRes.stats.signupBonus ?? 0,
+          isEnabled: refRes.stats.isEnabled ?? true,
+          minWithdrawal: refRes.stats.minWithdrawal ?? 100,
+        });
+      }
 
       if (statsRes && typeof statsRes === 'object' && !('error' in statsRes)) {
         setStats(prev => ({
@@ -725,6 +869,9 @@ export const AdminPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'email' || activeTab === 'deposits') {
       fetchImap24x7Status();
+    }
+    if (activeTab === 'referrals') {
+      fetchAdminReferrals();
     }
   }, [activeTab]);
 
@@ -1881,6 +2028,74 @@ export const AdminPage: React.FC = () => {
           addLog(`User @${targetUser.username} status toggled.`, 'success');
         } else {
           addLog(`User "${targetIdentifier}" not found.`, 'error');
+        }
+        setIsPromptRunning(false);
+        return;
+      }
+
+      if (cmd === 'referral' || cmd === 'referrals' || cmd === 'ref') {
+        const sub = parts[1]?.toLowerCase();
+        if (sub === 'pct' || sub === 'commission' || sub === 'rate') {
+          const num = parseFloat(parts[2]);
+          if (!isNaN(num) && num >= 0 && num <= 100) {
+            await api.updateReferralSettings({ commissionPct: num });
+            addLog(`Referral commission updated to ${num}%`, 'success');
+            showToastSuccess(`Referral Commission set to ${num}%`);
+            await fetchAdminReferrals();
+          } else {
+            addLog('Usage: referral pct <0-100> (e.g. "referral pct 10")', 'error');
+          }
+        } else if (sub === 'bonus') {
+          const num = parseFloat(parts[2]);
+          if (!isNaN(num) && num >= 0) {
+            await api.updateReferralSettings({ signupBonus: num });
+            addLog(`Referral signup bonus updated to ₹${num}`, 'success');
+            showToastSuccess(`Signup bonus set to ₹${num}`);
+            await fetchAdminReferrals();
+          } else {
+            addLog('Usage: referral bonus <amount> (e.g. "referral bonus 50")', 'error');
+          }
+        } else if (sub === 'toggle' || sub === 'enable' || sub === 'disable') {
+          const nextState = sub === 'enable' ? true : sub === 'disable' ? false : !adminReferralsData.stats.isEnabled;
+          await api.updateReferralSettings({ isEnabled: nextState });
+          addLog(`Referral program ${nextState ? 'ENABLED' : 'DISABLED'}`, 'success');
+          showToastSuccess(`Referral Program ${nextState ? 'Enabled' : 'Disabled'}`);
+          await fetchAdminReferrals();
+        } else if (sub === 'assign') {
+          const targetUserStr = parts[2];
+          const sponsorStr = parts[3];
+          if (targetUserStr && sponsorStr) {
+            const targetU = users.find(u => (u.username || '').toLowerCase() === targetUserStr.toLowerCase() || (u.id || '').toLowerCase() === targetUserStr.toLowerCase());
+            if (targetU) {
+              const res = await api.manualAssignReferral({ userId: targetU.id, sponsorCodeOrUser: sponsorStr });
+              addLog(`Assigned sponsor ${sponsorStr} to @${targetU.username}: ${res.message}`, 'success');
+              showToastSuccess('Sponsor Assigned!');
+              await fetchAdminReferrals();
+            } else {
+              addLog(`User "${targetUserStr}" not found.`, 'error');
+            }
+          } else {
+            addLog('Usage: referral assign <username> <sponsorCodeOrUser>', 'error');
+          }
+        } else if (sub === 'credit') {
+          const partnerStr = parts[2];
+          const amt = parseFloat(parts[3]);
+          if (partnerStr && !isNaN(amt) && amt > 0) {
+            const partnerU = users.find(u => (u.username || '').toLowerCase() === partnerStr.toLowerCase() || (u.id || '').toLowerCase() === partnerStr.toLowerCase());
+            if (partnerU) {
+              const res = await api.creditReferralCommission({ userId: partnerU.id, amount: amt, note: 'Admin Prompt Credit' });
+              addLog(`Credited ₹${amt} commission to @${partnerU.username}`, 'success');
+              showToastSuccess(`Credited ₹${amt} commission to @${partnerU.username}`);
+              await fetchAdminReferrals();
+              await loadAllAdminData();
+            } else {
+              addLog(`Partner "${partnerStr}" not found.`, 'error');
+            }
+          } else {
+            addLog('Usage: referral credit <partnerUsername> <amount>', 'error');
+          }
+        } else {
+          addLog('Referral commands: referral pct <num>, referral bonus <amt>, referral assign <user> <sponsor>, referral credit <user> <amt>, referral toggle', 'info');
         }
         setIsPromptRunning(false);
         return;
@@ -3128,8 +3343,9 @@ export const AdminPage: React.FC = () => {
   const navTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Activity },
     { id: 'customization', label: 'Customization & Branding', icon: Palette },
-    { id: 'backup', label: '🌐 Another Website, Domain & Backup', icon: Globe },
+    { id: 'backup', label: '💾 Database Backup & Domain Settings', icon: Database },
     { id: 'users', label: 'Users', icon: Users },
+    { id: 'referrals', label: '🤝 Referrals & Partner Program', icon: TrendingUp },
     { id: 'products', label: 'Products', icon: ShoppingBag },
     { id: 'variants', label: 'Durations', icon: Layers },
     { id: 'user_reseller_api', label: 'User Reseller API System', icon: Terminal },
@@ -3179,18 +3395,6 @@ export const AdminPage: React.FC = () => {
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
-            type="button"
-            onClick={() => {
-              const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
-              window.open(url, '_blank');
-            }}
-            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/30 to-orange-500/30 hover:from-amber-500/50 hover:to-orange-500/50 text-amber-300 text-xs font-bold border border-amber-500/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-950/30"
-            title="Open Admin Panel in Dedicated Website Window"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Open in New Website</span>
-          </button>
-          <button
             onClick={() => setActiveTab('customization')}
             className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600/30 to-red-600/30 hover:from-rose-600/50 hover:to-red-600/50 text-rose-300 text-xs font-bold border border-rose-500/40 transition-all flex items-center gap-1.5"
           >
@@ -3207,200 +3411,7 @@ export const AdminPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Another Website & Standalone Admin Website Quick Launcher Banner */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-[#0e111a] to-cyan-950/40 border border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center shrink-0">
-            <Globe className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-xs sm:text-sm text-white">
-                Admin Panel in Another Website &amp; Standalone Website Window
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
-                MULTI-WEBSITE READY
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 mt-0.5">
-              Launch this Admin Panel as its own standalone website in a new window/tab, or embed and connect with an external website.
-            </p>
-          </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
-              window.open(url, '_blank');
-            }}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-extrabold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-            title="Open dedicated admin portal in fresh window"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Open Admin in New Window</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('backup')}
-            className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white border border-white/10 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Settings className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Another Website Settings</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ⚡ ADMIN PANEL PROMPT & FAST COMMAND CONSOLE */}
-      <div className="rounded-3xl bg-gradient-to-r from-[#0d0f1b] via-[#090b14] to-[#140f1f] border border-rose-500/35 shadow-2xl overflow-hidden transition-all">
-        {/* Prompt Header */}
-        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.06] bg-black/25">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-500/20 via-purple-500/20 to-amber-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center shrink-0 shadow-lg shadow-rose-950/40">
-              <Terminal className="w-5 h-5 text-rose-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-display font-black text-sm sm:text-base text-white tracking-wide flex items-center gap-1.5">
-                  <span>Admin Command Prompt &amp; Fast Terminal</span>
-                  <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-                </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-                  LIVE PROMPT READY
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Type natural admin commands or click quick action chips to instantly credit balances, generate keys, or broadcast alerts.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsAdminPromptOpen(prev => !prev)}
-              className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 text-xs font-semibold border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Terminal className="w-3.5 h-3.5 text-rose-400" />
-              <span>{isAdminPromptOpen ? 'Hide Terminal Logs' : 'Show Terminal Logs'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Prompt Input & Quick Action Chips */}
-        <div className="p-4 sm:p-5 space-y-4">
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              handleExecuteAdminPrompt();
-            }}
-            className="flex flex-col sm:flex-row items-stretch gap-2"
-          >
-            <div className="relative flex-1">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-xs font-bold text-emerald-400 select-none hidden sm:inline">
-                admin@kalam:~$
-              </span>
-              <input
-                type="text"
-                value={adminPromptInput}
-                onChange={e => setAdminPromptInput(e.target.value)}
-                placeholder="Enter prompt (e.g. 'credit kalam 500', 'gen 5 keys', 'notice Server OB55 Ready', 'goto users')..."
-                className="w-full sm:pl-32 pl-3.5 pr-4 py-3 rounded-2xl bg-[#07090f] border border-white/15 focus:border-rose-500/70 text-white text-xs sm:text-sm font-mono placeholder:text-slate-600 focus:outline-none transition-all shadow-inner"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isPromptRunning || !adminPromptInput.trim()}
-              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 disabled:opacity-50 text-white text-xs sm:text-sm font-black tracking-wide transition-all shadow-lg shadow-rose-950/50 flex items-center justify-center gap-2 cursor-pointer shrink-0 active:scale-95"
-            >
-              {isPromptRunning ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Executing...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4 text-amber-300" />
-                  <span>Run Prompt</span>
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Quick Action Prompt Chips */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mr-1">
-              ⚡ Quick Prompt Commands:
-            </span>
-            {[
-              { label: '💰 Credit ₹500 to Kalam', prompt: 'credit kalam 500' },
-              { label: '🔑 Generate 5 FF Keys', prompt: 'gen 5 freefire' },
-              { label: '📢 Post Global Notice', prompt: 'notice Kalam FF VIP Panel v5.0 Active! All keys online.' },
-              { label: '👥 Jump to Users', prompt: 'goto users' },
-              { label: '🛒 Jump to Products', prompt: 'goto products' },
-              { label: '🌐 Open Multi-Website', prompt: 'goto backup' },
-              { label: '💾 Export Backup', prompt: 'export' },
-              { label: '🟢 Status Ping', prompt: 'ping' },
-              { label: '❓ Help', prompt: 'help' },
-            ].map((chip, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleExecuteAdminPrompt(chip.prompt)}
-                className="px-2.5 py-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.09] border border-white/10 hover:border-rose-500/30 text-slate-300 hover:text-white font-mono text-[11px] transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-sm"
-              >
-                <span>{chip.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Collapsible Console Log Box */}
-          {isAdminPromptOpen && (
-            <div className="rounded-2xl bg-[#06070b] border border-white/10 p-3.5 space-y-2 font-mono text-xs max-h-48 overflow-y-auto no-scrollbar shadow-inner">
-              <div className="flex items-center justify-between text-[10px] text-slate-500 pb-1 border-b border-white/5">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>LIVE CONSOLE OUTPUT</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleExecuteAdminPrompt('clear')}
-                  className="text-slate-500 hover:text-slate-300 underline cursor-pointer"
-                >
-                  Clear Console
-                </button>
-              </div>
-
-              {adminPromptLogs.length === 0 ? (
-                <div className="text-slate-600 italic py-1">Console is cleared. Type a command above.</div>
-              ) : (
-                adminPromptLogs.map(log => (
-                  <div key={log.id} className="space-y-0.5 leading-relaxed">
-                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                      <span>[{log.timestamp}]</span>
-                      <span className="text-rose-400 font-bold">&gt; {log.command}</span>
-                    </div>
-                    <div
-                      className={`pl-3 whitespace-pre-wrap break-words text-[11px] ${
-                        log.status === 'success'
-                          ? 'text-emerald-400'
-                          : log.status === 'error'
-                          ? 'text-rose-400'
-                          : 'text-cyan-300'
-                      }`}
-                    >
-                      {log.output}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Admin Navigation Pills */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
@@ -4702,6 +4713,74 @@ export const AdminPage: React.FC = () => {
                 {users.filter(u => u.role !== 'USER').length}
               </div>
               <span className="text-[10px] text-slate-400">Privileged accounts</span>
+            </div>
+          </div>
+
+          {/* Top Active Members Admin Management Card */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-950/30 via-[#0d0e17] to-[#0a0c14] border border-amber-500/30 shadow-xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  🏆
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                    <span>Top Active Members &amp; Leaderboard Roster</span>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">ADMIN ONLY DELETION</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Leaderboard member standings. Delete or hide members from Top Active Members directly from this Admin Panel.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {users
+                .filter(u => !u.hiddenFromLeaderboard)
+                .slice()
+                .sort((a, b) => (b.keysCount || 0) - (a.keysCount || 0) || (b.balance || 0) - (a.balance || 0))
+                .slice(0, 6)
+                .map((u, idx) => (
+                  <div key={u.id} className="p-3 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between gap-2 hover:border-amber-500/30 transition-all">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 font-mono font-bold text-xs flex items-center justify-center shrink-0 border border-amber-500/30">
+                        #{idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white text-xs truncate">@{u.username}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">₹{Number(u.balance || 0).toFixed(0)} bal · {u.keysCount || 0} keys</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await api.removeTopActiveUser(u.id);
+                            showToastSuccess('Top Member Removed', `@${u.username} hidden from Top Active Members.`);
+                            loadAllAdminData();
+                          } catch (e: any) {
+                            showToastError('Remove Failed', e.message);
+                          }
+                        }}
+                        className="px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold border border-amber-500/30 transition-all cursor-pointer"
+                        title="Remove from Leaderboard Standings"
+                      >
+                        Hide Top
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteUser(u)}
+                        className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 hover:text-white border border-rose-500/30 transition-all cursor-pointer"
+                        title="Delete User Account"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
             </div>
           </div>
 
@@ -10100,457 +10179,484 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB: DOMAIN & BACKUP MIGRATION */}
-      {activeTab === 'backup' && (
+      {/* TAB: REFERRALS & PARTNER PROGRAM */}
+      {activeTab === 'referrals' && (
         <div className="space-y-6">
-          {/* ======================================================== */}
-          {/* 🌐 ANOTHER WEBSITE & MULTI-SITE ADMIN PORTAL MANAGER      */}
-          {/* ======================================================== */}
-          <div className="p-6 rounded-3xl bg-gradient-to-br from-[#0c121e] via-[#090b14] to-[#140c1a] border border-cyan-500/40 shadow-2xl space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-white/10 gap-4">
+          {/* Header Banner */}
+          <div className="p-6 rounded-3xl bg-gradient-to-r from-rose-950/40 via-[#0d0d14] to-amber-950/40 border border-rose-500/40 shadow-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/30 text-cyan-400 border border-cyan-500/40 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
-                  <Globe className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center shrink-0 shadow-lg shadow-rose-950/50">
+                  <Users className="w-6 h-6" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider">
-                      ANOTHER WEBSITE &amp; MULTI-SITE ADMIN PORTAL MANAGER
+                      REFERRAL &amp; PARTNER PROGRAM MANAGEMENT
                     </h3>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
-                      CROSS-SITE READY
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border uppercase ${
+                      adminReferralsData.stats.isEnabled
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                    }`}>
+                      {adminReferralsData.stats.isEnabled ? 'PROGRAM ACTIVE' : 'DISABLED'}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-1">
-                    Connect, embed, or host this Admin Panel on another website or external domain. Includes 1-click launch, live ping health check, and responsive embed codes.
+                    Manage affiliate commissions, assign manual sponsors, credit partner earnings, and audit all platform referral connections.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
-                    window.open(url, '_blank');
-                  }}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Launch Admin in New Website Window</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={fetchAdminReferrals}
+                disabled={isReferralsLoading}
+                className="px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 text-xs font-semibold border border-white/10 flex items-center gap-2 transition-colors cursor-pointer self-start sm:self-auto"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isReferralsLoading ? 'animate-spin text-rose-400' : ''}`} />
+                <span>Refresh Referrals</span>
+              </button>
             </div>
 
-            {/* Quick Standalone Website URL Share Bar */}
-            <div className="p-4 rounded-2xl bg-black/60 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="space-y-1">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 block">
-                  STANDALONE DEDICATED ADMIN WEBSITE URL
-                </span>
-                <p className="text-xs text-slate-300 font-mono select-all break-all">
-                  {typeof window !== 'undefined' ? `${window.location.origin}/#admin?standalone=true` : '/#admin?standalone=true'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const url = `${window.location.origin}/#admin?standalone=true`;
-                    navigator.clipboard.writeText(url);
-                    showToastSuccess('Copied to Clipboard!', 'Standalone Admin Website URL copied.');
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 hover:text-white border border-white/10 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Copy className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Copy Standalone URL</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const url = `${window.location.origin}/#admin?standalone=true`;
-                    window.open(url, '_blank');
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
-                >
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>Open URL Now</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Form: External Website Configuration & Health Ping */}
-            <form onSubmit={handleSaveExternalWebsiteSettings} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Field 1: Primary External Admin Website URL */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-300 block">
-                    EXTERNAL ADMIN WEBSITE URL (ANOTHER WEBSITE)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={externalWebsiteInput}
-                      onChange={e => setExternalWebsiteInput(e.target.value)}
-                      placeholder="https://admin.youranotherwebsite.com"
-                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-black/50 border border-cyan-500/30 text-white font-mono text-xs focus:border-cyan-400 focus:outline-none transition-colors"
-                    />
-                    {externalWebsiteInput && (
-                      <button
-                        type="button"
-                        onClick={() => window.open(externalWebsiteInput.startsWith('http') ? externalWebsiteInput : `https://${externalWebsiteInput}`, '_blank')}
-                        className="px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                        title="Visit External Website"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Visit</span>
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-400">
-                    If configured, clicking Admin in the user app opens this external website domain.
-                  </p>
-                </div>
-
-                {/* Field 2: Secondary / Partner Website URL */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-rose-300 block">
-                    SECONDARY / PARTNER STORE WEBSITE URL
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={secondaryWebsiteInput}
-                      onChange={e => setSecondaryWebsiteInput(e.target.value)}
-                      placeholder="https://secondary-store.com"
-                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-black/50 border border-rose-500/30 text-white font-mono text-xs focus:border-rose-400 focus:outline-none transition-colors"
-                    />
-                    {secondaryWebsiteInput && (
-                      <button
-                        type="button"
-                        onClick={() => window.open(secondaryWebsiteInput.startsWith('http') ? secondaryWebsiteInput : `https://${secondaryWebsiteInput}`, '_blank')}
-                        className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                        title="Visit Secondary Website"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Visit</span>
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-400">
-                    Linked external storefront or consumer portal for easy cross-site navigation.
-                  </p>
-                </div>
+            {/* 4 KPI Stat Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              <div className="p-4 rounded-2xl bg-[#080a12] border border-white/5 space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase font-bold block">Total Referred Users</span>
+                <div className="font-mono text-2xl font-black text-white">{adminReferralsData.stats.totalReferredUsers}</div>
+                <span className="text-[10px] text-slate-500 font-mono">Linked via referral codes</span>
               </div>
 
-              {/* Ping Result Banner if active */}
-              {externalSitePingResult && (
-                <div
-                  className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 font-mono animate-in fade-in ${
-                    externalSitePingResult.ok
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    {externalSitePingResult.ok ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                    )}
-                    <span>{externalSitePingResult.message}</span>
-                  </div>
-                  {externalSitePingResult.latencyMs !== undefined && (
-                    <span className="font-bold text-white px-2 py-0.5 rounded bg-black/40">
-                      {externalSitePingResult.latencyMs}ms
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Actions: Save Settings & Test Ping */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/5">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="submit"
-                    disabled={isSavingExternalSite}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>{isSavingExternalSite ? 'Saving...' : 'Save Another Website Settings'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={isTestingExternalSite || (!externalWebsiteInput && !secondaryWebsiteInput)}
-                    onClick={() => handleTestExternalWebsitePing()}
-                    className="px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 hover:text-white border border-white/10 text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingExternalSite ? 'animate-spin text-cyan-400' : ''}`} />
-                    <span>{isTestingExternalSite ? 'Pinging Website...' : 'Test Website Connection'}</span>
-                  </button>
-                </div>
-
-                {siteConfig.externalAdminUrl && (
-                  <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Active External Admin: {siteConfig.externalAdminUrl}
-                  </span>
-                )}
-              </div>
-            </form>
-
-            {/* Embed & Cross-Site Code Generator Tabs */}
-            <div className="space-y-3 pt-3 border-t border-white/10">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-display font-bold text-xs text-white uppercase tracking-wider">
-                    EMBED OR CONNECT THIS ADMIN PANEL ON ANOTHER WEBSITE
-                  </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Use these production snippets to embed this Admin Panel into another website or call APIs from external servers.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto no-scrollbar">
-                  {[
-                    { id: 'standalone_html', label: 'Standalone HTML Website (admin.html)' },
-                    { id: 'iframe', label: 'iFrame Embed' },
-                    { id: 'js', label: 'JavaScript API' },
-                    { id: 'php', label: 'PHP cURL' },
-                    { id: 'curl', label: 'cURL Terminal' },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setMultiSiteSnippetTab(tab.id as any)}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
-                        multiSiteSnippetTab === tab.id
-                          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black shadow'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
+              <div className="p-4 rounded-2xl bg-[#080a12] border border-emerald-500/20 space-y-1">
+                <span className="text-[10px] font-mono text-emerald-400 uppercase font-bold block">Commissions Paid</span>
+                <div className="font-mono text-2xl font-black text-emerald-400">₹{(adminReferralsData.stats.totalCommissionsPaid || 0).toFixed(2)}</div>
+                <span className="text-[10px] text-emerald-400/80 font-mono">Total partner earnings</span>
               </div>
 
-              {/* Tab 0: Standalone HTML Website (admin.html) */}
-              {multiSiteSnippetTab === 'standalone_html' && (
-                <div className="space-y-4">
-                  <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#0c0f1d] via-[#090b14] to-cyan-950/30 border border-cyan-500/30 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 uppercase">
-                          STANDALONE ADMIN WEBSITE FILE
-                        </span>
-                        <h5 className="font-bold text-sm text-white mt-1">
-                          Deploy This Admin Panel as an Independent Website on Any Domain / Host
-                        </h5>
-                        <p className="text-xs text-slate-300 mt-0.5">
-                          A complete, single-file responsive admin website portal (<code className="text-amber-300 font-mono">admin.html</code>) pre-configured with your backend REST APIs and CORS support.
-                        </p>
-                      </div>
+              <div className="p-4 rounded-2xl bg-[#080a12] border border-amber-500/20 space-y-1">
+                <span className="text-[10px] font-mono text-amber-400 uppercase font-bold block">Active Partners</span>
+                <div className="font-mono text-2xl font-black text-amber-400">{adminReferralsData.stats.activePartners}</div>
+                <span className="text-[10px] text-amber-400/80 font-mono">Referrers with earnings</span>
+              </div>
 
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        <a
-                          href="/admin.html"
-                          download="kalam-ff-admin-website.html"
-                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs transition-all shadow-lg flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Download admin.html</span>
-                        </a>
-
-                        <button
-                          type="button"
-                          onClick={() => window.open(`${window.location.origin}/admin.html`, '_blank')}
-                          className="px-3.5 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-200 hover:text-white border border-white/10 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>Open /admin.html</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
-                      <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                        <div className="font-bold text-cyan-400 flex items-center gap-1.5">
-                          <span>1. Upload to Any Host</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          Drop <code className="text-slate-300">admin.html</code> into WordPress root, cPanel <code className="text-slate-300">public_html</code>, Netlify, Cloudflare Pages, or Vercel.
-                        </p>
-                      </div>
-
-                      <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                        <div className="font-bold text-emerald-400 flex items-center gap-1.5">
-                          <span>2. Zero Backend Setup</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          Pre-configured to talk directly to your live API at <code className="text-slate-300 font-mono text-[10px]">{window.location.origin}</code> with full CORS headers.
-                        </p>
-                      </div>
-
-                      <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                        <div className="font-bold text-amber-400 flex items-center gap-1.5">
-                          <span>3. Master Key Auth</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          Uses your Master Admin Key (<code className="text-amber-300 font-mono">kalam_admin_master_secret_2026</code>) for 100% unrestricted admin permissions.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 1: iFrame Embed */}
-              {multiSiteSnippetTab === 'iframe' && (
-                <div className="space-y-2">
-                  <div className="p-3.5 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs text-slate-300 relative group">
-                    <pre className="overflow-x-auto whitespace-pre-wrap select-all text-cyan-300">
-{`<!-- Embed Kalam FF Admin Panel in Another Website -->
-<iframe
-  src="${typeof window !== 'undefined' ? `${window.location.origin}/#admin?standalone=true` : 'https://your-domain.com/#admin?standalone=true'}"
-  width="100%"
-  height="960px"
-  frameborder="0"
-  style="border: none; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);"
-  allow="clipboard-read; clipboard-write"
-></iframe>`}
-                    </pre>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const snippet = `<!-- Embed Kalam FF Admin Panel in Another Website -->\n<iframe\n  src="${window.location.origin}/#admin?standalone=true"\n  width="100%"\n  height="960px"\n  frameborder="0"\n  style="border: none; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);"\n  allow="clipboard-read; clipboard-write"\n></iframe>`;
-                        navigator.clipboard.writeText(snippet);
-                        showToastSuccess('Copied to Clipboard!', 'iFrame embed code copied.');
-                      }}
-                      className="absolute top-3 right-3 p-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white transition-colors cursor-pointer"
-                      title="Copy iFrame Code"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-400">
-                    Paste this iframe into WordPress, Webflow, Shopify, or any HTML/PHP page on another website to display this admin panel.
-                  </p>
-                </div>
-              )}
-
-              {/* Tab 2: JavaScript Fetch */}
-              {multiSiteSnippetTab === 'js' && (
-                <div className="space-y-2">
-                  <div className="p-3.5 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs text-slate-300 relative group">
-                    <pre className="overflow-x-auto whitespace-pre-wrap select-all text-purple-300">
-{`// Connect to Admin Panel from JavaScript on Another Website
-const API_BASE = "${typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}";
-
-// 1. Fetch Users Roster
-const usersRes = await fetch(\`\${API_BASE}/api/admin/users\`, {
-  headers: {
-    "x-admin-key": "kalam_admin_master_secret_2026",
-    "x-user-email": "kalam172010@gmail.com"
-  }
-});
-const { users } = await usersRes.json();
-console.log("Users:", users);
-
-// 2. Adjust User Balance (+₹500)
-await fetch(\`\${API_BASE}/api/admin/users/\${users[0].id}/adjust-balance\`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "x-admin-key": "kalam_admin_master_secret_2026",
-    "x-user-email": "kalam172010@gmail.com"
-  },
-  body: JSON.stringify({ amount: 500, reason: "Credit from External Admin Website" })
-});`}
-                    </pre>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const snippet = `// Connect to Admin Panel from JavaScript on Another Website\nconst API_BASE = "${window.location.origin}";\n\n// 1. Fetch Users Roster\nconst usersRes = await fetch(\`\${API_BASE}/api/admin/users\`, {\n  headers: {\n    "x-admin-key": "kalam_admin_master_secret_2026",\n    "x-user-email": "kalam172010@gmail.com"\n  }\n});\nconst { users } = await usersRes.json();\nconsole.log("Users:", users);\n\n// 2. Adjust User Balance (+₹500)\nawait fetch(\`\${API_BASE}/api/admin/users/\${users[0].id}/adjust-balance\`, {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "x-admin-key": "kalam_admin_master_secret_2026",\n    "x-user-email": "kalam172010@gmail.com"\n  },\n  body: JSON.stringify({ amount: 500, reason: "Credit from External Admin Website" })\n});`;
-                        navigator.clipboard.writeText(snippet);
-                        showToastSuccess('Copied to Clipboard!', 'JavaScript snippet copied.');
-                      }}
-                      className="absolute top-3 right-3 p-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white transition-colors cursor-pointer"
-                      title="Copy JS Snippet"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 3: PHP cURL */}
-              {multiSiteSnippetTab === 'php' && (
-                <div className="space-y-2">
-                  <div className="p-3.5 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs text-slate-300 relative group">
-                    <pre className="overflow-x-auto whitespace-pre-wrap select-all text-emerald-300">
-{`<?php
-// Connect to Kalam FF Panel from Another Website using PHP
-$apiUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/admin/users";
-$ch = curl_init($apiUrl);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "x-admin-key: kalam_admin_master_secret_2026",
-    "x-user-email: kalam172010@gmail.com",
-    "Content-Type: application/json"
-]);
-$response = curl_exec($ch);
-curl_close($ch);
-$data = json_decode($response, true);
-print_r($data);
-?>`}
-                    </pre>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const snippet = `<?php\n// Connect to Kalam FF Panel from Another Website using PHP\n$apiUrl = "${window.location.origin}/api/admin/users";\n$ch = curl_init($apiUrl);\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\ncurl_setopt($ch, CURLOPT_HTTPHEADER, [\n    "x-admin-key: kalam_admin_master_secret_2026",\n    "x-user-email: kalam172010@gmail.com",\n    "Content-Type: application/json"\n]);\n$response = curl_exec($ch);\ncurl_close($ch);\n$data = json_decode($response, true);\nprint_r($data);\n?>`;
-                        navigator.clipboard.writeText(snippet);
-                        showToastSuccess('Copied to Clipboard!', 'PHP code copied.');
-                      }}
-                      className="absolute top-3 right-3 p-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white transition-colors cursor-pointer"
-                      title="Copy PHP Code"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 4: cURL Command */}
-              {multiSiteSnippetTab === 'curl' && (
-                <div className="space-y-2">
-                  <div className="p-3.5 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs text-slate-300 relative group">
-                    <pre className="overflow-x-auto whitespace-pre-wrap select-all text-amber-300">
-{`# Query live stats from another server or terminal
-curl -X GET "${typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/admin/stats" \\
-     -H "x-admin-key: kalam_admin_master_secret_2026" \\
-     -H "x-user-email: kalam172010@gmail.com" \\
-     -H "Content-Type: application/json"`}
-                    </pre>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const snippet = `curl -X GET "${window.location.origin}/api/admin/stats" -H "x-admin-key: kalam_admin_master_secret_2026" -H "x-user-email: kalam172010@gmail.com" -H "Content-Type: application/json"`;
-                        navigator.clipboard.writeText(snippet);
-                        showToastSuccess('Copied to Clipboard!', 'cURL command copied.');
-                      }}
-                      className="absolute top-3 right-3 p-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 hover:text-white transition-colors cursor-pointer"
-                      title="Copy cURL Command"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
+              <div className="p-4 rounded-2xl bg-[#080a12] border border-rose-500/20 space-y-1">
+                <span className="text-[10px] font-mono text-rose-400 uppercase font-bold block">Commission Rate</span>
+                <div className="font-mono text-2xl font-black text-rose-400">{adminReferralsData.stats.currentCommissionPct}%</div>
+                <span className="text-[10px] text-slate-500 font-mono">Per deposit purchase</span>
+              </div>
             </div>
           </div>
 
+          {/* Global Referral Program Settings Form */}
+          <div className="p-6 rounded-3xl bg-[#0d0d14] border border-white/10 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Settings className="w-4 h-4 text-rose-400" />
+                <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                  GLOBAL REFERRAL PROGRAM CONFIGURATION
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono text-slate-400">Site-wide affiliate rules</span>
+            </div>
+
+            <form onSubmit={handleSaveReferralSettings} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                {/* Program Enable Switch */}
+                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">PROGRAM STATUS</span>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-xs font-bold text-white">
+                      {referralSettingsForm.isEnabled ? '🟢 Enabled' : '🔴 Disabled'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setReferralSettingsForm(prev => ({ ...prev, isEnabled: !prev.isEnabled }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                        referralSettingsForm.isEnabled ? 'bg-emerald-500' : 'bg-slate-700'
+                      }`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        referralSettingsForm.isEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Commission % */}
+                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">COMMISSION RATE (%)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={referralSettingsForm.commissionPct}
+                      onChange={e => setReferralSettingsForm(prev => ({ ...prev, commissionPct: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-mono font-bold text-sm focus:border-rose-500 focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-slate-400 text-xs">%</span>
+                  </div>
+                </div>
+
+                {/* Signup Bonus */}
+                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">NEW SIGNUP BONUS (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-slate-400 text-xs">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={referralSettingsForm.signupBonus}
+                      onChange={e => setReferralSettingsForm(prev => ({ ...prev, signupBonus: parseFloat(e.target.value) || 0 }))}
+                      className="w-full pl-7 pr-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-mono font-bold text-sm focus:border-rose-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Min Withdrawal */}
+                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MIN WITHDRAWAL (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-slate-400 text-xs">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={referralSettingsForm.minWithdrawal}
+                      onChange={e => setReferralSettingsForm(prev => ({ ...prev, minWithdrawal: parseFloat(e.target.value) || 0 }))}
+                      className="w-full pl-7 pr-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-mono font-bold text-sm focus:border-rose-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="submit"
+                  disabled={isSavingReferralSettings}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingReferralSettings ? 'Saving Settings...' : 'Save Program Settings'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Two-Column Action Tools: 1. Manual Sponsor Assignment Tool  2. Manual Commission Credit Tool */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Tool 1: Manual Sponsor Assignment */}
+            <div className="p-6 rounded-3xl bg-[#0d0d14] border border-white/10 shadow-xl space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-white/5">
+                <UserCheck className="w-4 h-4 text-cyan-400" />
+                <div>
+                  <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    MANUALLY LINK USER TO SPONSOR
+                  </h4>
+                  <p className="text-[11px] text-slate-400">Assign an existing account to a referrer sponsor code</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleManualAssignReferral} className="space-y-3.5">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    SELECT REFERRED USER ACCOUNT
+                  </label>
+                  <select
+                    value={assignUserId}
+                    onChange={e => setAssignUserId(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-xs"
+                  >
+                    <option value="" className="bg-[#0d0d14]">-- Select User Account --</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id} className="bg-[#0d0d14]">
+                        @{u.username} ({u.email || u.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    SPONSOR REFERRAL CODE OR USERNAME
+                  </label>
+                  <input
+                    type="text"
+                    value={assignSponsorCode}
+                    onChange={e => setAssignSponsorCode(e.target.value)}
+                    placeholder="e.g. NXKALAM1 or kalam"
+                    required
+                    className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white font-mono text-xs focus:border-cyan-500 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Enter sponsor's referral code or exact username.</p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isAssigningReferral || !assignUserId || !assignSponsorCode.trim()}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isAssigningReferral ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Link User to Sponsor</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+
+            {/* Tool 2: Manual Referral Commission Credit */}
+            <div className="p-6 rounded-3xl bg-[#0d0d14] border border-white/10 shadow-xl space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-white/5">
+                <DollarSign className="w-4 h-4 text-emerald-400" />
+                <div>
+                  <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                    MANUAL COMMISSION WALLET CREDIT
+                  </h4>
+                  <p className="text-[11px] text-slate-400">Directly pay referral bonus or reward balance to partner</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreditReferralCommission} className="space-y-3.5">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    SELECT PARTNER USER ACCOUNT
+                  </label>
+                  <select
+                    value={creditUserId}
+                    onChange={e => setCreditUserId(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-xs"
+                  >
+                    <option value="" className="bg-[#0d0d14]">-- Select Partner Account --</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id} className="bg-[#0d0d14]">
+                        @{u.username} (Code: {u.referralCode || 'None'}) - Bal: ₹{Number(u.balance || 0).toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      CREDIT AMOUNT (₹)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-slate-400 text-xs">₹</span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="1"
+                        value={creditAmount}
+                        onChange={e => setCreditAmount(e.target.value)}
+                        placeholder="e.g. 250"
+                        required
+                        className="w-full pl-7 pr-3 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white font-mono font-bold text-xs focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      AUDIT NOTE / REASON
+                    </label>
+                    <input
+                      type="text"
+                      value={creditNote}
+                      onChange={e => setCreditNote(e.target.value)}
+                      placeholder="e.g. Partner Leaderboard Reward"
+                      className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-xs focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isCreditingReferral || !creditUserId || !creditAmount || parseFloat(creditAmount) <= 0}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isCreditingReferral ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Credit Commission to Wallet</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Top Referrers Leaderboard */}
+          <div className="p-6 rounded-3xl bg-[#0d0d14] border border-white/10 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-amber-400" />
+                <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                  TOP PARTNER &amp; REFERRER LEADERBOARD
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono text-slate-400">Ranked by total referral earnings</span>
+            </div>
+
+            {(!adminReferralsData.topReferrers || adminReferralsData.topReferrers.length === 0) ? (
+              <div className="p-8 text-center text-xs text-slate-500 font-mono">
+                No active referrers yet. Share user referral codes to start earning commissions!
+              </div>
+            ) : (
+              <div className="overflow-x-auto no-scrollbar">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 font-mono text-[10px] text-slate-400 uppercase">
+                      <th className="py-2.5 px-3">Rank</th>
+                      <th className="py-2.5 px-3">Partner / Referrer</th>
+                      <th className="py-2.5 px-3">Referral Code</th>
+                      <th className="py-2.5 px-3 text-center">Referred Users</th>
+                      <th className="py-2.5 px-3 text-right">Total Commission Paid</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {adminReferralsData.topReferrers.map((ref, idx) => (
+                      <tr key={ref.id || idx} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 px-3 font-mono font-bold">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${
+                            idx === 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-black' :
+                            idx === 1 ? 'bg-slate-300/20 text-slate-200 border border-slate-300/40' :
+                            idx === 2 ? 'bg-amber-700/20 text-amber-400 border border-amber-700/40' :
+                            'bg-white/5 text-slate-400'
+                          }`}>
+                            #{idx + 1}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-bold text-white">
+                          @{ref.username}
+                          <span className="block text-[10px] font-normal text-slate-400 font-mono">{ref.email}</span>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-amber-300 font-bold">
+                          {ref.referralCode}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-bold text-white">
+                          {ref.referredCount} Users
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400">
+                          ₹{(ref.totalEarned || 0).toFixed(2)}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCreditUserId(ref.id);
+                              setCreditAmount('100');
+                              setCreditNote('Partner Leaderboard Bonus');
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-mono text-[10px] font-bold transition-all cursor-pointer"
+                          >
+                            + Credit Bonus
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Full Referrals Audit Log Table */}
+          <div className="p-6 rounded-3xl bg-[#0d0d14] border border-white/10 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-rose-400" />
+                <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
+                  ALL SYSTEM REFERRALS AUDIT LOG
+                </h4>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={referralsSearchQuery}
+                  onChange={e => setReferralsSearchQuery(e.target.value)}
+                  placeholder="Search by sponsor or user..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-black/40 border border-white/10 rounded-xl text-white text-xs placeholder:text-slate-600 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {(!adminReferralsData.referrals || adminReferralsData.referrals.length === 0) ? (
+              <div className="p-8 text-center text-xs text-slate-500 font-mono">
+                No user referrals recorded yet in the database.
+              </div>
+            ) : (
+              <div className="overflow-x-auto no-scrollbar">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 font-mono text-[10px] text-slate-400 uppercase">
+                      <th className="py-2.5 px-3">Sponsor / Referrer</th>
+                      <th className="py-2.5 px-3">Referred User Account</th>
+                      <th className="py-2.5 px-3">Linked Date</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3 text-right">Reward Paid</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {adminReferralsData.referrals
+                      .filter(r => {
+                        if (!referralsSearchQuery.trim()) return true;
+                        const q = referralsSearchQuery.toLowerCase();
+                        return (
+                          (r.referrerUsername || '').toLowerCase().includes(q) ||
+                          (r.referredUsername || '').toLowerCase().includes(q) ||
+                          (r.referrerEmail || '').toLowerCase().includes(q) ||
+                          (r.referredEmail || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .map((ref, idx) => (
+                        <tr key={ref.id || idx} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="py-3 px-3 font-bold text-white">
+                            @{ref.referrerUsername}
+                            <span className="block text-[10px] font-normal text-slate-400 font-mono">{ref.referrerEmail}</span>
+                          </td>
+                          <td className="py-3 px-3 font-bold text-slate-200">
+                            @{ref.referredUsername}
+                            <span className="block text-[10px] font-normal text-slate-400 font-mono">{ref.referredEmail}</span>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-slate-400">
+                            {ref.createdAt ? new Date(ref.createdAt).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border uppercase ${
+                              ref.hasPurchased
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                : 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                            }`}>
+                              {ref.hasPurchased ? 'ACTIVE / PURCHASED' : 'REGISTERED'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400">
+                            ₹{Number(ref.rewardEarned || 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: DOMAIN & BACKUP MIGRATION */}
+      {activeTab === 'backup' && (
+        <div className="space-y-6">
           {/* Reassurance Hero Banner */}
           <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-950/40 via-[#0d0d14] to-cyan-950/40 border border-emerald-500/40 shadow-2xl space-y-4">
             <div className="flex items-start gap-3">

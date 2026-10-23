@@ -20,6 +20,8 @@ import {
   Eye,
   Smartphone,
   Cpu,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { Product, ProductVariant } from '../types/index.js';
 import { api } from '../services/api.js';
@@ -48,10 +50,12 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(() => api.getCachedProductsSync().length === 0);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Filters
+  // Filters & Mobile Layout Mode
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [gameFilter, setGameFilter] = useState<string>('ALL GAMES');
   const [deviceFilter, setDeviceFilter] = useState<string>('ALL SYSTEMS');
+  const [viewMode, setViewMode] = useState<'cards' | 'compact'>('cards');
+  const [selectedCompactVariantMap, setSelectedCompactVariantMap] = useState<Record<string, string>>({});
 
   // Track which product cards have their "Purchase Key" duration list expanded
   const [expandedProductIds, setExpandedProductIds] = useState<Record<string, boolean>>({});
@@ -238,48 +242,86 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     return matchGame && matchDevice;
   });
 
+  const getVariantPrice = (variant: ProductVariant) =>
+    Number(role === 'RESELLER' && variant.resellerPrice ? variant.resellerPrice : variant.price);
+
+  const getStartingPrice = (product: Product): number | null => {
+    if (!product.variants || product.variants.length === 0) return null;
+    const prices = product.variants.map(getVariantPrice).filter(p => !Number.isNaN(p) && p >= 0);
+    return prices.length > 0 ? Math.min(...prices) : null;
+  };
+
   return (
-    <div className="space-y-6 w-full max-w-full">
+    <div className="space-y-3.5 sm:space-y-6 w-full max-w-full overflow-x-hidden">
       {/* Dynamic Cyber Hero Header */}
-      <div className="p-4 sm:p-6 rounded-3xl bg-gradient-to-r from-[#14182e] via-[#0e1224] to-[#151a33] border border-cyan-500/25 shadow-[0_4px_30px_rgba(6,182,212,0.15)] space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-[#14182e] via-[#0e1224] to-[#151a33] border border-cyan-500/25 shadow-[0_4px_30px_rgba(6,182,212,0.15)] space-y-3 sm:space-y-4 overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 min-w-0">
           <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[10px] font-mono font-bold flex items-center gap-1.5 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                <span>OFFICIAL VIP KEY STORE</span>
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-[10px] sm:text-[11px] font-mono font-bold">
+              <span className="text-cyan-300 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+                <span className="truncate">OFFICIAL VIP KEY STORE</span>
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold">
-                ● 100% ANTI-BAN ACTIVE
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-mono font-bold">
-                ⚡ INSTANT DISPATCH
-              </span>
+              <span className="text-slate-600" aria-hidden="true">·</span>
+              <span className="text-emerald-400 truncate">100% ANTI-BAN</span>
+              <span className="text-slate-600" aria-hidden="true">·</span>
+              <span className="text-amber-300 truncate">INSTANT DISPATCH</span>
             </div>
-            <h2 className="font-display font-black text-xl sm:text-3xl text-white tracking-tight">
-              VIP License Catalog & Key Dispatch
+            <h2 className="font-display font-black text-base sm:text-2xl md:text-3xl text-white tracking-tight leading-snug break-words">
+              VIP License Catalog &amp; Key Dispatch
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300">
-              Click <span className="text-rose-400 font-bold">Purchase Key</span> on any product below to view all durations and tap <span className="text-emerald-400 font-bold">Buy Now</span>.
+            <p className="text-[11px] sm:text-sm text-slate-300 leading-relaxed break-words">
+              Tap <span className="text-rose-400 font-bold">Purchase Key</span> on any package or switch to <span className="text-cyan-400 font-bold">Quick Compact</span> view for 1-tap mobile checkout.
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
-            <div className="relative flex-1 md:w-64 min-w-0">
-              <Search className="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full md:w-auto min-w-0">
+            <div className="relative flex-1 md:w-56 min-w-0">
+              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search software package..."
-                className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-[#0a0d18] border border-white/10 focus:border-cyan-400 text-xs text-white placeholder:text-slate-500 focus:outline-none transition-colors shadow-inner font-medium"
+                placeholder="Search package..."
+                className="w-full min-h-[42px] pl-8 sm:pl-9 pr-3 py-2 rounded-xl bg-[#0a0d18] border border-white/10 focus:border-cyan-400 text-xs text-white placeholder:text-slate-500 focus:outline-none transition-colors shadow-inner font-medium"
               />
+            </div>
+
+            {/* Layout Mode Switcher: Cards vs Quick Compact */}
+            <div className="flex items-center p-1 rounded-xl bg-[#0a0d18] border border-white/10 shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-400/50 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Detailed Card View"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden xs:inline sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('compact')}
+                className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  viewMode === 'compact'
+                    ? 'bg-rose-500/25 text-rose-300 border border-rose-400/50 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Quick Compact Mobile View"
+              >
+                <List className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden xs:inline sm:inline">Compact</span>
+              </button>
             </div>
 
             <button
               type="button"
               onClick={() => fetchProducts(false)}
-              className="px-3.5 py-2.5 rounded-xl bg-[#101428] hover:bg-[#181f3d] text-slate-200 hover:text-white text-xs font-bold border border-cyan-500/30 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-md"
+              className="min-h-[42px] px-3 py-2 rounded-xl bg-[#101428] hover:bg-[#181f3d] active:scale-95 text-slate-200 hover:text-white text-xs font-bold border border-cyan-500/30 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-md"
+              aria-label="Refresh Catalog"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
@@ -287,16 +329,17 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
           </div>
         </div>
 
-        {/* Colorful Segmented Filter Pills */}
-        <div className="pt-2 border-t border-white/[0.08] space-y-2.5">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+        {/* Touch-Friendly Segmented Filter Controls */}
+        <div className="pt-2.5 border-t border-white/[0.08] space-y-2 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5 max-w-full">
             {gameFilters.map(tab => {
               const isActive = gameFilter === tab;
               return (
                 <button
                   key={tab}
+                  type="button"
                   onClick={() => setGameFilter(tab)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                  className={`min-h-[38px] sm:min-h-[40px] px-3 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
                     isActive
                       ? 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 text-white shadow-lg shadow-rose-950/60 border border-white/30'
                       : 'text-slate-400 hover:text-white bg-[#090c18] hover:bg-white/[0.08] border border-white/10'
@@ -308,14 +351,15 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
             })}
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5 max-w-full">
             {deviceFilters.map(dTab => {
               const isActive = deviceFilter === dTab;
               return (
                 <button
                   key={dTab}
+                  type="button"
                   onClick={() => setDeviceFilter(dTab)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                  className={`min-h-[34px] sm:min-h-[36px] px-2.5 sm:px-3 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
                     isActive
                       ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-400/60 shadow-md shadow-cyan-950/50'
                       : 'text-slate-400 hover:text-slate-200 bg-[#090c18]/80 hover:bg-white/[0.05] border border-white/5'
@@ -331,18 +375,18 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
       {/* Products Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-5">
           {[1, 2].map(n => (
-            <div key={n} className="h-96 rounded-3xl bg-[#101424] border border-white/10 animate-pulse" />
+            <div key={n} className="h-80 sm:h-96 rounded-2xl sm:rounded-3xl bg-[#101424] border border-white/10 animate-pulse" />
           ))}
         </div>
       ) : products.length === 0 ? (
-        <div className="p-10 text-center rounded-3xl bg-[#101424] border border-white/10 space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-400 shadow-lg">
-            <ShoppingBag className="w-7 h-7" />
+        <div className="p-6 sm:p-10 text-center rounded-2xl sm:rounded-3xl bg-[#101424] border border-white/10 space-y-3 sm:space-y-4">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-400 shadow-lg">
+            <ShoppingBag className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
           <div className="space-y-1">
-            <h4 className="text-white font-display font-bold text-lg">
+            <h4 className="text-white font-display font-bold text-base sm:text-lg">
               No Products Configured
             </h4>
             <p className="text-slate-400 text-xs max-w-sm mx-auto">
@@ -353,32 +397,163 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
             <button
               type="button"
               onClick={onNavigateAdmin}
-              className="px-6 py-3 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white rounded-xl text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer shadow-lg"
+              className="min-h-[42px] px-5 py-2.5 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white rounded-xl text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer shadow-lg"
             >
               <span>Add Product in Admin Console</span>
             </button>
           )}
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="p-10 text-center rounded-3xl bg-[#101424] border border-white/10 space-y-3">
-          <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
-          <h4 className="text-white font-display font-bold text-base">No Matching Products</h4>
+        <div className="p-6 sm:p-10 text-center rounded-2xl sm:rounded-3xl bg-[#101424] border border-white/10 space-y-3">
+          <AlertCircle className="w-7 h-7 sm:w-8 sm:h-8 text-rose-400 mx-auto" />
+          <h4 className="text-white font-display font-bold text-sm sm:text-base">No Matching Products</h4>
           <p className="text-slate-400 text-xs max-w-sm mx-auto">
             No products match the selected category or system filters.
           </p>
           <button
+            type="button"
             onClick={() => {
               setGameFilter('ALL GAMES');
               setDeviceFilter('ALL SYSTEMS');
               setSearchQuery('');
             }}
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            className="min-h-[40px] px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
             Reset Filters
           </button>
         </div>
+      ) : viewMode === 'compact' ? (
+        /* IDEA 2: Ultra-Compact Mobile Quick-Buy Grid (Zero Banner Scroll, Inline Duration Selector) */
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-full">
+          {filteredProducts.map(product => {
+            const variants = product.variants || [];
+            const selectedVarId = selectedCompactVariantMap[product.id] || variants[0]?.id;
+            const activeVariant = variants.find(v => v.id === selectedVarId) || variants[0];
+            const activePrice = activeVariant ? getVariantPrice(activeVariant) : 0;
+            const hasExternalApi = Boolean(
+              (activeVariant as any)?.externalPid || product.externalPid
+            );
+            const isOutOfStock =
+              !activeVariant || (!hasExternalApi && (activeVariant.stockCount ?? 15) <= 0);
+
+            return (
+              <div
+                key={product.id}
+                className="p-3.5 rounded-2xl bg-gradient-to-b from-[#13172e] to-[#0b0e1c] border border-cyan-500/25 hover:border-cyan-400/50 transition-all space-y-3 min-w-0 shadow-lg"
+              >
+                {/* Compact Row Header */}
+                <div className="flex items-start justify-between gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500/20 via-rose-500/20 to-amber-500/20 border border-cyan-400/30 flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-5 h-5 text-cyan-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-slate-400">
+                        <span className="text-cyan-300 truncate">{product.game || 'FREE FIRE'}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="text-emerald-400 truncate">{product.deviceType || 'NONROOT'}</span>
+                      </div>
+                      <h3 className="font-display font-extrabold text-sm sm:text-base text-white truncate">
+                        {product.name}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setActiveFileModal(product)}
+                      className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center justify-center cursor-pointer active:scale-95"
+                      title="Download Loader File"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveVideoModal(product)}
+                      className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-300 flex items-center justify-center cursor-pointer active:scale-95"
+                      title="Watch Gameplay Video"
+                    >
+                      <PlaySquare className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Inline Touch Duration Selector Chips + Instant Buy Bar */}
+                {product.isUnderMaintenance ? (
+                  <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-300 font-bold flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Temporarily Under Maintenance</span>
+                  </div>
+                ) : variants.length > 0 ? (
+                  <div className="space-y-2.5 pt-2 border-t border-white/[0.08] min-w-0">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 min-w-0">
+                      {variants.map(v => {
+                        const isSelected = activeVariant?.id === v.id;
+                        const vP = getVariantPrice(v);
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() =>
+                              setSelectedCompactVariantMap(prev => ({
+                                ...prev,
+                                [product.id]: v.id,
+                              }))
+                            }
+                            className={`min-h-[38px] px-2.5 py-1.5 rounded-xl text-left transition-all cursor-pointer border min-w-0 flex flex-col justify-center ${
+                              isSelected
+                                ? 'bg-rose-500/20 border-rose-500 text-white shadow-sm'
+                                : 'bg-[#090c18] border-white/10 text-slate-300 hover:border-white/25'
+                            }`}
+                          >
+                            <div className="text-[10px] font-bold truncate">{v.durationLabel}</div>
+                            <div className="text-[11px] font-mono font-black text-emerald-400 tabular-nums">
+                              ₹{vP.toFixed(0)}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {activeVariant && (
+                      <div className="flex items-center justify-between gap-2 pt-1 min-w-0">
+                        <div className="min-w-0">
+                          <span className="text-[10px] text-slate-400 block truncate">
+                            Selected: {activeVariant.durationLabel}
+                          </span>
+                          <span className="font-mono text-sm font-black text-emerald-400 tabular-nums">
+                            ₹{activePrice.toFixed(2)}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={isOutOfStock}
+                          onClick={() => setSelectedPurchase({ product, variant: activeVariant })}
+                          className={`min-h-[42px] px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer active:scale-95 ${
+                            isOutOfStock
+                              ? 'bg-white/5 text-slate-500 border border-white/10 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-md border border-white/20'
+                          }`}
+                        >
+                          <Zap className="w-3.5 h-3.5 fill-white text-white shrink-0" />
+                          <span>{isOutOfStock ? 'Out of Stock' : 'Buy Now'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-2 text-[11px] text-slate-500">
+                    No duration plans configured.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-5 items-start w-full max-w-full">
           {filteredProducts.map(product => {
             const features = product.features || [
               'Precision Auto Aim Assist',
@@ -388,23 +563,24 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
             ];
             const hasValidImage = Boolean(product.imageUrl && !failedImages[product.id]);
             const isExpanded = Boolean(expandedProductIds[product.id]);
+            const startingPrice = getStartingPrice(product);
 
             return (
               <div
                 key={product.id}
-                className="w-full min-w-0 bg-gradient-to-b from-[#13172e] via-[#0f1326] to-[#0a0d1a] border border-cyan-500/25 hover:border-cyan-400/60 rounded-3xl overflow-hidden flex flex-col justify-between transition-all duration-200 shadow-[0_10px_35px_rgba(0,0,0,0.6)] group"
+                className="w-full min-w-0 max-w-full bg-gradient-to-b from-[#13172e] via-[#0f1326] to-[#0a0d1a] border border-cyan-500/25 hover:border-cyan-400/60 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col justify-between transition-all duration-200 shadow-[0_8px_28px_rgba(0,0,0,0.55)] group"
               >
-                <div>
-                  {/* High-Impact Visual Banner */}
-                  <div className="relative aspect-[16/8] w-full bg-[#080b14] overflow-hidden border-b border-white/10">
-                    <div className="absolute inset-0 bg-gradient-to-br from-rose-950/80 via-[#101428] to-cyan-950/80 flex flex-col items-center justify-center p-4 text-center select-none">
-                      <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-cyan-500 via-rose-500 to-amber-500 flex items-center justify-center mb-2 shadow-lg shadow-cyan-950/50 border border-white/20">
-                        <ShieldCheck className="w-5 h-5 text-white" />
+                <div className="min-w-0">
+                  {/* Compact Visual Banner */}
+                  <div className="relative aspect-[16/7] sm:aspect-[16/8] w-full bg-[#080b14] overflow-hidden border-b border-white/10">
+                    <div className="absolute inset-0 bg-gradient-to-br from-rose-950/80 via-[#101428] to-cyan-950/80 flex flex-col items-center justify-center p-3 sm:p-4 text-center select-none">
+                      <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-cyan-500 via-rose-500 to-amber-500 flex items-center justify-center mb-1.5 sm:mb-2 shadow-lg shadow-cyan-950/50 border border-white/20 shrink-0">
+                        <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                       </div>
-                      <div className="font-display font-extrabold text-base sm:text-xl text-white tracking-tight line-clamp-1">
+                      <div className="font-display font-extrabold text-sm sm:text-lg text-white tracking-tight line-clamp-1 max-w-full px-2">
                         {product.name}
                       </div>
-                      <div className="text-xs text-cyan-300 font-semibold mt-1">
+                      <div className="text-[10px] sm:text-xs text-cyan-300 font-semibold mt-0.5 truncate max-w-full px-2">
                         {product.game || 'FREE FIRE'} · {product.deviceType || 'NON-ROOT'}
                       </div>
                     </div>
@@ -421,20 +597,20 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                       />
                     )}
 
-                    {/* Gradient Scrim & Badges */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f1326] via-black/35 to-transparent z-20 pointer-events-none" />
+                    {/* Gradient Scrim & Overlay Metadata */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f1326] via-black/30 to-transparent z-20 pointer-events-none" />
 
-                    <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 flex-wrap">
-                      <span className="px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-white/20 text-white text-[10px] font-mono font-bold shadow-lg uppercase">
-                        {product.game || 'FREE FIRE'}
-                      </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-cyan-500/25 backdrop-blur-md border border-cyan-400/40 text-cyan-300 text-[10px] font-mono font-bold shadow-lg uppercase">
-                        {product.deviceType || 'NONROOT'}
-                      </span>
-                    </div>
+                    <div className="absolute top-2.5 left-2.5 right-2.5 z-30 flex items-center justify-between gap-1.5 pointer-events-none">
+                      <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                        <span className="px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/15 text-white text-[9px] sm:text-[10px] font-mono font-bold uppercase truncate">
+                          {product.game || 'FREE FIRE'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-cyan-950/85 backdrop-blur-md border border-cyan-400/40 text-cyan-300 text-[9px] sm:text-[10px] font-mono font-bold uppercase truncate">
+                          {product.deviceType || 'NONROOT'}
+                        </span>
+                      </div>
 
-                    <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/25 backdrop-blur-md border border-emerald-400/50 text-emerald-300 text-[10px] font-mono font-extrabold shadow-lg flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-950/85 backdrop-blur-md border border-emerald-400/50 text-emerald-300 text-[9px] sm:text-[10px] font-mono font-extrabold shrink-0 flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         <span>INSTANT</span>
                       </span>
@@ -442,61 +618,68 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
                     {/* Maintenance Overlay */}
                     {product.isUnderMaintenance && (
-                      <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/85 backdrop-blur-xs p-4">
-                        <div className="px-4 py-2.5 rounded-2xl bg-amber-500/20 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-2 shadow-2xl">
+                      <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/85 backdrop-blur-xs p-3">
+                        <div className="px-3.5 py-2 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 font-bold text-[11px] sm:text-xs flex items-center gap-2 shadow-2xl max-w-full">
                           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                          <span>Temporarily Under Maintenance</span>
+                          <span className="truncate">Temporarily Under Maintenance</span>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Card Content & Features */}
-                  <div className="p-4 sm:p-6 space-y-4">
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        {product.badge && (
-                          <span className="px-2.5 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" />
-                            {product.badge}
+                  {/* Card Content & Compact Feature Grid */}
+                  <div className="p-3.5 sm:p-5 space-y-3 sm:space-y-4 min-w-0">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] sm:text-xs font-mono font-bold">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {product.badge && (
+                            <>
+                              <span className="text-amber-300 uppercase truncate max-w-[150px]">
+                                {product.badge}
+                              </span>
+                              <span className="text-slate-600" aria-hidden="true">·</span>
+                            </>
+                          )}
+                          <span className="text-emerald-400 uppercase shrink-0">OB55 VERIFIED</span>
+                        </div>
+                        {startingPrice !== null && (
+                          <span className="text-cyan-300 font-mono font-black shrink-0">
+                            From ₹{startingPrice.toFixed(0)}
                           </span>
                         )}
-                        <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold text-[10px] uppercase">
-                          OB55 VERIFIED
-                        </span>
                       </div>
 
-                      <h3 className="font-display font-extrabold text-lg sm:text-2xl text-white break-words">
+                      <h3 className="font-display font-extrabold text-base sm:text-xl md:text-2xl text-white leading-tight break-words line-clamp-2">
                         {product.name}
                       </h3>
                       {product.description && (
-                        <p className="text-xs text-slate-400 line-clamp-2">
+                        <p className="text-[11px] sm:text-xs text-slate-400 line-clamp-2 break-words leading-relaxed">
                           {product.description}
                         </p>
                       )}
                     </div>
 
-                    {/* Feature Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-white/[0.08]">
+                    {/* Compact 2-Column Mobile Feature Grid */}
+                    <div className="grid grid-cols-2 gap-1.5 sm:gap-2 pt-2.5 border-t border-white/[0.08] min-w-0">
                       {features.slice(0, 4).map((feat, idx) => (
                         <div
                           key={idx}
-                          className="flex items-center gap-2 text-xs text-slate-200 py-0.5 min-w-0"
+                          className="flex items-center gap-1.5 text-[11px] sm:text-xs text-slate-200 py-0.5 min-w-0"
                         >
-                          <div className="w-4 h-4 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                            <Check className="w-3 h-3 text-emerald-400 stroke-[3]" />
+                          <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                            <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-400 stroke-[3]" />
                           </div>
-                          <span className="truncate font-semibold">{feat}</span>
+                          <span className="truncate font-medium sm:font-semibold">{feat}</span>
                         </div>
                       ))}
                     </div>
 
-                    {/* Loader & Proof Buttons */}
-                    <div className="grid grid-cols-2 gap-2.5 pt-1">
+                    {/* Touch-Friendly Loader & Proof Action Buttons */}
+                    <div className="grid grid-cols-2 gap-2 pt-0.5 min-w-0">
                       <button
                         type="button"
                         onClick={() => setActiveFileModal(product)}
-                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500/15 to-teal-500/10 hover:from-emerald-500/25 hover:to-teal-500/20 border border-emerald-500/35 text-emerald-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 cursor-pointer shadow-md"
+                        className="min-h-[42px] py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-emerald-500/15 to-teal-500/10 hover:from-emerald-500/25 hover:to-teal-500/20 active:scale-[0.98] border border-emerald-500/35 text-emerald-300 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 cursor-pointer shadow-md"
                       >
                         <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span className="truncate">Download File</span>
@@ -505,7 +688,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                       <button
                         type="button"
                         onClick={() => setActiveVideoModal(product)}
-                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-violet-500/15 to-rose-500/10 hover:from-violet-500/25 hover:to-rose-500/20 border border-violet-500/35 text-violet-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 cursor-pointer shadow-md"
+                        className="min-h-[42px] py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-violet-500/15 to-rose-500/10 hover:from-violet-500/25 hover:to-rose-500/20 active:scale-[0.98] border border-violet-500/35 text-violet-300 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-0 cursor-pointer shadow-md"
                       >
                         <PlaySquare className="w-3.5 h-3.5 text-violet-400 shrink-0" />
                         <span className="truncate">Feedback Video</span>
@@ -514,29 +697,29 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                   </div>
                 </div>
 
-                {/* PURCHASE KEY Button & Expandable Duration Rows with BUY NOW on each row */}
-                <div className="p-4 sm:p-6 pt-3 bg-[#080b16] border-t border-white/10 space-y-3">
+                {/* PURCHASE KEY Button & Compact Touch-Friendly Duration Grid */}
+                <div className="p-3.5 sm:p-5 pt-2.5 sm:pt-3 bg-[#080b16] border-t border-white/10 space-y-2.5 min-w-0">
                   {product.isUnderMaintenance ? (
-                    <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2.5">
+                    <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-[11px] sm:text-xs text-amber-200 flex items-start gap-2 min-w-0">
                       <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                      <div>
+                      <div className="min-w-0">
                         <div className="font-bold text-amber-300">Maintenance Notice</div>
-                        <p className="text-amber-200/90 mt-0.5">
+                        <p className="text-amber-200/90 mt-0.5 break-words">
                           {product.maintenanceNotice ||
                             'This package is undergoing a scheduled update. New license purchases are temporarily paused.'}
                         </p>
                       </div>
                     </div>
                   ) : product.variants && product.variants.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2.5 min-w-0">
                       {/* Primary "PURCHASE KEY" Toggle Button */}
                       <button
                         type="button"
                         onClick={() => toggleProductPurchaseList(product.id)}
-                        className={`w-full py-3.5 px-4 rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase transition-all flex items-center justify-between gap-2 cursor-pointer border ${
+                        className={`w-full min-h-[44px] sm:min-h-[48px] py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm tracking-wider uppercase transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.99] border min-w-0 ${
                           isExpanded
                             ? 'bg-[#151a30] border-rose-500/50 text-white shadow-inner'
-                            : 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-[0_4px_25px_rgba(244,63,94,0.4)] border-white/20'
+                            : 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-[0_4px_20px_rgba(244,63,94,0.35)] border-white/20'
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
@@ -545,20 +728,16 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                             {isExpanded ? 'Hide Durations' : 'Purchase Key'}
                           </span>
                         </div>
-                        <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-black/30 text-white shrink-0">
+                        <span className="text-[10px] sm:text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg bg-black/30 text-white shrink-0">
                           {product.variants.length} Plans {isExpanded ? '▲' : '▼'}
                         </span>
                       </button>
 
-                      {/* Expanded Duration Rows: Each Duration Row Has Its Own BUY NOW Button */}
+                      {/* Expanded Duration Rows: Compact & Touch-Friendly */}
                       {isExpanded && (
-                        <div className="space-y-2 pt-1">
+                        <div className="grid grid-cols-1 gap-2 pt-0.5 min-w-0">
                           {product.variants.map(variant => {
-                            const vPrice = Number(
-                              role === 'RESELLER' && variant.resellerPrice
-                                ? variant.resellerPrice
-                                : variant.price
-                            );
+                            const vPrice = getVariantPrice(variant);
                             const hasExternalApi = Boolean(
                               (variant as any).externalPid || product.externalPid
                             );
@@ -567,18 +746,18 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                             return (
                               <div
                                 key={variant.id}
-                                className="p-3 rounded-2xl bg-[#101528] hover:bg-[#151c36] border border-white/10 hover:border-rose-500/40 transition-all flex items-center justify-between gap-2 sm:gap-3"
+                                className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-[#101528] hover:bg-[#151c36] border border-white/10 hover:border-rose-500/40 transition-all flex items-center justify-between gap-2 min-w-0"
                               >
                                 <div className="min-w-0 flex-1">
                                   <div className="text-xs sm:text-sm font-extrabold text-white truncate">
                                     {variant.durationLabel}
                                   </div>
-                                  <div className="flex items-center gap-2 mt-0.5">
+                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                     <span className="font-mono text-xs sm:text-sm font-black text-emerald-400 tabular-nums">
                                       ₹{vPrice.toFixed(2)}
                                     </span>
-                                    <span className="text-[10px] font-semibold text-slate-400">
-                                      • {isOutOfStock ? 'Out of Stock' : 'Instant Key'}
+                                    <span className="text-[10px] font-semibold text-slate-400 truncate">
+                                      · {isOutOfStock ? 'Out of Stock' : 'Instant Key'}
                                     </span>
                                   </div>
                                 </div>
@@ -587,13 +766,13 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                                   type="button"
                                   disabled={isOutOfStock}
                                   onClick={() => setSelectedPurchase({ product, variant })}
-                                  className={`px-3.5 sm:px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                                  className={`min-h-[40px] px-3 sm:px-4 py-2 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer active:scale-95 ${
                                     isOutOfStock
                                       ? 'bg-white/5 text-slate-500 border border-white/10 cursor-not-allowed'
                                       : 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-[0_4px_15px_rgba(244,63,94,0.35)] border border-white/20'
                                   }`}
                                 >
-                                  <Zap className="w-3.5 h-3.5 fill-white text-white shrink-0" />
+                                  <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-white text-white shrink-0" />
                                   <span>BUY NOW</span>
                                 </button>
                               </div>
@@ -603,7 +782,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                       )}
                     </div>
                   ) : (
-                    <div className="text-center py-3 text-xs text-slate-500">
+                    <div className="text-center py-2.5 text-xs text-slate-500">
                       No duration plans configured for this package.
                     </div>
                   )}
@@ -616,40 +795,43 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
       {/* Modal: Update File & Loader */}
       {activeFileModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <div
             onClick={() => setActiveFileModal(null)}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm"
           />
-          <div className="relative w-full max-w-md bg-[#121628] border border-emerald-500/40 rounded-3xl p-6 shadow-2xl z-10 space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <Download className="w-5 h-5 text-emerald-400" />
-                <h4 className="font-display font-extrabold text-base text-white">Loader & Package File</h4>
+          <div className="relative w-full max-w-[calc(100vw-1.5rem)] sm:max-w-md bg-[#121628] border border-emerald-500/40 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl z-10 space-y-4 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Download className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
+                <h4 className="font-display font-extrabold text-sm sm:text-base text-white truncate">
+                  Loader &amp; Package File
+                </h4>
               </div>
               <button
+                type="button"
                 onClick={() => setActiveFileModal(null)}
-                className="text-slate-400 hover:text-white cursor-pointer"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/5 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-4 text-xs">
-              <p className="text-slate-300">
+            <div className="space-y-3.5 text-xs">
+              <p className="text-slate-300 break-words leading-relaxed">
                 Download the latest verified setup package for{' '}
                 <span className="text-white font-bold">{activeFileModal.name}</span>.
               </p>
 
-              <div className="bg-[#0a0d18] border border-white/10 rounded-2xl p-4 space-y-2">
-                <div className="flex justify-between">
+              <div className="bg-[#0a0d18] border border-white/10 rounded-xl sm:rounded-2xl p-3.5 space-y-2">
+                <div className="flex justify-between items-center gap-2">
                   <span className="text-slate-400">System Compatibility</span>
-                  <span className="text-cyan-400 font-bold">{activeFileModal.deviceType || 'NON-ROOT'}</span>
+                  <span className="text-cyan-400 font-bold truncate">{activeFileModal.deviceType || 'NON-ROOT'}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center gap-2">
                   <span className="text-slate-400">Verification</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    <ShieldCheck className="w-4 h-4" /> Verified Clean Build
+                  <span className="text-emerald-400 font-bold flex items-center gap-1 shrink-0">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Verified Clean Build
                   </span>
                 </div>
               </div>
@@ -658,10 +840,10 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                 href={activeFileModal.updateFileUrl || 'https://t.me'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-950/50"
+                className="w-full min-h-[44px] py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-950/50"
               >
-                <Download className="w-4 h-4" />
-                <span>Download Setup Package</span>
+                <Download className="w-4 h-4 shrink-0" />
+                <span className="truncate">Download Setup Package</span>
               </a>
             </div>
           </div>
@@ -670,29 +852,32 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
 
       {/* Modal: Gameplay Video & Proof */}
       {activeVideoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <div
             onClick={() => setActiveVideoModal(null)}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm"
           />
-          <div className="relative w-full max-w-md bg-[#121628] border border-violet-500/40 rounded-3xl p-6 shadow-2xl z-10 space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <PlaySquare className="w-5 h-5 text-violet-400" />
-                <h4 className="font-display font-extrabold text-base text-white">Gameplay Preview & Proof</h4>
+          <div className="relative w-full max-w-[calc(100vw-1.5rem)] sm:max-w-md bg-[#121628] border border-violet-500/40 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl z-10 space-y-4 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <PlaySquare className="w-4 h-4 sm:w-5 sm:h-5 text-violet-400 shrink-0" />
+                <h4 className="font-display font-extrabold text-sm sm:text-base text-white truncate">
+                  Gameplay Preview &amp; Proof
+                </h4>
               </div>
               <button
+                type="button"
                 onClick={() => setActiveVideoModal(null)}
-                className="text-slate-400 hover:text-white cursor-pointer"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/5 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-4 text-xs">
-              <div className="p-4 rounded-2xl bg-[#0a0d18] border border-white/10 space-y-1.5 text-slate-300">
-                <div className="font-bold text-white text-sm">Official Demonstration Channel</div>
-                <p className="text-slate-400 leading-relaxed">
+            <div className="space-y-3.5 text-xs">
+              <div className="p-3.5 rounded-xl sm:rounded-2xl bg-[#0a0d18] border border-white/10 space-y-1.5 text-slate-300">
+                <div className="font-bold text-white text-xs sm:text-sm">Official Demonstration Channel</div>
+                <p className="text-slate-400 leading-relaxed text-[11px] sm:text-xs">
                   Watch live gameplay footage, setup tutorials, and customer feedback on our verified channel.
                 </p>
               </div>
@@ -701,10 +886,10 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                 href={activeVideoModal.videoUrl || 'https://t.me'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-violet-600 via-pink-600 to-rose-600 hover:from-violet-500 hover:to-rose-500 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-violet-950/50"
+                className="w-full min-h-[44px] py-3 px-4 rounded-xl bg-gradient-to-r from-violet-600 via-pink-600 to-rose-600 hover:from-violet-500 hover:to-rose-500 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-violet-950/50"
               >
-                <span>Open Video Demonstration</span>
-                <ExternalLink className="w-4 h-4" />
+                <span className="truncate">Open Video Demonstration</span>
+                <ExternalLink className="w-4 h-4 shrink-0" />
               </a>
             </div>
           </div>
