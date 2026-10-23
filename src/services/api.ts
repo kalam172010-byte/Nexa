@@ -1,33 +1,3 @@
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
-
-const RESTORE_SYNC_VERSION = 'nexa_restored_v2026_10_23_v4';
-
-function ensureRestoredBrowserCacheState(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const currentVersion = localStorage.getItem('nexa_restore_sync_version');
-    if (currentVersion !== RESTORE_SYNC_VERSION) {
-      const staleKeys = [
-        'nexa_cached_products',
-        'nexa_cached_users',
-        'nexa_cached_keys',
-        'nexa_cached_orders',
-        'nexa_cached_deposits',
-        'nexa_deleted_product_ids',
-        'nexa_site_customization',
-        'nexa_api_base_url',
-      ];
-      for (const k of staleKeys) {
-        localStorage.removeItem(k);
-      }
-      localStorage.setItem('nexa_restore_sync_version', RESTORE_SYNC_VERSION);
-    }
-  } catch {}
-}
-
-ensureRestoredBrowserCacheState();
-
 export function getEffectiveOrigin(): string {
   if (typeof window === 'undefined') {
     return '';
@@ -89,86 +59,94 @@ export class ApiError extends Error {
   }
 }
 
-const RESTORED_DEFAULT_PRODUCTS = [
+const DEFAULT_SEED_PRODUCTS = [
   {
-    id: 'PROD-476840-90',
-    name: 'DRIP CLIENT FF NONROOT APKMOD',
+    id: 'PROD-BALA-01',
+    name: 'BALA MOD XYZ ~ V5 FF NONROOT',
     game: 'FREEFIRE',
-    description: 'Aimbot Lock + Esp Location + Smooth Menu UI + Smooth Aimbot Fov Work Full Safe Antiban All Server Working Play Like Legit Player',
     category: 'FREEFIRE',
-    badge: 'STAR',
     deviceType: 'NONROOT',
+    badge: 'STAR',
+    description: 'V5 FF Nonroot mod menu with auto headshot, real-time location radar, and fast revive.',
     imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
-    features: ['ESP', 'Aimbot', 'Bypass'],
-    updateFileUrl: 'https://www.mediafire.com/file/4bc0w766z34p6t7/V17+PAID+MOD+APK.zip/file',
-    videoUrl: '',
+    features: ['Headshot', 'Location', 'Fast Revive'],
+    updateFileUrl: 'https://t.me/c/nexa_mod/update_bala_v5.apk',
+    videoUrl: 'https://t.me/c/nexa_mod/bala_gameplay',
+    externalPid: '155',
+    isActive: true,
+    isUnderMaintenance: false,
+    createdAt: new Date().toISOString(),
+    variants: [
+      { id: 'VAR-BALA-1H', productId: 'PROD-BALA-01', durationLabel: '1 Hours', durationHours: 1, price: 20.0, resellerPrice: 15.0, stockCount: 999, externalPid: '155', externalDuration: '1 Hours', isActive: true, isAvailable: true },
+      { id: 'VAR-BALA-3H', productId: 'PROD-BALA-01', durationLabel: '3 Hours', durationHours: 3, price: 70.0, resellerPrice: 55.0, stockCount: 999, externalPid: '155', externalDuration: '3 Hours', isActive: true, isAvailable: true },
+      { id: 'VAR-BALA-6H', productId: 'PROD-BALA-01', durationLabel: '6 Hours', durationHours: 6, price: 120.0, resellerPrice: 95.0, stockCount: 999, externalPid: '155', externalDuration: '6 Hours', isActive: true, isAvailable: true },
+      { id: 'VAR-BALA-1D', productId: 'PROD-BALA-01', durationLabel: '1 DAYS', durationHours: 24, price: 300.0, resellerPrice: 240.0, stockCount: 999, externalPid: '155', externalDuration: '1 DAYS', isActive: true, isAvailable: true },
+    ],
+  },
+  {
+    id: 'PROD-IMMO-02',
+    name: 'IMMO BLOODY NON ROOT',
+    game: 'FREEFIRE',
+    category: 'FREEFIRE',
+    deviceType: 'NONROOT',
+    badge: 'NONROOT',
+    description: 'Full safe working all servers with all enemy location pinpoint and freeze fake lag protection.',
+    imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
+    features: ['All Enemy Location', 'All Server Working', 'Freez fake lag'],
+    updateFileUrl: 'https://t.me/c/nexa_mod/immo_bloody_v4.apk',
+    videoUrl: 'https://t.me/c/nexa_mod/immo_feedback',
+    externalPid: '65',
+    isActive: true,
+    isUnderMaintenance: false,
+    createdAt: new Date().toISOString(),
+    variants: [
+      { id: 'VAR-IMMO-1H', productId: 'PROD-IMMO-02', durationLabel: '1 Hours', durationHours: 1, price: 25.0, resellerPrice: 18.0, stockCount: 999, externalPid: '65', externalDuration: '1 Hours', isActive: true, isAvailable: true },
+      { id: 'VAR-IMMO-3H', productId: 'PROD-IMMO-02', durationLabel: '3 Hours', durationHours: 3, price: 80.0, resellerPrice: 65.0, stockCount: 999, externalPid: '65', externalDuration: '3 Hours', isActive: true, isAvailable: true },
+      { id: 'VAR-IMMO-1D', productId: 'PROD-IMMO-02', durationLabel: '1 DAYS', durationHours: 24, price: 320.0, resellerPrice: 250.0, stockCount: 999, externalPid: '65', externalDuration: '1 DAYS', isActive: true, isAvailable: true },
+    ],
+  },
+  {
+    id: 'PROD-DRIP-03',
+    name: 'DRIP WIRE IOS + NONROOT',
+    game: 'FREEFIRE',
+    category: 'FREEFIRE',
+    deviceType: 'iOS IPHONE',
+    badge: 'ELITE',
+    description: 'Advanced iOS iPhone & Android Non-Root bypass with precision aimbot and silent aim prediction.',
+    imageUrl: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=800&q=80',
+    features: ['AIMBOT', 'Silent Aim', 'AIM LAG'],
+    updateFileUrl: 'https://t.me/c/nexa_mod/drip_wire_ios.mobileconfig',
+    videoUrl: 'https://t.me/c/nexa_mod/drip_wire_gameplay',
     externalPid: '150',
     isActive: true,
     isUnderMaintenance: false,
-    maintenanceNotice: '',
-    createdAt: '2026-10-23T06:04:36.840Z',
+    createdAt: new Date().toISOString(),
     variants: [
-      { id: 'VAR-476841-19-0', productId: 'PROD-476840-90', durationLabel: '1 DAYS', durationHours: 24, price: 110, resellerPrice: 80, stockCount: 999, externalPid: '150', externalDuration: '1 DAYS', isActive: true, isAvailable: true },
-      { id: 'VAR-476841-71-1', productId: 'PROD-476840-90', durationLabel: '7 DAYS', durationHours: 168, price: 320, resellerPrice: 280, stockCount: 999, externalPid: '150', externalDuration: '7 DAYS', isActive: true, isAvailable: true },
-      { id: 'VAR-476841-61-2', productId: 'PROD-476840-90', durationLabel: '15 DAYS', durationHours: 360, price: 620, resellerPrice: 550, stockCount: 999, externalPid: '150', externalDuration: '15 DAYS', isActive: true, isAvailable: true },
-      { id: 'VAR-476841-91-3', productId: 'PROD-476840-90', durationLabel: '30 DAYS', durationHours: 720, price: 960, resellerPrice: 850, stockCount: 999, externalPid: '150', externalDuration: '30 DAYS', isActive: true, isAvailable: true },
+      { id: 'VAR-DRIP-1H', productId: 'PROD-DRIP-03', durationLabel: '1 Hours', durationHours: 1, price: 30.0, resellerPrice: 22.0, stockCount: 999, externalPid: '150', externalDuration: '1 Hours', isActive: true, isAvailable: true },
+      { id: 'VAR-DRIP-1D', productId: 'PROD-DRIP-03', durationLabel: '1 DAYS', durationHours: 24, price: 350.0, resellerPrice: 270.0, stockCount: 999, externalPid: '150', externalDuration: '1 DAYS', isActive: true, isAvailable: true },
     ],
   },
   {
     id: 'PROD-499177',
     name: 'KALAM VIP AIMBOT FF OB55',
     game: 'FREEFIRE',
-    description: 'Premium VIP security panel for FreeFire.',
+    description: 'Auto aimbot and radar location with 100% anti-ban protection.',
     category: 'FREEFIRE',
-    badge: 'STAR',
+    badge: 'VIP',
     deviceType: 'NONROOT',
     imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
-    features: ['ESP', 'Aimbot', 'Bypass'],
-    updateFileUrl: '',
-    videoUrl: '',
+    features: ['Auto Headshot', 'Location Pinpoint', 'Anti-Ban'],
     externalPid: '155',
     isActive: true,
     isUnderMaintenance: false,
-    maintenanceNotice: '',
-    createdAt: '2026-10-23T02:21:39.177Z',
+    createdAt: new Date().toISOString(),
     variants: [
-      { id: 'VAR-499189', productId: 'PROD-499177', durationLabel: '60 Days', durationHours: 1440, price: 1100, resellerPrice: 800, stockCount: 999, externalPid: '155', externalDuration: '60 Days', isActive: true, isAvailable: true },
-    ],
-  },
-  {
-    id: 'PROD-521953',
-    name: 'HG CHEATS FF APKMOD ANDROID',
-    game: 'FREEFIRE',
-    description: 'Premium VIP security panel for FreeFire.',
-    category: 'FREEFIRE',
-    badge: 'STAR',
-    deviceType: 'NONROOT',
-    imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
-    features: ['ESP', 'Aimbot', 'Bypass'],
-    updateFileUrl: '',
-    videoUrl: '',
-    externalPid: '65',
-    isActive: true,
-    isUnderMaintenance: false,
-    maintenanceNotice: '',
-    createdAt: '2026-10-23T00:08:41.953Z',
-    variants: [
-      { id: 'VAR-521968', productId: 'PROD-521953', durationLabel: '10 Days', durationHours: 240, price: 480, resellerPrice: 400, stockCount: 999, externalPid: '65', externalDuration: '10 Days', isActive: true, isAvailable: true },
+      { id: 'VAR-499189-1D', productId: 'PROD-499177', durationLabel: '1 Day', durationHours: 24, price: 50, resellerPrice: 38, stockCount: 999, externalPid: '155', externalDuration: '1 DAYS', isActive: true, isAvailable: true },
+      { id: 'VAR-499189-7D', productId: 'PROD-499177', durationLabel: '7 Days', durationHours: 168, price: 250, resellerPrice: 190, stockCount: 999, externalPid: '155', externalDuration: '7 DAYS', isActive: true, isAvailable: true },
+      { id: 'VAR-499189', productId: 'PROD-499177', durationLabel: '60 Days', durationHours: 1440, price: 1100, resellerPrice: 800, stockCount: 999, externalPid: '155', externalDuration: '60 DAYS', isActive: true, isAvailable: true },
     ],
   },
 ];
-
-const LEGACY_DELETED_SEED_ID_SET = new Set([
-  'PROD-BALA-01',
-  'PROD-IMMO-02',
-  'PROD-DRIP-03',
-  'PROD-TROLL-04',
-  'PROD-CARROM-05',
-  'PROD-709750',
-  'PROD-042859',
-  'PROD-882350',
-  'PROD-035699-81',
-]);
 
 function getDeletedProductIds(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -197,29 +175,27 @@ function unmarkProductDeleted(id: string): void {
   } catch {}
 }
 
+const SEED_PRODUCT_ID_SET = new Set(DEFAULT_SEED_PRODUCTS.map(p => p.id));
+
 export function getCachedProducts(): any[] {
-  if (typeof window === 'undefined') return RESTORED_DEFAULT_PRODUCTS;
-  ensureRestoredBrowserCacheState();
+  if (typeof window === 'undefined') return [];
   const deleted = getDeletedProductIds();
   try {
     const raw = localStorage.getItem('nexa_cached_products');
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const filtered = parsed.filter(p => p && p.id && !deleted.has(p.id) && !LEGACY_DELETED_SEED_ID_SET.has(p.id));
-        if (filtered.length > 0) {
-          return filtered;
-        }
+        return parsed.filter(p => p && p.id && !deleted.has(p.id) && !SEED_PRODUCT_ID_SET.has(p.id));
       }
     }
   } catch {}
-  return RESTORED_DEFAULT_PRODUCTS.filter(p => !deleted.has(p.id));
+  return [];
 }
 
 function saveCachedProducts(products: any[], emitEvent = true): void {
   if (typeof window === 'undefined') return;
   const deleted = getDeletedProductIds();
-  const cleanProducts = (products || []).filter(p => p && p.id && !deleted.has(p.id) && !LEGACY_DELETED_SEED_ID_SET.has(p.id));
+  const cleanProducts = (products || []).filter(p => p && p.id && !deleted.has(p.id));
   try {
     localStorage.setItem('nexa_cached_products', JSON.stringify(cleanProducts));
   } catch (err) {
@@ -248,20 +224,46 @@ function saveCachedProducts(products: any[], emitEvent = true): void {
   }
 }
 
-function sanitizeBackendProducts(backendProds: any[]): any[] {
+function mergeWithCachedProducts(backendProds: any[]): { merged: any[]; unsyncedLocal: any[] } {
   const deleted = getDeletedProductIds();
-  const currentCached = getCachedProducts();
-  const cachedById = new Map<string, any>(currentCached.map(p => [p.id, p]));
-  return (backendProds || [])
-    .filter((p: any) => p && p.id && !deleted.has(p.id) && !LEGACY_DELETED_SEED_ID_SET.has(p.id))
-    .map((bp: any) => {
-      const cp = cachedById.get(bp.id);
-      return {
-        ...bp,
-        imageUrl: bp.imageUrl || cp?.imageUrl || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
-        variants: Array.isArray(bp.variants) ? bp.variants : cp?.variants || [],
-      };
-    });
+  const currentCached = getCachedProducts().filter(p => p && p.id && !deleted.has(p.id) && !SEED_PRODUCT_ID_SET.has(p.id));
+  const validBackend = (backendProds || []).filter((p: any) => p && p.id && !deleted.has(p.id));
+
+  const map = new Map<string, any>();
+  const unsyncedLocal: any[] = [];
+
+  // Put unsynced local custom products first so newly added products appear at top immediately
+  for (const cp of currentCached) {
+    if (!validBackend.some((bp: any) => bp.id === cp.id)) {
+      map.set(cp.id, cp);
+      unsyncedLocal.push(cp);
+    }
+  }
+
+  for (const bp of validBackend) {
+    map.set(bp.id, { ...bp, variants: bp.variants || [] });
+  }
+
+  for (const cp of currentCached) {
+    if (map.has(cp.id) && validBackend.some((bp: any) => bp.id === cp.id)) {
+      const existing = map.get(cp.id)!;
+      if (!existing.imageUrl && cp.imageUrl) {
+        existing.imageUrl = cp.imageUrl;
+      }
+      const existingVarMap = new Map<string, any>((existing.variants || []).map((v: any) => [v.id, v]));
+      for (const cv of (cp.variants || [])) {
+        if (!existingVarMap.has(cv.id)) {
+          existingVarMap.set(cv.id, cv);
+        } else {
+          const prevVar = existingVarMap.get(cv.id) || {};
+          existingVarMap.set(cv.id, { ...cv, ...prevVar });
+        }
+      }
+      existing.variants = Array.from(existingVarMap.values());
+    }
+  }
+
+  return { merged: Array.from(map.values()), unsyncedLocal };
 }
 
 export function getCachedKeys(): any[] {
@@ -490,9 +492,23 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (!fetchFailed && !isHtml && response && response.ok && data) {
     const method = (options.method || 'GET').toUpperCase();
     if (endpoint === '/products' && Array.isArray(data.products)) {
-      const authoritativeProducts = sanitizeBackendProducts(data.products);
-      saveCachedProducts(authoritativeProducts, false);
-      data.products = authoritativeProducts;
+      const { merged, unsyncedLocal } = mergeWithCachedProducts(data.products);
+      saveCachedProducts(merged, false);
+      data.products = merged;
+
+      // Auto-push any locally created products that aren't in backend DB yet so they persist on server
+      if (unsyncedLocal.length > 0) {
+        for (const up of unsyncedLocal) {
+          fetch(`${baseUrl}/admin/products`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ...up,
+              variants: up.variants || [],
+            }),
+          }).catch(() => {});
+        }
+      }
     } else if (endpoint === '/admin/products' && method === 'POST' && data.product) {
       unmarkProductDeleted(data.product.id);
       const current = getCachedProducts();
@@ -986,30 +1002,6 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
     // 10. Public / Admin Get Products: GET /products or GET /products/:id
     if (endpoint === '/products' && method === 'GET') {
-      try {
-        const [prodSnap, varSnap] = await Promise.all([
-          getDocs(collection(db, 'products')),
-          getDocs(collection(db, 'productVariants')),
-        ]);
-        if (!prodSnap.empty) {
-          const deleted = getDeletedProductIds();
-          const allVars = varSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-          const cloudProds = prodSnap.docs
-            .map(d => {
-              const pData = { id: d.id, ...(d.data() as any) };
-              const matchingVars = allVars.filter(v => v.productId === pData.id && v.isActive !== false);
-              return {
-                ...pData,
-                variants: matchingVars.length > 0 ? matchingVars : Array.isArray(pData.variants) ? pData.variants : [],
-              };
-            })
-            .filter(p => p && p.id && p.isActive !== false && !deleted.has(p.id) && !LEGACY_DELETED_SEED_ID_SET.has(p.id));
-          if (cloudProds.length > 0) {
-            saveCachedProducts(cloudProds, false);
-            return { products: cloudProds } as unknown as T;
-          }
-        }
-      } catch {}
       return { products: getCachedProducts() } as unknown as T;
     }
     if (endpoint.startsWith('/products/') && method === 'GET') {
@@ -2143,60 +2135,6 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       return { tickets: [] } as unknown as T;
     }
 
-    if (endpoint.includes('/admin/database/export')) {
-      const products = getCachedProducts();
-      const variants = products.flatMap((p: any) => p.variants || []);
-      return {
-        exportedAt: new Date().toISOString(),
-        version: '2.0',
-        data: {
-          users: getCachedUsers(),
-          products,
-          productVariants: variants,
-          licenseKeys: getCachedKeys(),
-          orders: JSON.parse(localStorage.getItem('nexa_cached_orders') || '[]'),
-          deposits: JSON.parse(localStorage.getItem('nexa_cached_deposits') || '[]'),
-          siteSettings: JSON.parse(localStorage.getItem('nexa_site_customization') || 'null'),
-        },
-      } as unknown as T;
-    }
-
-    if (endpoint.includes('/admin/database/import') && method === 'POST') {
-      const snapshot = bodyObj?.data || bodyObj || {};
-      if (Array.isArray(snapshot.products)) {
-        const variants = Array.isArray(snapshot.productVariants) ? snapshot.productVariants : [];
-        const hydrated = snapshot.products.map((p: any) => ({
-          ...p,
-          variants: variants.filter((v: any) => v.productId === p.id).length > 0
-            ? variants.filter((v: any) => v.productId === p.id)
-            : p.variants || [],
-        }));
-        localStorage.removeItem('nexa_deleted_product_ids');
-        saveCachedProducts(hydrated, true);
-      }
-      if (Array.isArray(snapshot.users)) {
-        saveCachedUsers(snapshot.users);
-      }
-      if (Array.isArray(snapshot.licenseKeys)) {
-        saveCachedKeys(snapshot.licenseKeys, true);
-      }
-      if (Array.isArray(snapshot.orders)) {
-        localStorage.setItem('nexa_cached_orders', JSON.stringify(snapshot.orders));
-      }
-      if (snapshot.siteSettings) {
-        localStorage.setItem('nexa_site_customization', JSON.stringify(snapshot.siteSettings));
-      }
-      return {
-        message: 'Database restored and synchronized across all storage layers!',
-        stats: {
-          usersCount: snapshot.users?.length || 0,
-          productsCount: snapshot.products?.length || 0,
-          ordersCount: snapshot.orders?.length || 0,
-          keysCount: snapshot.licenseKeys?.length || 0,
-        },
-      } as unknown as T;
-    }
-
     if (fetchFailed || isHtml) {
       return {
         success: true,
@@ -2481,37 +2419,9 @@ export const api = {
 
   // Database Backup & Migration
   exportDatabase: () => request<any>('/admin/database/export'),
-  importDatabase: async (backupData: any) => {
-    const res = await request<{ message: string; stats: any }>('/admin/database/import', {
+  importDatabase: (backupData: any) =>
+    request<{ message: string; stats: any }>('/admin/database/import', {
       method: 'POST',
       body: JSON.stringify(backupData),
-    });
-    try {
-      const snapshot = backupData?.data || backupData || {};
-      if (Array.isArray(snapshot.products)) {
-        const variants = Array.isArray(snapshot.productVariants) ? snapshot.productVariants : [];
-        const hydrated = snapshot.products.map((p: any) => ({
-          ...p,
-          variants: variants.filter((v: any) => v.productId === p.id).length > 0
-            ? variants.filter((v: any) => v.productId === p.id)
-            : p.variants || [],
-        }));
-        localStorage.removeItem('nexa_deleted_product_ids');
-        saveCachedProducts(hydrated, true);
-      }
-      if (Array.isArray(snapshot.users)) {
-        saveCachedUsers(snapshot.users);
-      }
-      if (Array.isArray(snapshot.licenseKeys)) {
-        saveCachedKeys(snapshot.licenseKeys, true);
-      }
-      if (Array.isArray(snapshot.orders)) {
-        localStorage.setItem('nexa_cached_orders', JSON.stringify(snapshot.orders));
-      }
-      if (snapshot.siteSettings) {
-        localStorage.setItem('nexa_site_customization', JSON.stringify(snapshot.siteSettings));
-      }
-    } catch {}
-    return res;
-  },
+    }),
 };

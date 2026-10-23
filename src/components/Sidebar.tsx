@@ -161,20 +161,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
           <div>
             <div className="px-3 mb-2 text-[10px] font-bold text-amber-400/80 uppercase tracking-wider flex items-center justify-between">
               <span>Administration</span>
-              <span className="text-[9px] font-mono text-amber-400/60 font-semibold">MASTER</span>
+              <span className="text-[9px] font-mono text-amber-400/60 font-semibold">PORTAL</span>
             </div>
             <nav className="space-y-1">
-              <button
-                onClick={() => onNavigate('admin')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
-                  currentPage === 'admin'
-                    ? 'bg-gradient-to-r from-amber-500/25 via-rose-500/10 to-transparent text-white border-l-2 border-amber-500 font-bold shadow-lg shadow-amber-950/40'
-                    : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border-transparent font-medium'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
-                <span className="truncate">Admin Console</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => onNavigate('admin')}
+                  className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
+                    currentPage === 'admin'
+                      ? 'bg-gradient-to-r from-amber-500/25 via-rose-500/10 to-transparent text-white border-l-2 border-amber-500 font-bold shadow-lg shadow-amber-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border-transparent font-medium'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span className="truncate">Admin Console</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const targetUrl = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
+                    window.open(targetUrl, '_blank');
+                  }}
+                  className="p-2.5 rounded-xl bg-white/[0.04] hover:bg-amber-500/20 text-slate-400 hover:text-amber-300 border border-white/5 hover:border-amber-500/40 transition-colors cursor-pointer shrink-0"
+                  title="Open Admin Panel in Dedicated Website Window / Tab"
+                  aria-label="Open Admin Website in New Tab"
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                </button>
+              </div>
             </nav>
           </div>
         )}

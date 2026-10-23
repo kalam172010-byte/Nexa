@@ -1540,8 +1540,6 @@ export class AdminController {
       }
 
       db.replaceData(backupData);
-      await FirestoreSyncService.pushFullRestoredStateToCloud(true);
-
       db.logActivity(
         req.user?.id,
         req.user?.username,
@@ -1550,10 +1548,9 @@ export class AdminController {
       );
 
       res.json({
-        message: 'Database snapshot successfully restored and synced to Cloud & Edge! All user balances, accounts, products, and orders are intact.',
+        message: 'Database snapshot successfully restored! All user balances, accounts, and orders are intact.',
         stats: {
           usersCount: db.users.length,
-          productsCount: db.products.length,
           ordersCount: db.orders.length,
           depositsCount: db.deposits.length,
           keysCount: db.digitalKeys.length,

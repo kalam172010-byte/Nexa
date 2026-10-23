@@ -191,11 +191,24 @@ const AdminUnlockCard: React.FC<{ onNavigate: (page: string) => void }> = ({ onN
 };
 
 const MainLayout: React.FC = () => {
-  const { user, isLoading, role } = useAuth();
+  const { user, isLoading, role, promptSignOut } = useAuth();
   const { siteConfig } = useSite();
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isUpgradeOpen, setIsUpgradeOpen] = useState<boolean>(false);
+  const [isStandaloneAdmin, setIsStandaloneAdmin] = useState<boolean>(() => {
+    try {
+      const search = new URLSearchParams(window.location.search);
+      const hash = window.location.hash;
+      const isParam =
+        search.get('standalone') === 'true' ||
+        search.get('admin') === 'true' ||
+        hash.includes('standalone=true');
+      return isParam || sessionStorage.getItem('nexa_standalone_admin') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Sync document title with current active page and site title
   useEffect(() => {
@@ -209,6 +222,17 @@ const MainLayout: React.FC = () => {
     const syncFromUrl = () => {
       const rawHash = window.location.hash.replace('#', '').trim();
       const path = window.location.pathname.replace(/^\//, '').trim();
+      const search = new URLSearchParams(window.location.search);
+
+      const isStandaloneQuery =
+        search.get('standalone') === 'true' ||
+        search.get('admin') === 'true' ||
+        rawHash.includes('standalone=true');
+
+      if (isStandaloneQuery) {
+        setIsStandaloneAdmin(true);
+        sessionStorage.setItem('nexa_standalone_admin', 'true');
+      }
 
       const cleanHash = rawHash.split('?')[0];
       const pageKey = (cleanHash && PAGE_TITLES[cleanHash]) ? cleanHash : (path && PAGE_TITLES[path]) ? path : null;
@@ -234,6 +258,35 @@ const MainLayout: React.FC = () => {
       }
     }
   }, [user, currentPage]);
+
+  if (isLoading) {
+    return <PremiumLoadingPage />;
+  }
+
+  // If user not authenticated, strictly show login/register screen only
+  if (!user) {
+    return (
+      <React.Suspense fallback={<PremiumLoadingPage />}>
+        <AuthPage
+          onSuccess={() => {
+            setCurrentPage('dashboard');
+            window.location.hash = 'dashboard';
+          }}
+        />
+      </React.Suspense>
+    );
+  }
+
+  const handleNavigate = (pageId: string) => {
+    if (!user) {
+      setCurrentPage('auth');
+      window.location.hash = 'auth';
+      return;
+    }
+    setCurrentPage(pageId);
+    window.location.hash = pageId;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const isUserAdmin = useMemo(() => {
     if (role === 'ADMIN' || role === 'SUPER ADMIN') return true;
@@ -267,34 +320,96 @@ const MainLayout: React.FC = () => {
     return false;
   }, [role, user]);
 
-  if (isLoading) {
-    return <PremiumLoadingPage />;
-  }
-
-  // If user not authenticated, strictly show login/register screen only
-  if (!user) {
+  // Dedicated Standalone Admin Website View Mode
+  if (currentPage === 'admin' && isStandaloneAdmin) {
     return (
-      <React.Suspense fallback={<PremiumLoadingPage />}>
-        <AuthPage
-          onSuccess={() => {
-            setCurrentPage('dashboard');
-            window.location.hash = 'dashboard';
-          }}
-        />
-      </React.Suspense>
+      <div className="min-h-screen w-full bg-[#06070a] text-slate-100 flex flex-col antialiased selection:bg-rose-500/25 selection:text-rose-200">
+        {/* Dedicated Admin Website Navigation Header */}
+        <header className="sticky top-0 z-50 w-full h-16 bg-[#090b14]/95 backdrop-blur-xl border-b border-amber-500/30 px-4 sm:px-8 flex items-center justify-between gap-4 shadow-[0_4px_30px_rgba(245,158,11,0.15)]">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/30 border border-white/20 shrink-0">
+              <ShieldCheck className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-display font-black text-sm sm:text-base text-white tracking-tight truncate">
+                  {siteConfig.adminPanelTitle || 'KALAM FF SYSTEM CONTROL CENTER'}
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  DEDICATED ADMIN WEBSITE
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-mono truncate hidden sm:block">
+                Standalone Admin Website Portal · Host: {window.location.host}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {siteConfig.externalAdminUrl && (
+              <a
+                href={siteConfig.externalAdminUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-purple-950/40"
+                title="Open External Configured Website"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">External Website</span>
+              </a>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                const url = siteConfig.externalAdminUrl || `${window.location.origin}/#admin?standalone=true`;
+                window.open(url, '_blank');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white border border-white/10 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Open Admin Website in New Window"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">New Window</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsStandaloneAdmin(false);
+                sessionStorage.removeItem('nexa_standalone_admin');
+                handleNavigate('dashboard');
+              }}
+              className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-rose-950/50 cursor-pointer"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Customer Store Website</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => promptSignOut()}
+              className="p-2 rounded-xl bg-white/[0.04] hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-white/5 transition-colors cursor-pointer"
+              title="Sign Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* Full-width Standalone Content Canvas */}
+        <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+          <React.Suspense fallback={<PageLoadingFallback />}>
+            {isUserAdmin ? (
+              <AdminPage />
+            ) : (
+              <AdminUnlockCard onNavigate={handleNavigate} />
+            )}
+          </React.Suspense>
+        </main>
+      </div>
     );
   }
-
-  const handleNavigate = (pageId: string) => {
-    if (!user) {
-      setCurrentPage('auth');
-      window.location.hash = 'auth';
-      return;
-    }
-    setCurrentPage(pageId);
-    window.location.hash = pageId;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   return (
     <div className="min-h-screen w-full bg-[#06070a] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-rose-500/25 selection:text-rose-200">
@@ -383,7 +498,10 @@ const MainLayout: React.FC = () => {
             {currentPage === 'api' && <ResellerApiPage />}
 
             {currentPage === 'admin' && (
-              isUserAdmin ? (
+              (role === 'ADMIN' ||
+                role === 'SUPER ADMIN' ||
+                (user?.email && ['kk7953926@gmail.com', 'kalamkalam1234kd@gmail.com', 'kalam172010@gmail.com', 'admin@example.com'].includes(user.email.toLowerCase())) ||
+                (user?.username && ['kalam', 'kalam_admin', 'nexa_admin', 'admin'].includes(user.username.toLowerCase()))) ? (
                 <AdminPage />
               ) : (
                 <AdminUnlockCard onNavigate={handleNavigate} />

@@ -9,69 +9,10 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers':
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-User-Email, X-User-Id, X-User-Role, X-Api-Key, X-Master-Key, x-api-key, x-master-key',
-  'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-User-Email, X-User-Id, X-Api-Key, X-Master-Key, x-api-key, x-master-key',
 };
 
-const DEFAULT_EDGE_PRODUCTS: any[] = [
-  {
-    id: 'PROD-476840-90',
-    name: 'DRIP CLIENT FF NONROOT APKMOD',
-    game: 'FREEFIRE',
-    category: 'FREEFIRE',
-    deviceType: 'NONROOT',
-    badge: 'STAR',
-    description: 'High-performance Free Fire Non-Root VIP panel with auto headshot, radar pinpoint, and anti-ban protection.',
-    imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
-    features: ['Auto Headshot', 'Location Pinpoint', 'Anti-Ban'],
-    externalPid: '62',
-    isActive: true,
-    isUnderMaintenance: false,
-    createdAt: '2026-10-23T01:58:41.579Z',
-    variants: [
-      { id: 'VAR-76841-0-34', productId: 'PROD-476840-90', durationLabel: '1 Day', durationHours: 24, price: 50, resellerPrice: 50, stockCount: 999, externalPid: '62', externalDuration: '1 DAYS', isActive: true, isAvailable: true },
-      { id: 'VAR-76841-1-59', productId: 'PROD-476840-90', durationLabel: '3 Days', durationHours: 72, price: 120, resellerPrice: 120, stockCount: 999, externalPid: '62', externalDuration: '3 DAYS', isActive: true, isAvailable: true },
-      { id: 'VAR-76841-2-44', productId: 'PROD-476840-90', durationLabel: '7 Days', durationHours: 168, price: 250, resellerPrice: 250, stockCount: 999, externalPid: '62', externalDuration: '7 DAYS', isActive: true, isAvailable: true },
-      { id: 'VAR-76841-3-68', productId: 'PROD-476840-90', durationLabel: '30 Days', durationHours: 720, price: 600, resellerPrice: 600, stockCount: 999, externalPid: '62', externalDuration: '30 DAYS', isActive: true, isAvailable: true },
-    ],
-  },
-  {
-    id: 'PROD-499177',
-    name: 'KALAM VIP AIMBOT FF OB55',
-    game: 'FREEFIRE',
-    description: 'Auto aimbot and radar location with 100% anti-ban protection.',
-    category: 'FREEFIRE',
-    badge: 'VIP',
-    deviceType: 'NONROOT',
-    imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
-    features: ['Auto Headshot', 'Location Pinpoint', 'Anti-Ban'],
-    externalPid: '155',
-    isActive: true,
-    isUnderMaintenance: false,
-    createdAt: '2026-10-03T15:31:39.177Z',
-    variants: [
-      { id: 'VAR-499189', productId: 'PROD-499177', durationLabel: '60 Days', durationHours: 1440, price: 1100, resellerPrice: 1100, stockCount: 999, externalPid: '155', externalDuration: '60 DAYS', isActive: true, isAvailable: true },
-    ],
-  },
-  {
-    id: 'PROD-521953',
-    name: 'HG CHEATS FF APKMOD ANDROID',
-    game: 'FREEFIRE',
-    description: 'Premium Android Non-Root Free Fire mod menu with instant delivery.',
-    category: 'FREEFIRE',
-    badge: 'STAR',
-    deviceType: 'NONROOT',
-    imageUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
-    features: ['Auto Headshot', 'Location Pinpoint', 'Anti-Ban'],
-    externalPid: '65',
-    isActive: true,
-    isUnderMaintenance: false,
-    createdAt: '2026-10-03T14:08:41.953Z',
-    variants: [
-      { id: 'VAR-516760', productId: 'PROD-521953', durationLabel: '1 Day Test', durationHours: 24, price: 50, resellerPrice: 50, stockCount: 999, externalPid: '155', externalDuration: '1 DAYS', isActive: true, isAvailable: true },
-    ],
-  },
-];
+const DEFAULT_EDGE_PRODUCTS: any[] = [];
 
 interface EdgeUser {
   id: string;
@@ -81,11 +22,8 @@ interface EdgeUser {
   balance: number;
   apiKey: string;
   referralCode: string;
-  referredBy?: string;
   twoFactorEnabled: boolean;
   isBanned: boolean;
-  isDeleted?: boolean;
-  hiddenFromLeaderboard?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -140,11 +78,6 @@ interface EdgeDbState {
   digitalKeys: EdgeKey[];
   orders: EdgeOrder[];
   transactions: EdgeTransaction[];
-  referrals: any[];
-  deletedProductIds: string[];
-  deletedUserIds: string[];
-  hiddenLeaderboardUserIds: string[];
-  siteConfig: Record<string, any>;
   resellerConfig: {
     apiUrl: string;
     apiKey: string;
@@ -163,42 +96,16 @@ function getEdgeDb(): EdgeDbState {
     g.__KALAM_EDGE_DB__ = {
       users: [
         {
-          id: 'tnqy7LYfgwgzYpoQGqljC4H6bKc2',
+          id: 'USR-KALAM-172010',
           username: 'kalam',
           email: 'kalam172010@gmail.com',
           role: 'ADMIN',
-          balance: 100.0,
+          balance: 5000.0,
           apiKey: 'nexa_live_89f4e2a1c7d3b6f890e1a2b3c4d5e6f7',
-          referralCode: 'NXC8A9FC',
+          referralCode: 'NXKALAM1',
           twoFactorEnabled: false,
           isBanned: false,
-          createdAt: '2026-10-03T07:23:04.943Z',
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'USR-1792242683123',
-          username: 'kk7953926',
-          email: 'kk7953926@gmail.com',
-          role: 'ADMIN',
-          balance: 550.0,
-          apiKey: 'nexa_live_7953926a1b2c3d4e5f6a7b8c9d0e1f2a',
-          referralCode: 'NX18EDC3',
-          twoFactorEnabled: false,
-          isBanned: false,
-          createdAt: '2026-10-17T13:11:23.123Z',
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'USR-1792301745726',
-          username: 'kalam_admin',
-          email: 'kalamkalam1234kd@gmail.com',
-          role: 'ADMIN',
-          balance: 100.0,
-          apiKey: 'nexa_live_70717a36985c082bab77b1caa8c02d36',
-          referralCode: 'NXE032E6',
-          twoFactorEnabled: false,
-          isBanned: false,
-          createdAt: '2026-10-18T05:35:45.726Z',
+          createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
         {
@@ -207,24 +114,11 @@ function getEdgeDb(): EdgeDbState {
           email: 'user@example.com',
           role: 'USER',
           balance: 0.0,
-          apiKey: 'nexa_live_101a9b8c7d6e5f4a3b2c1d0e9f8a7b6c',
+          apiKey: 'nexa_live_user101_0000000000000000',
           referralCode: 'NEXA99PRO',
           twoFactorEnabled: false,
           isBanned: false,
-          createdAt: '2026-10-03T07:21:44.786Z',
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'USR-202',
-          username: 'apex_reseller',
-          email: 'reseller@example.com',
-          role: 'RESELLER',
-          balance: 0.0,
-          apiKey: 'nexa_live_202f1e2d3c4b5a69788796a5b4c3d2e1',
-          referralCode: 'APEXVIP77',
-          twoFactorEnabled: false,
-          isBanned: false,
-          createdAt: '2026-10-03T07:21:44.786Z',
+          createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
       ],
@@ -232,34 +126,6 @@ function getEdgeDb(): EdgeDbState {
       digitalKeys: [],
       orders: [],
       transactions: [],
-      referrals: [],
-      deletedProductIds: [
-        'PROD-BALA-01',
-        'PROD-IMMO-02',
-        'PROD-DRIP-03',
-        'PROD-TROLL-04',
-        'PROD-CARROM-05',
-        'PROD-709750',
-        'PROD-042859',
-        'PROD-882350',
-        'PROD-035699-81',
-      ],
-      deletedUserIds: [],
-      hiddenLeaderboardUserIds: [],
-      siteConfig: {
-        siteTitle: 'KALAM FF PANEL',
-        siteTagline: 'Free Fire VIP Digital Keys & Reseller Panel',
-        currencySymbol: '₹',
-        currencyCode: 'INR',
-        accentTheme: 'crimson',
-        backgroundStyle: 'deep-slate',
-        glowIntensity: 'vibrant',
-        borderRadius: 'rounded',
-        fontStyle: 'ultra-bold',
-        minDepositAmount: 1,
-        resellerUpgradePrice: 299,
-        referralCommissionPct: 5,
-      },
       resellerConfig: {
         apiUrl: 'https://bantibhaiya.to/api/reseller_v1.php',
         apiKey: '5841ac0e6b458bdde0ffbe2baa095306',
@@ -498,81 +364,37 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
 
   // 1B. Two-Way State Sync Endpoint (/api/sync/state)
   if (path === '/api/sync/state') {
-    if (Array.isArray(bodyData.deletedProductIds)) {
-      edgeDb.deletedProductIds = Array.from(new Set([...(edgeDb.deletedProductIds || []), ...bodyData.deletedProductIds]));
-    }
-    if (Array.isArray(bodyData.deletedUserIds)) {
-      edgeDb.deletedUserIds = Array.from(new Set([...(edgeDb.deletedUserIds || []), ...bodyData.deletedUserIds]));
-    }
-    if (Array.isArray(bodyData.hiddenLeaderboardUserIds)) {
-      edgeDb.hiddenLeaderboardUserIds = Array.from(new Set([...(edgeDb.hiddenLeaderboardUserIds || []), ...bodyData.hiddenLeaderboardUserIds]));
-    }
     if (Array.isArray(bodyData.users)) {
-      if (bodyData.forceReplace) {
-        edgeDb.users = bodyData.users.map((u: any) => ({
-          id: u.id,
-          username: u.username || 'user',
-          email: u.email || `${u.id}@user.local`,
-          role: u.role || 'USER',
-          balance: typeof u.balance === 'number' ? u.balance : 0,
-          apiKey: u.apiKey || `nexa_live_${generateRandomHex(24)}`,
-          referralCode: u.referralCode || `NX${generateRandomHex(4).toUpperCase()}`,
-          referredBy: u.referredBy,
-          twoFactorEnabled: Boolean(u.twoFactorEnabled),
-          isBanned: Boolean(u.isBanned),
-          isDeleted: Boolean(u.isDeleted),
-          hiddenFromLeaderboard: Boolean(u.hiddenFromLeaderboard),
-          createdAt: u.createdAt || new Date().toISOString(),
-          updatedAt: u.updatedAt || new Date().toISOString(),
-        }));
-      } else {
-        for (const incomingUser of bodyData.users) {
-          if (!incomingUser || !incomingUser.id) continue;
-          const existing = edgeDb.users.find(
-            u => u.id === incomingUser.id || (incomingUser.email && u.email.toLowerCase() === String(incomingUser.email).toLowerCase())
-          );
-          if (!existing) {
-            edgeDb.users.push({
-              id: incomingUser.id,
-              username: incomingUser.username || 'user',
-              email: incomingUser.email || `${incomingUser.id}@user.local`,
-              role: incomingUser.role || 'USER',
-              balance: typeof incomingUser.balance === 'number' ? incomingUser.balance : 0,
-              apiKey: incomingUser.apiKey || `nexa_live_${generateRandomHex(24)}`,
-              referralCode: incomingUser.referralCode || `NX${generateRandomHex(4).toUpperCase()}`,
-              referredBy: incomingUser.referredBy,
-              twoFactorEnabled: Boolean(incomingUser.twoFactorEnabled),
-              isBanned: Boolean(incomingUser.isBanned),
-              createdAt: incomingUser.createdAt || new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            });
-          } else {
-            if (incomingUser.apiKey && !existing.apiKey) existing.apiKey = incomingUser.apiKey;
-            if (incomingUser.role) existing.role = incomingUser.role;
-            if (typeof incomingUser.balance === 'number' && bodyData.forceBalanceSync) {
-              existing.balance = incomingUser.balance;
-            }
+      for (const incomingUser of bodyData.users) {
+        if (!incomingUser || !incomingUser.id) continue;
+        const existing = edgeDb.users.find(
+          u => u.id === incomingUser.id || (incomingUser.email && u.email.toLowerCase() === String(incomingUser.email).toLowerCase())
+        );
+        if (!existing) {
+          edgeDb.users.push({
+            id: incomingUser.id,
+            username: incomingUser.username || 'user',
+            email: incomingUser.email || `${incomingUser.id}@user.local`,
+            role: incomingUser.role || 'USER',
+            balance: typeof incomingUser.balance === 'number' ? incomingUser.balance : 0,
+            apiKey: incomingUser.apiKey || `nexa_live_${generateRandomHex(24)}`,
+            referralCode: incomingUser.referralCode || `NX${generateRandomHex(4).toUpperCase()}`,
+            twoFactorEnabled: Boolean(incomingUser.twoFactorEnabled),
+            isBanned: Boolean(incomingUser.isBanned),
+            createdAt: incomingUser.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          if (incomingUser.apiKey && !existing.apiKey) existing.apiKey = incomingUser.apiKey;
+          if (incomingUser.role) existing.role = incomingUser.role;
+          if (typeof incomingUser.balance === 'number' && bodyData.forceBalanceSync) {
+            existing.balance = incomingUser.balance;
           }
         }
       }
     }
-    if (Array.isArray(bodyData.products)) {
+    if (Array.isArray(bodyData.products) && bodyData.products.length > 0) {
       edgeDb.products = bodyData.products;
-    }
-    if (Array.isArray(bodyData.orders) && bodyData.forceReplace) {
-      edgeDb.orders = bodyData.orders;
-    }
-    if (Array.isArray(bodyData.keys) && bodyData.forceReplace) {
-      edgeDb.digitalKeys = bodyData.keys;
-    }
-    if (Array.isArray(bodyData.transactions) && bodyData.forceReplace) {
-      edgeDb.transactions = bodyData.transactions;
-    }
-    if (Array.isArray(bodyData.referrals)) {
-      edgeDb.referrals = bodyData.referrals;
-    }
-    if (bodyData.siteConfig && typeof bodyData.siteConfig === 'object') {
-      edgeDb.siteConfig = { ...edgeDb.siteConfig, ...bodyData.siteConfig };
     }
     if (bodyData.resellerConfig && typeof bodyData.resellerConfig === 'object') {
       edgeDb.resellerConfig = { ...edgeDb.resellerConfig, ...bodyData.resellerConfig };
@@ -581,16 +403,10 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     return jsonResponse({
       status: true,
       users: edgeDb.users,
-      products: edgeDb.products,
       orders: edgeDb.orders,
       keys: edgeDb.digitalKeys,
       transactions: edgeDb.transactions,
-      referrals: edgeDb.referrals,
-      siteConfig: edgeDb.siteConfig,
       resellerConfig: edgeDb.resellerConfig,
-      deletedProductIds: edgeDb.deletedProductIds,
-      deletedUserIds: edgeDb.deletedUserIds,
-      hiddenLeaderboardUserIds: edgeDb.hiddenLeaderboardUserIds,
     });
   }
 
@@ -1471,21 +1287,8 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
 
   // 7B. Top Active Users Leaderboard (/api/top-active-users)
   if ((path === '/api/top-active-users' || path === '/top-active-users') && method === 'GET') {
-    const hiddenSet = new Set<string>([
-      ...(edgeDb.hiddenLeaderboardUserIds || []),
-      ...(edgeDb.deletedUserIds || []),
-    ].map(x => String(x).toLowerCase()));
-
     const userStatsMap: Record<string, { rank: number; userId: string; username: string; role: string; keysCount: number; totalSpent: number }> = {};
     for (const u of edgeDb.users) {
-      if (
-        u.isDeleted ||
-        u.hiddenFromLeaderboard ||
-        hiddenSet.has(u.id.toLowerCase()) ||
-        hiddenSet.has((u.username || '').toLowerCase())
-      ) {
-        continue;
-      }
       userStatsMap[u.id] = {
         rank: 0,
         userId: u.id,
@@ -1519,135 +1322,8 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     });
   }
 
-  if (path.startsWith('/api/admin/top-active-users/') && method === 'DELETE') {
-    const targetId = decodeURIComponent(path.replace('/api/admin/top-active-users/', '').trim());
-    if (!edgeDb.hiddenLeaderboardUserIds.includes(targetId)) {
-      edgeDb.hiddenLeaderboardUserIds.push(targetId);
-    }
-    const usr = edgeDb.users.find(u => u.id === targetId || u.username === targetId);
-    if (usr) {
-      usr.hiddenFromLeaderboard = true;
-      if (!edgeDb.hiddenLeaderboardUserIds.includes(usr.id)) edgeDb.hiddenLeaderboardUserIds.push(usr.id);
-      if (!edgeDb.hiddenLeaderboardUserIds.includes(usr.username)) edgeDb.hiddenLeaderboardUserIds.push(usr.username);
-    }
-    return jsonResponse({ success: true, message: 'User removed from Top Active Members leaderboard.' });
-  }
-
-  if (path.startsWith('/api/admin/users/') && !path.includes('/adjust-balance') && !path.includes('/balance') && !path.includes('/role') && !path.includes('/ban') && !path.includes('/password') && method === 'DELETE') {
-    const targetId = decodeURIComponent(path.replace('/api/admin/users/', '').trim());
-    if (!edgeDb.deletedUserIds.includes(targetId)) edgeDb.deletedUserIds.push(targetId);
-    if (!edgeDb.hiddenLeaderboardUserIds.includes(targetId)) edgeDb.hiddenLeaderboardUserIds.push(targetId);
-    edgeDb.users = edgeDb.users.filter(u => u.id !== targetId && u.username !== targetId);
-    return jsonResponse({ success: true, message: 'User deleted permanently.' });
-  }
-
-  // 7C. Referral System Endpoints (/api/referrals & /api/admin/referrals*)
-  if (path === '/api/referrals' && method === 'GET') {
-    const user = resolveUserFromRequest(request, bodyData);
-    const myReferrals = (edgeDb.referrals || []).filter((r: any) => r.referrerId === user.id);
-    const totalCommission = myReferrals.reduce((s: number, r: any) => s + Number(r.commissionEarned || 0), 0);
-    return jsonResponse({
-      referralCode: user.referralCode || `NX${user.id.slice(0, 4).toUpperCase()}`,
-      commissionPct: Number(edgeDb.siteConfig?.referralCommissionPct ?? 5),
-      totalReferrals: myReferrals.length,
-      totalCommission,
-      referrals: myReferrals,
-    });
-  }
-
-  if (path === '/api/admin/referrals' && method === 'GET') {
-    const records = (edgeDb.referrals || []).map((r: any) => {
-      const refUser = edgeDb.users.find(u => u.id === r.referrerId);
-      const targetUser = edgeDb.users.find(u => u.id === r.referredUserId);
-      return {
-        ...r,
-        referrerUsername: r.referrerUsername || refUser?.username || 'Sponsor',
-        referrerEmail: r.referrerEmail || refUser?.email || '',
-        referredUsername: r.referredUsername || targetUser?.username || 'Member',
-        referredEmail: r.referredEmail || targetUser?.email || '',
-      };
-    });
-    const totalCommissionsPaid = records.reduce((s: number, r: any) => s + Number(r.commissionEarned || 0), 0);
-    return jsonResponse({
-      commissionPct: Number(edgeDb.siteConfig?.referralCommissionPct ?? 5),
-      signupBonus: Number(edgeDb.siteConfig?.referralSignupBonus ?? 0),
-      totalReferrals: records.length,
-      totalCommissionsPaid,
-      referrals: records,
-      users: edgeDb.users.map(u => ({
-        id: u.id,
-        username: u.username,
-        email: u.email,
-        referralCode: u.referralCode,
-        referredBy: u.referredBy,
-        balance: u.balance,
-      })),
-    });
-  }
-
-  if (path === '/api/admin/referrals/settings' && method === 'PATCH') {
-    if (bodyData.commissionPct !== undefined) {
-      edgeDb.siteConfig.referralCommissionPct = Number(bodyData.commissionPct);
-    }
-    if (bodyData.signupBonus !== undefined) {
-      edgeDb.siteConfig.referralSignupBonus = Number(bodyData.signupBonus);
-    }
-    return jsonResponse({
-      message: 'Referral settings updated.',
-      commissionPct: edgeDb.siteConfig.referralCommissionPct,
-      signupBonus: edgeDb.siteConfig.referralSignupBonus || 0,
-    });
-  }
-
-  if (path === '/api/admin/referrals/assign' && method === 'POST') {
-    const { userId, sponsorCodeOrUser } = bodyData;
-    const target = edgeDb.users.find(u => u.id === userId || u.username === userId);
-    const sponsor = edgeDb.users.find(
-      u =>
-        u.referralCode?.toLowerCase() === String(sponsorCodeOrUser || '').toLowerCase() ||
-        u.username?.toLowerCase() === String(sponsorCodeOrUser || '').toLowerCase() ||
-        u.id === sponsorCodeOrUser
-    );
-    if (!target || !sponsor) {
-      return jsonResponse({ error: 'Target user or sponsor not found.' }, 404);
-    }
-    target.referredBy = sponsor.id;
-    const rec = {
-      id: `REF-${Date.now()}`,
-      referrerId: sponsor.id,
-      referrerUsername: sponsor.username,
-      referredUserId: target.id,
-      referredUsername: target.username,
-      commissionEarned: 0,
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-    };
-    edgeDb.referrals.unshift(rec);
-    return jsonResponse({ message: `Linked ${target.username} under sponsor ${sponsor.username}.`, referral: rec });
-  }
-
-  if (path === '/api/admin/referrals/credit' && method === 'POST') {
-    const { userId, amount, note } = bodyData;
-    const target = edgeDb.users.find(u => u.id === userId || u.username === userId);
-    if (!target) {
-      return jsonResponse({ error: 'User not found.' }, 404);
-    }
-    const bonus = Math.max(0, Number(amount) || 0);
-    target.balance = Number((target.balance + bonus).toFixed(2));
-    edgeDb.transactions.unshift({
-      id: `TX-REF-${Date.now()}`,
-      userId: target.id,
-      type: 'CREDIT',
-      amount: bonus,
-      description: note || 'Referral commission reward credit',
-      createdAt: new Date().toISOString(),
-    });
-    return jsonResponse({ message: `Credited ₹${bonus} referral commission to ${target.username}.`, newBalance: target.balance });
-  }
-
   // 8. Admin Users & Balance Adjustments (/api/admin/users, /api/admin/users/:id/adjust-balance)
   if (path === '/api/admin/users' && method === 'GET') {
-    const deletedSet = new Set((edgeDb.deletedUserIds || []).map(x => x.toLowerCase()));
     // Sync any newly discovered users from Firestore in deploy/edge
     try {
       const fsQueryUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/users?pageSize=100&key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
@@ -1659,8 +1335,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           const f = d.fields || {};
           const uId = f.id?.stringValue || d.name?.split('/').pop() || '';
           const uEmail = (f.email?.stringValue || '').toLowerCase().trim();
-          const uName = (f.username?.stringValue || '').toLowerCase().trim();
-          if ((!uId && !uEmail) || deletedSet.has(uId.toLowerCase()) || deletedSet.has(uName)) continue;
+          if (!uId && !uEmail) continue;
           const existing = edgeDb.users.find(u => u.id === uId || (uEmail && u.email.toLowerCase() === uEmail));
           const uBal = typeof f.balance?.doubleValue === 'number'
             ? f.balance.doubleValue
@@ -1689,18 +1364,16 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       }
     } catch {}
 
-    const users = edgeDb.users
-      .filter(u => !u.isDeleted && !deletedSet.has(u.id.toLowerCase()) && !deletedSet.has((u.username || '').toLowerCase()))
-      .map(u => {
-        const userOrders = edgeDb.orders.filter(o => o.userId === u.id);
-        const userKeys = edgeDb.digitalKeys.filter(k => k.assignedUserId === u.id);
-        return {
-          ...u,
-          totalOrdersCount: userOrders.length,
-          totalSpent: userOrders.reduce((s, o) => s + (o.pricePaid || 0), 0),
-          keysCount: userKeys.length,
-        };
-      });
+    const users = edgeDb.users.map(u => {
+      const userOrders = edgeDb.orders.filter(o => o.userId === u.id);
+      const userKeys = edgeDb.digitalKeys.filter(k => k.assignedUserId === u.id);
+      return {
+        ...u,
+        totalOrdersCount: userOrders.length,
+        totalSpent: userOrders.reduce((s, o) => s + (o.pricePaid || 0), 0),
+        keysCount: userKeys.length,
+      };
+    });
     return jsonResponse({ users });
   }
 
@@ -1974,9 +1647,6 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
 
   if (path.startsWith('/api/admin/products/') && method === 'DELETE') {
     const delId = path.replace('/api/admin/products/', '').split('/')[0];
-    if (!edgeDb.deletedProductIds.includes(delId)) {
-      edgeDb.deletedProductIds.push(delId);
-    }
     edgeDb.products = edgeDb.products.filter((p: any) => p.id !== delId);
     try {
       const fsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents/products/${encodeURIComponent(delId)}?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
@@ -1985,123 +1655,8 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
     return jsonResponse({ message: 'Product deleted permanently.' });
   }
 
-  if (path.startsWith('/api/admin/products/') && method === 'PATCH') {
-    const cleanSub = path.replace('/api/admin/products/', '');
-    const prodId = cleanSub.split('/')[0];
-    const prod = edgeDb.products.find((p: any) => p.id === prodId);
-    if (prod) {
-      if (cleanSub.endsWith('/pid')) {
-        prod.externalPid = String(bodyData.externalPid || '').trim();
-      } else if (cleanSub.endsWith('/maintenance')) {
-        prod.isUnderMaintenance = typeof bodyData.isUnderMaintenance === 'boolean' ? bodyData.isUnderMaintenance : !prod.isUnderMaintenance;
-        if (bodyData.maintenanceNotice !== undefined) prod.maintenanceNotice = bodyData.maintenanceNotice;
-      } else {
-        Object.assign(prod, bodyData, { id: prod.id, variants: prod.variants || [] });
-      }
-    }
-    return jsonResponse({ message: 'Product updated.', product: prod });
-  }
-
-  if (path === '/api/admin/variants' && method === 'POST') {
-    const prod = edgeDb.products.find((p: any) => p.id === bodyData.productId) || edgeDb.products[0];
-    const newVar = {
-      id: `VAR-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
-      productId: prod?.id || bodyData.productId,
-      durationLabel: String(bodyData.durationLabel || '1 Day').trim(),
-      durationHours: Number(bodyData.durationHours) || 24,
-      price: Number(bodyData.price) || 50,
-      resellerPrice: Number(bodyData.resellerPrice) || Number(bodyData.price) || 50,
-      stockCount: 999,
-      externalPid: bodyData.externalPid || prod?.externalPid,
-      externalDuration: String(bodyData.externalDuration || bodyData.durationLabel || '1 DAYS').trim(),
-      isActive: true,
-      isAvailable: true,
-    };
-    if (prod) {
-      prod.variants = [...(prod.variants || []), newVar];
-    }
-    return jsonResponse({ message: 'Duration variant created.', variant: newVar }, 201);
-  }
-
-  if (path.startsWith('/api/admin/variants/') && (method === 'PATCH' || method === 'DELETE')) {
-    const varId = path.replace('/api/admin/variants/', '').split('/')[0];
-    let matchedVar: any = null;
-    for (const p of edgeDb.products) {
-      if (method === 'DELETE') {
-        p.variants = (p.variants || []).filter((v: any) => v.id !== varId);
-      } else {
-        p.variants = (p.variants || []).map((v: any) => {
-          if (v.id === varId) {
-            matchedVar = { ...v, ...bodyData, id: v.id };
-            return matchedVar;
-          }
-          return v;
-        });
-      }
-    }
-    return jsonResponse({ message: method === 'DELETE' ? 'Variant deleted.' : 'Variant updated.', variant: matchedVar });
-  }
-
-  if (path === '/api/site-settings' || path === '/api/admin/settings/site') {
-    if (method === 'PATCH' || method === 'POST') {
-      edgeDb.siteConfig = { ...edgeDb.siteConfig, ...bodyData };
-      return jsonResponse({ message: 'Site settings saved.', config: edgeDb.siteConfig });
-    }
-    return jsonResponse({ config: edgeDb.siteConfig });
-  }
-
-  if (path === '/api/admin/database/export' && method === 'GET') {
-    return jsonResponse({
-      users: edgeDb.users,
-      products: edgeDb.products,
-      productVariants: edgeDb.products.flatMap((p: any) => p.variants || []),
-      digitalKeys: edgeDb.digitalKeys,
-      orders: edgeDb.orders,
-      transactions: edgeDb.transactions,
-      referrals: edgeDb.referrals,
-      siteConfig: edgeDb.siteConfig,
-      resellerConfig: edgeDb.resellerConfig,
-      deletedProductIds: edgeDb.deletedProductIds,
-      deletedUserIds: edgeDb.deletedUserIds,
-      hiddenLeaderboardUserIds: edgeDb.hiddenLeaderboardUserIds,
-    });
-  }
-
-  if (path === '/api/admin/database/import' && method === 'POST') {
-    if (Array.isArray(bodyData.users)) edgeDb.users = bodyData.users;
-    if (Array.isArray(bodyData.products)) {
-      const incomingVars = Array.isArray(bodyData.productVariants) ? bodyData.productVariants : [];
-      edgeDb.products = bodyData.products.map((p: any) => ({
-        ...p,
-        variants: Array.isArray(p.variants) && p.variants.length > 0
-          ? p.variants
-          : incomingVars.filter((v: any) => v.productId === p.id),
-      }));
-    }
-    if (Array.isArray(bodyData.digitalKeys)) edgeDb.digitalKeys = bodyData.digitalKeys;
-    if (Array.isArray(bodyData.orders)) edgeDb.orders = bodyData.orders;
-    if (Array.isArray(bodyData.transactions)) edgeDb.transactions = bodyData.transactions;
-    if (Array.isArray(bodyData.referrals)) edgeDb.referrals = bodyData.referrals;
-    if (Array.isArray(bodyData.deletedProductIds)) edgeDb.deletedProductIds = bodyData.deletedProductIds;
-    if (Array.isArray(bodyData.deletedUserIds)) edgeDb.deletedUserIds = bodyData.deletedUserIds;
-    if (Array.isArray(bodyData.hiddenLeaderboardUserIds)) edgeDb.hiddenLeaderboardUserIds = bodyData.hiddenLeaderboardUserIds;
-    if (bodyData.siteConfig) edgeDb.siteConfig = { ...edgeDb.siteConfig, ...bodyData.siteConfig };
-    if (bodyData.resellerConfig) edgeDb.resellerConfig = { ...edgeDb.resellerConfig, ...bodyData.resellerConfig };
-
-    return jsonResponse({
-      message: 'Database snapshot successfully restored on Edge!',
-      stats: {
-        usersCount: edgeDb.users.length,
-        productsCount: edgeDb.products.length,
-        ordersCount: edgeDb.orders.length,
-        keysCount: edgeDb.digitalKeys.length,
-      },
-    });
-  }
-
   // 10B. Public Products Endpoint with Firestore Integration
   if (path === '/api/products') {
-    const deletedProdSet = new Set(edgeDb.deletedProductIds || []);
     try {
       const fsProdsUrl = `https://firestore.googleapis.com/v1/projects/kalam-panel/databases/ai-studio-nexagamingpanel-02432dbb-5483-456e-9269-5d439824a6d9/documents:runQuery?key=AIzaSyCr1MPZ1LARgyKRTQKIQ0cKH6Z3R6U0-As`;
       const [pRes, vRes] = await Promise.all([
@@ -2128,7 +1683,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
           const vf = vd.fields || {};
           const vid = vf.id?.stringValue || (vd.name || '').split('/').pop() || '';
           const pid = vf.productId?.stringValue || '';
-          if (vid && pid && !deletedProdSet.has(pid)) {
+          if (vid && pid) {
             const vObj = {
               id: vid,
               productId: pid,
@@ -2149,7 +1704,7 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
         for (const pd of pDocs) {
           const pf = pd.fields || {};
           const pid = pf.id?.stringValue || (pd.name || '').split('/').pop() || '';
-          if (!pid || deletedProdSet.has(pid)) continue;
+          if (!pid) continue;
           const pObj = {
             id: pid,
             name: pf.name?.stringValue || 'Gaming Panel',
@@ -2182,7 +1737,6 @@ async function handleEdgeApi(url: URL, request: Request, rawBodyText: string): P
       }
     } catch {}
 
-    edgeDb.products = edgeDb.products.filter((p: any) => p && p.id && !deletedProdSet.has(p.id));
     return jsonResponse({ products: edgeDb.products });
   }
 
@@ -2275,20 +1829,9 @@ export default {
       return handleEdgeApi(url, request, rawBodyText);
     }
 
-    // Route static SPA files with no-cache on HTML so restored deployments show immediately
+    // Route static SPA files
     if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      const assetRes = await env.ASSETS.fetch(request);
-      const cType = assetRes.headers.get('content-type') || '';
-      if (cType.includes('text/html')) {
-        const headers = new Headers(assetRes.headers);
-        headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-        return new Response(assetRes.body, {
-          status: assetRes.status,
-          statusText: assetRes.statusText,
-          headers,
-        });
-      }
-      return assetRes;
+      return env.ASSETS.fetch(request);
     }
 
     return new Response('Asset service unavailable', { status: 503 });
