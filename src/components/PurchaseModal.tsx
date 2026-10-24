@@ -12,6 +12,7 @@ import {
   Zap,
   KeyRound,
   Layers,
+  Mail,
 } from 'lucide-react';
 import { Product, ProductVariant } from '../types/index';
 import { useAuth } from '../context/AuthContext';
@@ -178,6 +179,17 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Email Receipt Notice */}
+        {user?.email && (
+          <div className="px-3.5 py-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-center gap-2.5 text-xs">
+            <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div className="truncate text-slate-300">
+              Instant Email Receipt &amp; Key sent to{' '}
+              <span className="font-mono font-bold text-emerald-300">{user.email}</span>
+            </div>
+          </div>
+        )}
 
         {/* Insufficient Balance Alert */}
         {!hasEnoughBalance && (

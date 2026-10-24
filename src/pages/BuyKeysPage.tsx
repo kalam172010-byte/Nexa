@@ -20,6 +20,8 @@ import {
   Eye,
   Smartphone,
   Cpu,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { Product, ProductVariant } from '../types/index.js';
 import { api } from '../services/api.js';
@@ -48,10 +50,12 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(() => api.getCachedProductsSync().length === 0);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Filters
+  // Filters & Mobile Layout Mode
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [gameFilter, setGameFilter] = useState<string>('ALL GAMES');
   const [deviceFilter, setDeviceFilter] = useState<string>('ALL SYSTEMS');
+  const [viewMode, setViewMode] = useState<'cards' | 'compact'>('cards');
+  const [selectedCompactVariantMap, setSelectedCompactVariantMap] = useState<Record<string, string>>({});
 
   // Track which product cards have their "Purchase Key" duration list expanded
   const [expandedProductIds, setExpandedProductIds] = useState<Record<string, boolean>>({});
@@ -148,18 +152,28 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     const purchasedVariant = selectedPurchase?.variant;
     setSelectedPurchase(null);
 
+    const receiptTarget = deliveredKeyData?.receiptEmailAddress;
     showToastSuccess(
-      'Purchase Successful',
-      `${purchasedProduct?.name || 'License'} (${purchasedVariant?.durationLabel || 'Key'}) is ready for use.`
+      'Purchase Successful & Receipt Sent',
+      receiptTarget
+        ? `${purchasedProduct?.name || 'License'} key delivered & email receipt dispatched to ${receiptTarget}.`
+        : `${purchasedProduct?.name || 'License'} (${purchasedVariant?.durationLabel || 'Key'}) is ready for use.`
     );
 
     setDeliveredKey({
+      id: deliveredKeyData?.id,
+      orderId: deliveredKeyData?.orderId || deliveredKeyData?.assignedOrderId,
       keyCode: deliveredKeyData?.keyCode || 'N/A',
       productName: purchasedProduct?.name || deliveredKeyData?.productName || 'VIP Key',
+      gameName: purchasedProduct?.game || deliveredKeyData?.gameName || 'FREE FIRE',
       durationLabel: purchasedVariant?.durationLabel || deliveredKeyData?.durationLabel || 'Standard',
+      pricePaid: deliveredKeyData?.pricePaid ?? purchasedVariant?.price,
       expiresAt: deliveredKeyData?.expiresAt,
+      assignedAt: deliveredKeyData?.assignedAt || deliveredKeyData?.createdAt,
       purchaseSource: deliveredKeyData?.purchaseSource || 'WEB',
       purchaseSourceLabel: deliveredKeyData?.purchaseSourceLabel || 'Buy from Website',
+      receiptEmailSent: deliveredKeyData?.receiptEmailSent,
+      receiptEmailAddress: deliveredKeyData?.receiptEmailAddress,
     });
 
     fetchProducts(true);
@@ -238,6 +252,15 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
     return matchGame && matchDevice;
   });
 
+  const getVariantPrice = (variant: ProductVariant) =>
+    Number(role === 'RESELLER' && variant.resellerPrice ? variant.resellerPrice : variant.price);
+
+  const getStartingPrice = (product: Product): number | null => {
+    if (!product.variants || product.variants.length === 0) return null;
+    const prices = product.variants.map(getVariantPrice).filter(p => !Number.isNaN(p) && p >= 0);
+    return prices.length > 0 ? Math.min(...prices) : null;
+  };
+
   return (
     <div className="space-y-3.5 sm:space-y-6 w-full max-w-full overflow-x-hidden">
       {/* Dynamic Cyber Hero Header */}
@@ -258,26 +281,56 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
               VIP License Catalog &amp; Key Dispatch
             </h2>
             <p className="text-[11px] sm:text-sm text-slate-300 leading-relaxed break-words">
-              Tap <span className="text-rose-400 font-bold">Purchase Key</span> on any package to view durations and <span className="text-emerald-400 font-bold">Buy Now</span>.
+              Tap <span className="text-rose-400 font-bold">Purchase Key</span> on any package or switch to <span className="text-cyan-400 font-bold">Quick Compact</span> view for 1-tap mobile checkout.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 w-full md:w-auto min-w-0">
-            <div className="relative flex-1 md:w-64 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full md:w-auto min-w-0">
+            <div className="relative flex-1 md:w-56 min-w-0">
               <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search software package..."
+                placeholder="Search package..."
                 className="w-full min-h-[42px] pl-8 sm:pl-9 pr-3 py-2 rounded-xl bg-[#0a0d18] border border-white/10 focus:border-cyan-400 text-xs text-white placeholder:text-slate-500 focus:outline-none transition-colors shadow-inner font-medium"
               />
+            </div>
+
+            {/* Layout Mode Switcher: Cards vs Quick Compact */}
+            <div className="flex items-center p-1 rounded-xl bg-[#0a0d18] border border-white/10 shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-400/50 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Detailed Card View"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden xs:inline sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('compact')}
+                className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  viewMode === 'compact'
+                    ? 'bg-rose-500/25 text-rose-300 border border-rose-400/50 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Quick Compact Mobile View"
+              >
+                <List className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden xs:inline sm:inline">Compact</span>
+              </button>
             </div>
 
             <button
               type="button"
               onClick={() => fetchProducts(false)}
-              className="min-h-[42px] px-3 sm:px-3.5 py-2 rounded-xl bg-[#101428] hover:bg-[#181f3d] active:scale-95 text-slate-200 hover:text-white text-xs font-bold border border-cyan-500/30 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-md"
+              className="min-h-[42px] px-3 py-2 rounded-xl bg-[#101428] hover:bg-[#181f3d] active:scale-95 text-slate-200 hover:text-white text-xs font-bold border border-cyan-500/30 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-md"
               aria-label="Refresh Catalog"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
@@ -379,6 +432,136 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
             Reset Filters
           </button>
         </div>
+      ) : viewMode === 'compact' ? (
+        /* IDEA 2: Ultra-Compact Mobile Quick-Buy Grid (Zero Banner Scroll, Inline Duration Selector) */
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-full">
+          {filteredProducts.map(product => {
+            const variants = product.variants || [];
+            const selectedVarId = selectedCompactVariantMap[product.id] || variants[0]?.id;
+            const activeVariant = variants.find(v => v.id === selectedVarId) || variants[0];
+            const activePrice = activeVariant ? getVariantPrice(activeVariant) : 0;
+            const hasExternalApi = Boolean(
+              (activeVariant as any)?.externalPid || product.externalPid
+            );
+            const isOutOfStock =
+              !activeVariant || (!hasExternalApi && (activeVariant.stockCount ?? 15) <= 0);
+
+            return (
+              <div
+                key={product.id}
+                className="p-3.5 rounded-2xl bg-gradient-to-b from-[#13172e] to-[#0b0e1c] border border-cyan-500/25 hover:border-cyan-400/50 transition-all space-y-3 min-w-0 shadow-lg"
+              >
+                {/* Compact Row Header */}
+                <div className="flex items-start justify-between gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500/20 via-rose-500/20 to-amber-500/20 border border-cyan-400/30 flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-5 h-5 text-cyan-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-slate-400">
+                        <span className="text-cyan-300 truncate">{product.game || 'FREE FIRE'}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="text-emerald-400 truncate">{product.deviceType || 'NONROOT'}</span>
+                      </div>
+                      <h3 className="font-display font-extrabold text-sm sm:text-base text-white truncate">
+                        {product.name}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setActiveFileModal(product)}
+                      className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center justify-center cursor-pointer active:scale-95"
+                      title="Download Loader File"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveVideoModal(product)}
+                      className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-300 flex items-center justify-center cursor-pointer active:scale-95"
+                      title="Watch Gameplay Video"
+                    >
+                      <PlaySquare className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Inline Touch Duration Selector Chips + Instant Buy Bar */}
+                {product.isUnderMaintenance ? (
+                  <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-300 font-bold flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Temporarily Under Maintenance</span>
+                  </div>
+                ) : variants.length > 0 ? (
+                  <div className="space-y-2.5 pt-2 border-t border-white/[0.08] min-w-0">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 min-w-0">
+                      {variants.map(v => {
+                        const isSelected = activeVariant?.id === v.id;
+                        const vP = getVariantPrice(v);
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() =>
+                              setSelectedCompactVariantMap(prev => ({
+                                ...prev,
+                                [product.id]: v.id,
+                              }))
+                            }
+                            className={`min-h-[38px] px-2.5 py-1.5 rounded-xl text-left transition-all cursor-pointer border min-w-0 flex flex-col justify-center ${
+                              isSelected
+                                ? 'bg-rose-500/20 border-rose-500 text-white shadow-sm'
+                                : 'bg-[#090c18] border-white/10 text-slate-300 hover:border-white/25'
+                            }`}
+                          >
+                            <div className="text-[10px] font-bold truncate">{v.durationLabel}</div>
+                            <div className="text-[11px] font-mono font-black text-emerald-400 tabular-nums">
+                              ₹{vP.toFixed(0)}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {activeVariant && (
+                      <div className="flex items-center justify-between gap-2 pt-1 min-w-0">
+                        <div className="min-w-0">
+                          <span className="text-[10px] text-slate-400 block truncate">
+                            Selected: {activeVariant.durationLabel}
+                          </span>
+                          <span className="font-mono text-sm font-black text-emerald-400 tabular-nums">
+                            ₹{activePrice.toFixed(2)}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={isOutOfStock}
+                          onClick={() => setSelectedPurchase({ product, variant: activeVariant })}
+                          className={`min-h-[42px] px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer active:scale-95 ${
+                            isOutOfStock
+                              ? 'bg-white/5 text-slate-500 border border-white/10 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white shadow-md border border-white/20'
+                          }`}
+                        >
+                          <Zap className="w-3.5 h-3.5 fill-white text-white shrink-0" />
+                          <span>{isOutOfStock ? 'Out of Stock' : 'Buy Now'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-2 text-[11px] text-slate-500">
+                    No duration plans configured.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-5 items-start w-full max-w-full">
           {filteredProducts.map(product => {
@@ -390,6 +573,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
             ];
             const hasValidImage = Boolean(product.imageUrl && !failedImages[product.id]);
             const isExpanded = Boolean(expandedProductIds[product.id]);
+            const startingPrice = getStartingPrice(product);
 
             return (
               <div
@@ -456,16 +640,23 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                   {/* Card Content & Compact Feature Grid */}
                   <div className="p-3.5 sm:p-5 space-y-3 sm:space-y-4 min-w-0">
                     <div className="space-y-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-xs font-mono font-bold">
-                        {product.badge && (
-                          <>
-                            <span className="text-amber-300 uppercase truncate max-w-[180px]">
-                              {product.badge}
-                            </span>
-                            <span className="text-slate-600" aria-hidden="true">·</span>
-                          </>
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] sm:text-xs font-mono font-bold">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {product.badge && (
+                            <>
+                              <span className="text-amber-300 uppercase truncate max-w-[150px]">
+                                {product.badge}
+                              </span>
+                              <span className="text-slate-600" aria-hidden="true">·</span>
+                            </>
+                          )}
+                          <span className="text-emerald-400 uppercase shrink-0">OB55 VERIFIED</span>
+                        </div>
+                        {startingPrice !== null && (
+                          <span className="text-cyan-300 font-mono font-black shrink-0">
+                            From ₹{startingPrice.toFixed(0)}
+                          </span>
                         )}
-                        <span className="text-emerald-400 uppercase">OB55 VERIFIED</span>
                       </div>
 
                       <h3 className="font-display font-extrabold text-base sm:text-xl md:text-2xl text-white leading-tight break-words line-clamp-2">
@@ -556,11 +747,7 @@ export const BuyKeysPage: React.FC<BuyKeysPageProps> = ({
                       {isExpanded && (
                         <div className="grid grid-cols-1 gap-2 pt-0.5 min-w-0">
                           {product.variants.map(variant => {
-                            const vPrice = Number(
-                              role === 'RESELLER' && variant.resellerPrice
-                                ? variant.resellerPrice
-                                : variant.price
-                            );
+                            const vPrice = getVariantPrice(variant);
                             const hasExternalApi = Boolean(
                               (variant as any).externalPid || product.externalPid
                             );

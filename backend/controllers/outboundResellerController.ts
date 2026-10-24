@@ -6,6 +6,7 @@ import { ResellerApiService } from '../services/resellerApi';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { DigitalKey, Order, ProductVariant, Transaction, User } from '../models/types';
 import { FirestoreSyncService } from '../services/firestoreSync';
+import { emailService } from '../services/emailService';
 
 export class OutboundResellerController {
   /**
@@ -184,17 +185,21 @@ export class OutboundResellerController {
       // External panels service list handshake: action=get_products or action=products or action=services
       if (rawAction === 'get_products' || rawAction === 'products' || rawAction === 'services') {
         const productsList = db.products.map(p => {
-          const variants = db.productVariants.filter(v => v.productId === p.id && v.isActive);
+          const directVars = Array.isArray((p as any).variants) ? (p as any).variants : [];
+          const dbVars = db.productVariants.filter(v => v.productId === p.id && v.isActive !== false);
+          const variants = dbVars.length > 0 ? dbVars : directVars;
+          const prodPid = (p.externalPid && String(p.externalPid).trim()) || '155';
           return {
             id: p.id,
             name: p.name,
             game: p.game,
-            externalPid: p.externalPid || '155',
-            variants: variants.map(v => ({
-              variantId: v.id,
-              durationLabel: v.durationLabel,
-              externalPid: v.externalPid || p.externalPid || '155',
-              price: v.price,
+            externalPid: prodPid,
+            variants: variants.map((v: any) => ({
+              variantId: v.id || v.variantId,
+              durationLabel: v.durationLabel || v.duration || '1 Day',
+              externalPid: (v.externalPid && String(v.externalPid).trim()) || (v.pid && String(v.pid).trim()) || prodPid,
+              price: v.price ?? 50,
+              resellerPrice: v.resellerPrice ?? v.price ?? 50,
             })),
           };
         });
@@ -232,11 +237,15 @@ export class OutboundResellerController {
 
       // Try to find a candidate product that also has an exact or partial duration match
       for (const candProd of candidateProducts) {
-        const vars = db.productVariants.filter(v => v.productId === candProd.id && v.isActive);
+        const directVars = Array.isArray((candProd as any).variants) ? (candProd as any).variants : [];
+        const dbVars = db.productVariants.filter(v => v.productId === candProd.id && v.isActive !== false);
+        const vars = dbVars.length > 0 ? dbVars : directVars;
+
         const exactVar = vars.find(
-          v =>
-            v.durationLabel.trim().toLowerCase() === cleanDuration ||
-            v.externalDuration?.trim().toLowerCase() === cleanDuration
+          (v: any) =>
+            (v.durationLabel && v.durationLabel.trim().toLowerCase() === cleanDuration) ||
+            (v.externalDuration && v.externalDuration.trim().toLowerCase() === cleanDuration) ||
+            (v.duration && v.duration.trim().toLowerCase() === cleanDuration)
         );
         if (exactVar) {
           matchedProduct = candProd;
@@ -247,11 +256,15 @@ export class OutboundResellerController {
 
       if (!matchedVariant) {
         for (const candProd of candidateProducts) {
-          const vars = db.productVariants.filter(v => v.productId === candProd.id && v.isActive);
+          const directVars = Array.isArray((candProd as any).variants) ? (candProd as any).variants : [];
+          const dbVars = db.productVariants.filter(v => v.productId === candProd.id && v.isActive !== false);
+          const vars = dbVars.length > 0 ? dbVars : directVars;
+
           const partialVar = vars.find(
-            v =>
-              v.durationLabel.toLowerCase().includes(cleanDuration) ||
-              cleanDuration.includes(v.durationLabel.toLowerCase())
+            (v: any) => {
+              const lbl = (v.durationLabel || v.duration || '').toLowerCase();
+              return lbl.includes(cleanDuration) || cleanDuration.includes(lbl);
+            }
           );
           if (partialVar) {
             matchedProduct = candProd;
@@ -263,28 +276,33 @@ export class OutboundResellerController {
 
       // If not found on product directly, check if any variant has this externalPid + duration
       if (!matchedVariant) {
-        const varsWithPid = db.productVariants.filter(
-          v =>
-            v.isActive &&
-            (String(v.externalPid).trim() === cleanPid ||
-              String(v.id).trim().toLowerCase() === cleanPid.toLowerCase())
+        const allVars = [
+          ...db.productVariants.filter(v => v.isActive !== false),
+          ...db.products.flatMap(p => Array.isArray((p as any).variants) ? (p as any).variants : [])
+        ];
+        const varsWithPid = allVars.filter(
+          (v: any) =>
+            String(v.externalPid || v.pid || '').trim() === cleanPid ||
+            String(v.id || v.variantId || '').trim().toLowerCase() === cleanPid.toLowerCase()
         );
         const exactVarWithPid =
           varsWithPid.find(
-            v =>
-              v.durationLabel.trim().toLowerCase() === cleanDuration ||
-              v.externalDuration?.trim().toLowerCase() === cleanDuration
+            (v: any) =>
+              (v.durationLabel && v.durationLabel.trim().toLowerCase() === cleanDuration) ||
+              (v.externalDuration && v.externalDuration.trim().toLowerCase() === cleanDuration) ||
+              (v.duration && v.duration.trim().toLowerCase() === cleanDuration)
           ) ||
           varsWithPid.find(
-            v =>
-              v.durationLabel.toLowerCase().includes(cleanDuration) ||
-              cleanDuration.includes(v.durationLabel.toLowerCase())
+            (v: any) => {
+              const lbl = (v.durationLabel || v.duration || '').toLowerCase();
+              return lbl.includes(cleanDuration) || cleanDuration.includes(lbl);
+            }
           ) ||
           varsWithPid[0];
 
         if (exactVarWithPid) {
           matchedVariant = exactVarWithPid;
-          matchedProduct = db.products.find(p => p.id === exactVarWithPid.productId) || matchedProduct;
+          matchedProduct = db.products.find(p => p.id === (exactVarWithPid.productId || exactVarWithPid.id)) || matchedProduct;
         }
       }
 
@@ -525,6 +543,26 @@ export class OutboundResellerController {
         `[This Key Buyed by API] Generated ${quantity}x keys for ${matchedProduct.name} (${matchedVariant.durationLabel}) | Deducted: ₹${totalPrice} | Remaining Wallet: ₹${remainingBalance}`
       );
 
+      // Automatically send Email Receipt for API key purchase if user has a valid email
+      if (user.email && user.email.includes('@')) {
+        emailService
+          .sendKeyPurchaseReceipt({
+            toEmail: user.email,
+            username: user.username,
+            orderId,
+            productName: matchedProduct.name,
+            gameName: matchedProduct.game || 'FREEFIRE',
+            durationLabel: matchedVariant.durationLabel,
+            keyCodes: deliveredKeys,
+            pricePaid: totalPrice,
+            remainingBalance,
+            purchaseSourceLabel: 'Buy from API',
+            expiresAt: deliveredKeyObjects[0]?.expiresAt,
+            purchasedAt: now.toISOString(),
+          })
+          .catch(() => {});
+      }
+
       res.json({
         status: true,
         status_code: 200,
@@ -662,27 +700,46 @@ export class OutboundResellerController {
 
       const baseUrl = `${protocol}://${host}`;
 
-      // Build product reference list for resellers reading from db.productVariants!
-      const productReferenceTable = db.products.map(p => {
-        const variants = db.productVariants.filter(v => v.productId === p.id && v.isActive);
-        return {
-          id: p.id,
-          name: p.name,
-          game: p.game,
-          category: p.category,
-          deviceType: p.deviceType,
-          externalPid: p.externalPid || '100',
-          variants: variants.map(v => ({
-            variantId: v.id,
-            durationLabel: v.durationLabel,
-            durationHours: v.durationHours,
-            pid: p.externalPid || '100',
-            price: v.price,
-            resellerPrice: v.resellerPrice,
-            stockCount: db.digitalKeys.filter(k => k.productId === p.id && (!k.isUsed || k.status === 'ACTIVE') && !k.assignedUserId).length,
-          })),
-        };
-      });
+      // Build product reference list for resellers reading from db.productVariants and direct variants
+      const productReferenceTable = db.products
+        .filter(p => p.isActive !== false)
+        .map(p => {
+          const directVars = Array.isArray((p as any).variants) ? (p as any).variants : [];
+          const dbVars = db.productVariants.filter(v => v.productId === p.id && v.isActive !== false);
+          const variants = dbVars.length > 0 ? dbVars : directVars;
+
+          const fallbackPid = defaultPids[p.id] || String(autoNum++);
+          const validPid = p.externalPid && /^\d{2,3}$/.test(String(p.externalPid).trim())
+            ? String(p.externalPid).trim()
+            : (variants[0]?.externalPid && /^\d{2,3}$/.test(String(variants[0].externalPid).trim())
+                ? String(variants[0].externalPid).trim()
+                : fallbackPid);
+
+          return {
+            id: p.id,
+            name: p.name,
+            game: p.game || p.category || 'FREEFIRE',
+            category: p.category,
+            deviceType: p.deviceType,
+            externalPid: validPid,
+            variants: variants.map(v => {
+              const vPid = (v.externalPid && /^\d{2,3}$/.test(String(v.externalPid).trim()))
+                ? String(v.externalPid).trim()
+                : validPid;
+              return {
+                variantId: v.id || v.variantId,
+                durationLabel: v.durationLabel || v.duration || (v.durationHours ? `${v.durationHours} Hours` : '1 Day'),
+                durationHours: v.durationHours || 24,
+                pid: vPid,
+                price: v.price,
+                resellerPrice: v.resellerPrice ?? v.price,
+                stockCount: typeof v.stockCount === 'number'
+                  ? v.stockCount
+                  : db.digitalKeys.filter(k => (k.variantId === v.id || k.productId === p.id) && (!k.isUsed || k.status === 'ACTIVE') && !k.assignedUserId).length,
+              };
+            }),
+          };
+        });
 
       res.json({
         apiKey: dbUser?.apiKey || user.id,

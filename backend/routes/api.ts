@@ -50,6 +50,7 @@ router.get('/top-active-users', OrderController.getTopActiveUsers as any);
 // --- User Digital Keys ---
 router.get('/keys', authenticate as any, KeyController.getUserKeys as any);
 router.patch('/keys/:id/used', authenticate as any, KeyController.markKeyUsed as any);
+router.post('/keys/:id/send-receipt', authenticate as any, KeyController.sendKeyReceipt as any);
 
 // --- Wallet & Deposits ---
 router.get('/wallet/summary', authenticate as any, WalletController.getWalletSummary as any);

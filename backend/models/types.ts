@@ -5,6 +5,7 @@ export interface User {
   firebaseUid?: string;
   username: string;
   email: string;
+  phoneNumber?: string;
   passwordHash: string;
   role: UserRole;
   balance: number;

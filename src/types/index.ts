@@ -4,6 +4,7 @@ export interface User {
   id: string;
   username: string;
   email: string;
+  phoneNumber?: string;
   role: UserRole;
   balance: number;
   apiKey?: string;

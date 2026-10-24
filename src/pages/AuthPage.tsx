@@ -27,7 +27,15 @@ interface AuthPageProps {
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
-  const { user, login, register, sendPasswordReset, loginWithGoogle, sendOtp, loginWithOtp } = useAuth();
+  const {
+    user,
+    login,
+    register,
+    sendPasswordReset,
+    loginWithGoogle,
+    sendOtp,
+    loginWithOtp,
+  } = useAuth();
   const { success: showToastSuccess, error: showToastError } = useToast();
   const { siteConfig } = useSite();
 
@@ -42,14 +50,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Email OTP Login states
+  // Email OTP states
   const [otpEmail, setOtpEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isOtpSending, setIsOtpSending] = useState(false);
   const [isOtpVerifying, setIsOtpVerifying] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
-  const [, setPreviewOtp] = useState<string | null>(null);
+  const [previewOtp, setPreviewOtp] = useState<string | null>(null);
 
   // Forgot Password states
   const [resetIdentifier, setResetIdentifier] = useState('');
@@ -113,10 +121,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
       if (res.code) {
         setPreviewOtp(res.code);
       }
+      showToastSuccess('Email Code Sent', res.message || 'Verification code sent to your inbox.');
     } catch (err: any) {
       showToastError(
         'Verification Error',
-        'Failed to send verification code. Please check your email and try again.'
+        err.message || 'Failed to send verification code. Please check your email and try again.'
       );
     } finally {
       setIsOtpSending(false);
@@ -125,22 +134,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
 
   const handleVerifyOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const email = otpEmail.trim();
     const code = otpCode.trim();
 
-    if (!email) {
-      showToastError('Validation Error', 'Please enter your email.');
-      return;
-    }
     if (!code || code.length < 4) {
       showToastError('Validation Error', 'Please enter the 6-digit verification code.');
+      return;
+    }
+
+    const email = otpEmail.trim();
+    if (!email) {
+      showToastError('Validation Error', 'Please enter your email.');
       return;
     }
 
     setIsOtpVerifying(true);
     try {
       await loginWithOtp(email, code);
-      showToastSuccess('Login Successful', `Welcome to ${siteConfig.siteTitle || 'Nexa Panel'}!`);
+      showToastSuccess('Email Login Successful', `Welcome to ${siteConfig.siteTitle || 'KALAM VIP PANEL'}!`);
       onSuccess();
     } catch (err: any) {
       showToastError('Verification Failed', err.message || 'Invalid or expired OTP code.');
@@ -433,13 +443,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                   setMode('otp');
                   setIsResetSent(false);
                 }}
-                className={`py-2 px-3 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`py-2 px-3 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center gap-1.5 ${
                   mode === 'otp'
                     ? 'bg-rose-600 text-white font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Email OTP
+                <Mail className="w-3.5 h-3.5" />
+                <span>Email OTP</span>
               </button>
               <button
                 type="button"
@@ -458,7 +469,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
             </div>
           )}
 
-          {/* EMAIL OTP LOGIN INTERFACE */}
+          {/* OTP LOGIN INTERFACE (EMAIL) */}
           {mode === 'otp' && (
             <div className="space-y-4 text-xs">
               {!isOtpSent ? (
@@ -483,7 +494,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                   <button
                     type="submit"
                     disabled={isOtpSending}
-                    className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+                    className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-950/40 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     {isOtpSending ? (
                       <RefreshCw className="w-4 h-4 animate-spin" />
@@ -499,7 +510,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
                   <div className="p-3 rounded-xl bg-[#080a0f] border border-white/[0.08] flex items-center justify-between">
                     <div className="min-w-0">
-                      <div className="text-[11px] text-slate-400">Verification code sent to</div>
+                      <div className="text-[11px] text-slate-400">
+                        Verification code sent to
+                      </div>
                       <div className="font-mono text-white font-semibold text-xs truncate mt-0.5">
                         {otpEmail}
                       </div>
@@ -515,6 +528,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
                       Change
                     </button>
                   </div>
+
+                  {/* Sandbox instant test helper */}
+                  {previewOtp && (
+                    <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/40 flex items-center justify-between text-emerald-300">
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
+                        <span className="text-[11px] font-mono">
+                          Simulated Code: <strong className="text-white text-xs">{previewOtp}</strong>
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setOtpCode(previewOtp)}
+                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold"
+                      >
+                        Auto-Fill
+                      </button>
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-xs font-medium text-slate-300 block mb-1.5">

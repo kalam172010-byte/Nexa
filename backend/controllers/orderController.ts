@@ -7,6 +7,7 @@ import { KeyService } from '../services/keyService';
 import { ResellerApiService } from '../services/resellerApi';
 import { Order, DigitalKey } from '../models/types';
 import { FirestoreSyncService } from '../services/firestoreSync';
+import { emailService } from '../services/emailService';
 
 export class OrderController {
   public static async createOrder(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -249,6 +250,29 @@ export class OrderController {
         `[This Key Buyed by Web] Purchased ${qty}x ${product.name} [${variant.durationLabel}] for ₹${authoritativePrice}. Key: ${deliveredKey.keyCode}`
       );
 
+      // 9. Automatically dispatch Email Receipt to the buyer's email address
+      const recipientEmail = (userEmail || dbUser.email || '').trim().toLowerCase();
+      if (recipientEmail && recipientEmail.includes('@')) {
+        emailService
+          .sendKeyPurchaseReceipt({
+            toEmail: recipientEmail,
+            username: dbUser.username || user.username,
+            orderId,
+            productName: product.name,
+            gameName: product.game || 'FREEFIRE',
+            durationLabel: variant.durationLabel,
+            keyCodes: deliveredKeys.map(k => k.keyCode),
+            pricePaid: authoritativePrice,
+            remainingBalance: newBalance,
+            purchaseSourceLabel: 'Buy from Website',
+            expiresAt: deliveredKey.expiresAt,
+            purchasedAt: deliveredKey.assignedAt || deliveredKey.createdAt,
+          })
+          .catch(err => {
+            console.warn('[OrderController] Background email receipt notice:', err?.message || err);
+          });
+      }
+
       const latestOrder = db.orders[0];
       const formattedDeliveredKeys = deliveredKeys.map(k => ({
         id: k.id,
@@ -276,15 +300,25 @@ export class OrderController {
         message: 'Purchase successful! This Key Buyed by Web.',
         order: latestOrder,
         deliveredKeys: formattedDeliveredKeys,
+        receiptEmailSent: Boolean(recipientEmail && recipientEmail.includes('@')),
+        receiptEmailAddress: recipientEmail,
         deliveredKey: {
           ...formattedDeliveredKeys[0],
           keyCode: allKeyCodes,
+          receiptEmailSent: Boolean(recipientEmail && recipientEmail.includes('@')),
+          receiptEmailAddress: recipientEmail,
+          orderId,
+          pricePaid: authoritativePrice,
         },
         key: {
           ...formattedDeliveredKeys[0],
           keyCode: allKeyCodes,
           keys: deliveredKeys.map(k => k.keyCode),
           quantity: qty,
+          receiptEmailSent: Boolean(recipientEmail && recipientEmail.includes('@')),
+          receiptEmailAddress: recipientEmail,
+          orderId,
+          pricePaid: authoritativePrice,
         },
         newBalance,
       });

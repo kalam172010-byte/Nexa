@@ -57,16 +57,126 @@ export class FirestoreSyncService {
   }
 
   /**
-   * Start background 2.5s auto-sync loop
+   * Start background auto-sync loop and push authoritative restored products/variants to Firestore & Edge
    */
   public static startAutoSync(): void {
     if (this.autoSyncStarted) return;
     this.autoSyncStarted = true;
 
-    this.pullAndMergeExternalState(true).catch(() => {});
+    this.pushFullRestoredStateToCloud(true)
+      .then(() => this.pullAndMergeExternalState(true))
+      .catch(() => {});
+
     setInterval(() => {
       this.pullAndMergeExternalState(false).catch(() => {});
     }, 30000);
+  }
+
+  /**
+   * Pushes the full authoritative local database state (products, variants, users, keys, orders)
+   * to Firestore and Cloudflare Edge Worker, and optionally deletes stale/orphan cloud records
+   * from before a restore.
+   */
+  public static async pushFullRestoredStateToCloud(cleanupExtraneous = false): Promise<void> {
+    try {
+      const deletedProdSet = new Set(db.deletedProductIds || []);
+      const validProducts = db.products.filter(p => p && p.id && !deletedProdSet.has(p.id));
+      const validProdIdSet = new Set(validProducts.map(p => p.id));
+      const validVariants = db.productVariants.filter(v => v && v.id && validProdIdSet.has(v.productId));
+      const validVariantIdSet = new Set(validVariants.map(v => v.id));
+
+      // 1. Sync all valid local products and variants to Firestore
+      for (const p of validProducts) {
+        const pVars = validVariants.filter(v => v.productId === p.id);
+        await this.syncProduct(p, pVars);
+      }
+
+      // 2. If cleanupExtraneous is true (on startup or after database restore), delete any stale/orphan products & variants in Firestore
+      if (cleanupExtraneous) {
+        try {
+          const runColQuery = async (colName: string, limit = 200): Promise<any[]> => {
+            try {
+              const r = await fetch(`${FIRESTORE_BASE}:runQuery?key=${API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  structuredQuery: {
+                    from: [{ collectionId: colName }],
+                    limit,
+                  },
+                }),
+              });
+              if (!r.ok) return [];
+              const arr = (await r.json()) as any[];
+              return Array.isArray(arr) ? arr.map(item => item?.document).filter(Boolean) : [];
+            } catch {
+              return [];
+            }
+          };
+
+          const [fsProdDocs, fsVarDocs] = await Promise.all([
+            runColQuery('products', 150),
+            runColQuery('productVariants', 300),
+          ]);
+
+          for (const doc of fsProdDocs) {
+            const docId = (doc.name || '').split('/').pop() || doc.fields?.id?.stringValue || '';
+            if (docId && (deletedProdSet.has(docId) || !validProdIdSet.has(docId))) {
+              await fetch(`${FIRESTORE_BASE}/products/${encodeURIComponent(docId)}?key=${API_KEY}`, {
+                method: 'DELETE',
+              }).catch(() => {});
+            }
+          }
+
+          for (const doc of fsVarDocs) {
+            const docId = (doc.name || '').split('/').pop() || doc.fields?.id?.stringValue || '';
+            const pid = doc.fields?.productId?.stringValue || '';
+            if (docId && (!validVariantIdSet.has(docId) || !validProdIdSet.has(pid) || deletedProdSet.has(pid))) {
+              await fetch(`${FIRESTORE_BASE}/productVariants/${encodeURIComponent(docId)}?key=${API_KEY}`, {
+                method: 'DELETE',
+              }).catch(() => {});
+            }
+          }
+        } catch {}
+      }
+
+      // 3. Sync users to Firestore when restoring
+      if (cleanupExtraneous) {
+        for (const u of db.users) {
+          if (u && u.id && !u.isDeleted) {
+            await this.syncUserProfile(u).catch(() => {});
+          }
+        }
+      }
+
+      // 4. Push complete state to Cloudflare Edge Worker
+      const allProdsWithVars = validProducts.map(p => ({
+        ...p,
+        variants: validVariants.filter(v => v.productId === p.id),
+      }));
+
+      await fetch(EDGE_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          forceReplace: true,
+          forceBalanceSync: true,
+          users: db.users,
+          products: allProdsWithVars,
+          orders: db.orders,
+          keys: db.digitalKeys,
+          transactions: db.transactions,
+          referrals: db.referrals || [],
+          resellerConfig: db.resellerConfig,
+          siteConfig: db.siteConfig,
+          deletedProductIds: db.deletedProductIds || [],
+          deletedUserIds: db.deletedUserIds || [],
+          hiddenLeaderboardUserIds: db.hiddenLeaderboardUserIds || [],
+        }),
+      }).catch(() => {});
+    } catch (err) {
+      console.warn('[FirestoreSync] pushFullRestoredStateToCloud notice:', err);
+    }
   }
 
   /**
@@ -154,18 +264,20 @@ export class FirestoreSyncService {
           // Keep product fields synchronized
           if (fp.name && existing.name !== fp.name) { existing.name = fp.name; dbChanged = true; }
           if (fp.description !== undefined && fp.description !== '' && existing.description !== fp.description) { existing.description = fp.description; dbChanged = true; }
-          if (fp.imageUrl && existing.imageUrl !== fp.imageUrl) { existing.imageUrl = fp.imageUrl; dbChanged = true; }
+          if (fp.imageUrl && existing.imageUrl !== fp.imageUrl && !existing.imageUrl?.startsWith('data:image/')) { existing.imageUrl = fp.imageUrl; dbChanged = true; }
           if (fp.game && existing.game !== fp.game) { existing.game = fp.game; dbChanged = true; }
           if (fp.category && existing.category !== fp.category) { existing.category = fp.category; dbChanged = true; }
           if (fp.deviceType && existing.deviceType !== fp.deviceType) { existing.deviceType = fp.deviceType; dbChanged = true; }
           if (typeof fp.isActive === 'boolean' && existing.isActive !== fp.isActive) { existing.isActive = fp.isActive; dbChanged = true; }
           if (typeof fp.isUnderMaintenance === 'boolean' && existing.isUnderMaintenance !== fp.isUnderMaintenance) { existing.isUnderMaintenance = fp.isUnderMaintenance; dbChanged = true; }
-          if (fp.externalPid !== undefined && existing.externalPid !== fp.externalPid) { existing.externalPid = fp.externalPid; dbChanged = true; }
+          if (fp.externalPid !== undefined && fp.externalPid !== '' && existing.externalPid !== fp.externalPid) { existing.externalPid = fp.externalPid; dbChanged = true; }
         }
       }
 
+      const activeProductIdSet = new Set(db.products.map(p => p.id));
+
       for (const fv of parsedFsVariants) {
-        if (!fv.id || !fv.productId || deletedProdSet.has(fv.productId)) continue;
+        if (!fv.id || !fv.productId || deletedProdSet.has(fv.productId) || !activeProductIdSet.has(fv.productId)) continue;
         const existing = db.productVariants.find(v => v.id === fv.id);
         if (!existing) {
           db.productVariants.push(fv);
@@ -173,12 +285,12 @@ export class FirestoreSyncService {
         } else {
           if (fv.price !== undefined && existing.price !== fv.price) { existing.price = fv.price; dbChanged = true; }
           if (fv.resellerPrice !== undefined && existing.resellerPrice !== fv.resellerPrice) { existing.resellerPrice = fv.resellerPrice; dbChanged = true; }
-          if (fv.externalPid !== undefined && existing.externalPid !== fv.externalPid) { existing.externalPid = fv.externalPid; dbChanged = true; }
+          if (fv.externalPid !== undefined && fv.externalPid !== '' && existing.externalPid !== fv.externalPid) { existing.externalPid = fv.externalPid; dbChanged = true; }
         }
       }
 
       // Merge newly discovered Edge products into db.products if present (excluding Default Seed Edge IDs and deleted IDs)
-      const ignoredEdgeIds = new Set(['PROD-FF-155', 'PROD-BGMI-65', 'PROD-171001', 'PROD-171002', 'PROD-171003', 'PROD-499177']);
+      const ignoredEdgeIds = new Set(['PROD-FF-155', 'PROD-BGMI-65', 'PROD-171001', 'PROD-171002', 'PROD-171003', 'PROD-035699-81']);
       if (Array.isArray(edgeState?.products)) {
         for (const ep of edgeState.products) {
           if (!ep || !ep.id || deletedProdSet.has(ep.id) || ignoredEdgeIds.has(ep.id)) continue;

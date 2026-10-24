@@ -1,24 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle2, Copy, Check, KeyRound, ArrowRight, ShieldCheck } from 'lucide-react';
+import {
+  X,
+  CheckCircle2,
+  Copy,
+  Check,
+  KeyRound,
+  ArrowRight,
+  ShieldCheck,
+  Mail,
+  Send,
+  RefreshCw,
+} from 'lucide-react';
 import { triggerConfetti } from '../utils/confetti.js';
 import { useToast } from '../context/ToastContext.js';
+import { useAuth } from '../context/AuthContext.js';
+import { api } from '../services/api.js';
 
 interface KeySuccessModalProps {
   keyData: {
+    id?: string;
+    orderId?: string;
     keyCode: string;
     productName: string;
+    gameName?: string;
     durationLabel: string;
+    pricePaid?: number;
     expiresAt?: string;
+    assignedAt?: string;
     purchaseSource?: 'API' | 'WEB';
     purchaseSourceLabel?: string;
+    receiptEmailSent?: boolean;
+    receiptEmailAddress?: string;
   };
   onClose: () => void;
   onViewKeys: () => void;
 }
 
 export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClose, onViewKeys }) => {
+  const { user } = useAuth();
   const [copied, setCopied] = useState(false);
-  const { success: showToastSuccess } = useToast();
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [receiptSentTo, setReceiptSentTo] = useState<string>(
+    keyData.receiptEmailAddress || user?.email || ''
+  );
+  const [customEmail, setCustomEmail] = useState<string>(
+    keyData.receiptEmailAddress || user?.email || ''
+  );
+  const [showEmailInput, setShowEmailInput] = useState(false);
+  const { success: showToastSuccess, error: showToastError } = useToast();
 
   useEffect(() => {
     try {
@@ -33,6 +62,41 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handleSendEmailReceipt = async (targetEmailOverride?: string) => {
+    const emailToUse = (targetEmailOverride || customEmail || user?.email || '').trim();
+    if (!emailToUse || !emailToUse.includes('@')) {
+      showToastError('Invalid Email', 'Please enter a valid email address to receive the receipt.');
+      setShowEmailInput(true);
+      return;
+    }
+
+    setIsSendingEmail(true);
+    try {
+      const res = await api.sendKeyReceipt(keyData.id || keyData.orderId || 'receipt', {
+        email: emailToUse,
+        keyCode: keyData.keyCode,
+        orderId: keyData.orderId,
+        productName: keyData.productName,
+        gameName: keyData.gameName,
+        durationLabel: keyData.durationLabel,
+        pricePaid: keyData.pricePaid,
+        purchaseSourceLabel:
+          keyData.purchaseSourceLabel ||
+          (keyData.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website'),
+        expiresAt: keyData.expiresAt,
+        assignedAt: keyData.assignedAt,
+      });
+      const finalEmail = res.sentTo || emailToUse;
+      setReceiptSentTo(finalEmail);
+      setShowEmailInput(false);
+      showToastSuccess('Email Receipt Sent', `Key purchase receipt dispatched to ${finalEmail}`);
+    } catch (err: any) {
+      showToastError('Receipt Error', err.message || 'Could not send email receipt.');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
@@ -40,7 +104,7 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
         className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
       />
 
-      <div className="relative w-full max-w-sm bg-gradient-to-b from-[#131626] via-[#0f111d] to-[#090b12] border border-rose-500/30 rounded-3xl p-6 shadow-[0_0_50px_rgba(244,63,94,0.3)] z-10 space-y-5">
+      <div className="relative w-full max-w-sm bg-gradient-to-b from-[#131626] via-[#0f111d] to-[#090b12] border border-rose-500/30 rounded-3xl p-6 shadow-[0_0_50px_rgba(244,63,94,0.3)] z-10 space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.3)]">
@@ -102,6 +166,57 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
           </div>
         </div>
 
+        {/* Email Receipt Confirmation & Resend Box */}
+        <div className="p-3 rounded-xl bg-emerald-950/25 border border-emerald-500/30 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="text-[11px] text-slate-300 truncate">
+                {receiptSentTo ? (
+                  <>
+                    Receipt sent to{' '}
+                    <span className="font-mono font-bold text-emerald-300">{receiptSentTo}</span>
+                  </>
+                ) : (
+                  <span>Send key purchase receipt to your email</span>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowEmailInput(prev => !prev)}
+              className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 underline shrink-0 cursor-pointer"
+            >
+              {showEmailInput ? 'Hide' : 'Change'}
+            </button>
+          </div>
+
+          {showEmailInput && (
+            <div className="flex items-center gap-1.5 pt-1">
+              <input
+                type="email"
+                value={customEmail}
+                onChange={e => setCustomEmail(e.target.value)}
+                placeholder="Enter email for receipt..."
+                className="w-full px-2.5 py-1.5 rounded-lg bg-[#080a10] border border-white/15 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+              />
+              <button
+                type="button"
+                disabled={isSendingEmail}
+                onClick={() => handleSendEmailReceipt(customEmail)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
+              >
+                {isSendingEmail ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                <span>Send</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="space-y-2">
           <button
             onClick={handleCopy}
@@ -120,19 +235,42 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
             )}
           </button>
 
-          <button
-            onClick={() => {
-              onClose();
-              onViewKeys();
-            }}
-            className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium transition-colors flex items-center justify-center gap-2 border border-white/[0.06] cursor-pointer"
-          >
-            <KeyRound className="w-4 h-4 text-slate-400" />
-            <span>Open My Keys</span>
-            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={isSendingEmail}
+              onClick={() => handleSendEmailReceipt()}
+              className="w-full py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isSendingEmail ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Sending...</span>
+                </>
+              ) : (
+                <>
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Email Receipt</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onViewKeys();
+              }}
+              className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border border-white/[0.06] cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+              <span>Open My Keys</span>
+              <ArrowRight className="w-3 h-3 text-slate-400" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+

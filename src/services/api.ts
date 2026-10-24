@@ -184,12 +184,15 @@ export function getCachedProducts(): any[] {
     const raw = localStorage.getItem('nexa_cached_products');
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.filter(p => p && p.id && !deleted.has(p.id) && !SEED_PRODUCT_ID_SET.has(p.id));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const clean = parsed.filter(p => p && p.id && !deleted.has(p.id));
+        if (clean.length > 0) {
+          return clean;
+        }
       }
     }
   } catch {}
-  return [];
+  return DEFAULT_SEED_PRODUCTS.filter(p => p && p.id && !deleted.has(p.id));
 }
 
 function saveCachedProducts(products: any[], emitEvent = true): void {
@@ -1093,7 +1096,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           pollIntervalSeconds: 25,
           host: storedCfg.imapHost || 'imap.gmail.com',
           port: storedCfg.imapPort || 993,
-          user: storedCfg.imapUser || storedCfg.senderEmail || 'kalamkalam1234kd@gmail.com',
+          user: storedCfg.imapUser || storedCfg.senderEmail || 'kalam172010@gmail.com',
           recentScannedDeposits: [
             {
               id: 'DISC-01',
@@ -1163,7 +1166,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const storedRaw = localStorage.getItem('nexa_admin_email_config');
       const storedCfg = storedRaw ? JSON.parse(storedRaw) : {};
       const activeCfg = { ...storedCfg, ...(bodyObj.configOverride || {}) };
-      const sender = activeCfg.senderEmail || 'kalamkalam1234kd@gmail.com';
+      const sender = activeCfg.senderEmail || 'kalam172010@gmail.com';
       const host = activeCfg.smtpHost || 'smtp.gmail.com';
       const port = activeCfg.smtpPort || 587;
       const recipient = bodyObj.testEmail || sender;
@@ -1187,16 +1190,16 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const defaultEmailCfg = {
         enabled: true,
         protocol: 'smtp',
-        senderEmail: 'kalamkalam1234kd@gmail.com',
+        senderEmail: 'kalam172010@gmail.com',
         senderName: 'KALAM FF PANEL',
         smtpHost: 'smtp.gmail.com',
         smtpPort: 587,
         secure: false,
-        smtpUser: 'kalamkalam1234kd@gmail.com',
+        smtpUser: 'kalam172010@gmail.com',
         smtpPass: '',
         imapHost: 'imap.gmail.com',
         imapPort: 993,
-        imapUser: 'kalamkalam1234kd@gmail.com',
+        imapUser: 'kalam172010@gmail.com',
         imapPass: '',
         imapSecure: true,
         otpExpiryMinutes: 10,
@@ -1211,17 +1214,17 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       } else {
         const storedRaw = localStorage.getItem('nexa_admin_email_config');
         const prev = storedRaw ? JSON.parse(storedRaw) : defaultEmailCfg;
-        const nextSender = (bodyObj.senderEmail || prev.senderEmail || 'kalamkalam1234kd@gmail.com').trim();
+        const nextSender = (bodyObj.senderEmail || prev.senderEmail || 'kalam172010@gmail.com').trim();
         const merged = {
           ...prev,
           ...bodyObj,
           senderEmail: nextSender,
           smtpUser:
-            !bodyObj.smtpUser || bodyObj.smtpUser === prev.senderEmail || bodyObj.smtpUser === 'kalamkalam1234kd@gmail.com'
+            !bodyObj.smtpUser || bodyObj.smtpUser === prev.senderEmail || bodyObj.smtpUser.includes('kalamkalam1234kd')
               ? nextSender
               : bodyObj.smtpUser,
           imapUser:
-            !bodyObj.imapUser || bodyObj.imapUser === prev.senderEmail || bodyObj.imapUser === 'kalamkalam1234kd@gmail.com'
+            !bodyObj.imapUser || bodyObj.imapUser === prev.senderEmail || bodyObj.imapUser.includes('kalamkalam1234kd')
               ? nextSender
               : bodyObj.imapUser,
           smtpPass: bodyObj.smtpPass && !String(bodyObj.smtpPass).includes('••••') ? bodyObj.smtpPass : prev.smtpPass || '',
@@ -2192,6 +2195,28 @@ export const api = {
     return request<{ keys: any[] }>(`/keys?${params.toString()}`);
   },
   markKeyUsed: (id: string) => request<any>(`/keys/${id}/used`, { method: 'PATCH' }),
+  sendKeyReceipt: (
+    keyId: string,
+    payload?: {
+      email?: string;
+      keyCode?: string;
+      orderId?: string;
+      productName?: string;
+      gameName?: string;
+      durationLabel?: string;
+      pricePaid?: number;
+      purchaseSourceLabel?: string;
+      expiresAt?: string;
+      assignedAt?: string;
+    }
+  ) =>
+    request<{ success: boolean; simulated: boolean; sentTo: string; message: string }>(
+      `/keys/${encodeURIComponent(keyId || 'receipt')}/send-receipt`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      }
+    ),
 
   // Wallet & Deposits
   getWalletSummary: () => request<any>('/wallet/summary'),

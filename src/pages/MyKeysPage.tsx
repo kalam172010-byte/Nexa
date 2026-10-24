@@ -9,6 +9,8 @@ import {
   AlertCircle,
   Eye,
   ShoppingBag,
+  Mail,
+  RefreshCw,
 } from 'lucide-react';
 import { api } from '../services/api.js';
 import { DigitalKey } from '../types/index.js';
@@ -30,6 +32,7 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED' | 'USED'>('ALL');
   const [sourceFilter, setSourceFilter] = useState<'ALL' | 'WEB' | 'API'>('ALL');
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
+  const [sendingReceiptKeyId, setSendingReceiptKeyId] = useState<string | null>(null);
   const [viewingKey, setViewingKey] = useState<DigitalKey | null>(null);
 
   const fetchKeys = async (silent = false) => {
@@ -221,6 +224,38 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
       fetchKeys();
     } catch (err: any) {
       showToastError('Failed to update key status', err.message);
+    }
+  };
+
+  const handleSendReceipt = async (key: DigitalKey) => {
+    const recipient = user?.email || '';
+    if (!recipient || !recipient.includes('@')) {
+      showToastError('Email Required', 'No valid email address is linked to your account.');
+      return;
+    }
+
+    setSendingReceiptKeyId(key.id);
+    try {
+      const res = await api.sendKeyReceipt(key.id, {
+        email: recipient,
+        keyCode: key.keyCode,
+        orderId: key.assignedOrderId,
+        productName: key.productName,
+        gameName: key.gameName,
+        durationLabel: key.durationLabel,
+        purchaseSourceLabel:
+          key.purchaseSourceLabel || (key.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website'),
+        expiresAt: key.expiresAt,
+        assignedAt: key.assignedAt || key.createdAt,
+      });
+      showToastSuccess(
+        'Email Receipt Sent',
+        `Official key receipt sent to ${res.sentTo || recipient}`
+      );
+    } catch (err: any) {
+      showToastError('Failed to send receipt', err.message || 'Could not dispatch email receipt.');
+    } finally {
+      setSendingReceiptKeyId(null);
     }
   };
 
@@ -445,6 +480,20 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
                     </button>
 
                     <button
+                      onClick={() => handleSendReceipt(key)}
+                      disabled={sendingReceiptKeyId === key.id}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-emerald-500/30 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+                      title="Send key receipt to your email"
+                    >
+                      {sendingReceiptKeyId === key.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                      ) : (
+                        <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                      )}
+                      <span>Receipt</span>
+                    </button>
+
+                    <button
                       onClick={() => setViewingKey(key)}
                       className="px-3 py-1.5 rounded-lg bg-[#141824] hover:bg-[#1a2030] text-slate-200 text-xs font-medium flex items-center gap-1.5 transition-colors border border-white/[0.1] whitespace-nowrap shrink-0 cursor-pointer"
                     >
@@ -533,12 +582,32 @@ export const MyKeysPage: React.FC<MyKeysPageProps> = ({ onNavigateBuy }) => {
               </div>
             </div>
 
-            <button
-              onClick={() => setViewingKey(null)}
-              className="w-full py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white text-xs font-semibold transition-colors cursor-pointer"
-            >
-              Close
-            </button>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={() => handleSendReceipt(viewingKey)}
+                disabled={sendingReceiptKeyId === viewingKey.id}
+                className="w-full py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {sendingReceiptKeyId === viewingKey.id ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Email Receipt</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => setViewingKey(null)}
+                className="w-full py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

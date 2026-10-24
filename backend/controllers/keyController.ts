@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { db } from '../db/database';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { FirestoreSyncService } from '../services/firestoreSync';
+import { emailService } from '../services/emailService';
 
 export class KeyController {
   public static async getUserKeys(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -156,6 +157,81 @@ export class KeyController {
       res.json({ message: 'Key marked as USED successfully.', key });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to update key status.' });
+    }
+  }
+
+  public static async sendKeyReceipt(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ error: 'Not authenticated.' });
+        return;
+      }
+
+      const { id } = req.params;
+      const body = req.body || {};
+      const headerEmail = (req.headers['x-user-email'] as string | undefined)?.toLowerCase().trim();
+      const dbUser = db.users.find(
+        u => u.id === user.id || u.firebaseUid === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+      );
+      const targetEmail = (body.email || dbUser?.email || user.email || headerEmail || '').trim().toLowerCase();
+
+      if (!targetEmail || !targetEmail.includes('@')) {
+        res.status(400).json({ error: 'A valid recipient email address is required to send the receipt.' });
+        return;
+      }
+
+      const keyRecord = db.digitalKeys.find(
+        k => k.id === id || (body.keyCode && k.keyCode === body.keyCode)
+      );
+      const product = keyRecord ? db.products.find(p => p.id === keyRecord.productId) : undefined;
+      const variant = keyRecord ? db.productVariants.find(v => v.id === keyRecord.variantId) : undefined;
+      const order = keyRecord
+        ? db.orders.find(o => o.id === keyRecord.assignedOrderId || o.deliveredKeyId === keyRecord.id)
+        : undefined;
+
+      const keyCodeRaw = String(body.keyCode || keyRecord?.keyCode || 'N/A');
+      const keyCodes = keyCodeRaw
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const orderId = String(body.orderId || order?.id || keyRecord?.assignedOrderId || id || `ORD-${Date.now()}`);
+      const productName = String(body.productName || keyRecord?.productName || product?.name || 'VIP License Key');
+      const gameName = String(body.gameName || keyRecord?.gameName || product?.game || 'FREE FIRE');
+      const durationLabel = String(body.durationLabel || keyRecord?.durationLabel || variant?.durationLabel || 'Standard');
+      const pricePaid = Number(body.pricePaid ?? order?.pricePaid ?? variant?.price ?? 0);
+      const purchaseSourceLabel = String(
+        body.purchaseSourceLabel ||
+          keyRecord?.purchaseSourceLabel ||
+          (keyRecord?.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website')
+      );
+      const expiresAt = body.expiresAt || keyRecord?.expiresAt;
+      const purchasedAt = body.assignedAt || keyRecord?.assignedAt || keyRecord?.createdAt;
+
+      const result = await emailService.sendKeyPurchaseReceipt({
+        toEmail: targetEmail,
+        username: dbUser?.username || user.username,
+        orderId,
+        productName,
+        gameName,
+        durationLabel,
+        keyCodes: keyCodes.length > 0 ? keyCodes : [keyCodeRaw],
+        pricePaid,
+        remainingBalance: dbUser?.balance ?? user.balance,
+        purchaseSourceLabel,
+        expiresAt,
+        purchasedAt,
+      });
+
+      res.json({
+        success: result.success,
+        simulated: result.simulated,
+        sentTo: result.sentTo,
+        message: result.message,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to send key receipt email.' });
     }
   }
 }

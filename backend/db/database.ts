@@ -216,16 +216,16 @@ export class Database {
     return {
       enabled: true,
       protocol: 'smtp',
-      senderEmail: 'kalamkalam1234kd@gmail.com',
+      senderEmail: 'kalam172010@gmail.com',
       senderName: 'KALAM FF PANEL',
       smtpHost: 'smtp.gmail.com',
       smtpPort: 587,
       secure: false,
-      smtpUser: 'kalamkalam1234kd@gmail.com',
+      smtpUser: 'kalam172010@gmail.com',
       smtpPass: '',
       imapHost: 'imap.gmail.com',
       imapPort: 993,
-      imapUser: 'kalamkalam1234kd@gmail.com',
+      imapUser: 'kalam172010@gmail.com',
       imapPass: '',
       imapSecure: true,
       otpExpiryMinutes: 10,
@@ -438,7 +438,6 @@ export class Database {
     this.save();
     return this.data.siteConfig;
   }
-
   public updateEmailConfig(config: Partial<EmailConfig>): EmailConfig {
     if (!this.data.emailConfig) {
       this.data.emailConfig = this.getDefaultEmailConfig();
