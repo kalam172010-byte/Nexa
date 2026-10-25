@@ -409,6 +409,43 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('X-User-Role', String(storedUser.role));
   }
 
+  // Pass saved admin email/App Password header on email/OTP/order endpoints so backend self-heals if redeployed
+  if (
+    endpoint.includes('/auth/otp') ||
+    endpoint.includes('/auth/forgot-password') ||
+    endpoint.includes('/orders') ||
+    endpoint.includes('/receipt') ||
+    endpoint.includes('/admin/settings/email')
+  ) {
+    try {
+      const dedicatedPass = (localStorage.getItem('nexa_saved_app_password') || '').trim();
+      const dedicatedSender = (localStorage.getItem('nexa_saved_sender_email') || '').trim();
+      const rawEmailCfg = localStorage.getItem('nexa_admin_email_config');
+      const parsedCfg = rawEmailCfg ? JSON.parse(rawEmailCfg) : {};
+      const candidatePass =
+        dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••')
+          ? dedicatedPass
+          : String(parsedCfg?.imapPass || parsedCfg?.smtpPass || '').trim();
+      if (candidatePass && candidatePass !== 'testpass1234' && !candidatePass.includes('••••')) {
+        headers.set(
+          'X-Saved-Email-Config',
+          JSON.stringify({
+            senderEmail: dedicatedSender || parsedCfg?.senderEmail || 'kalam172010@gmail.com',
+            senderName: parsedCfg?.senderName || 'KALAM FF PANEL',
+            smtpHost: parsedCfg?.smtpHost || 'smtp.gmail.com',
+            smtpPort: parsedCfg?.smtpPort || 587,
+            smtpUser: dedicatedSender || parsedCfg?.smtpUser || parsedCfg?.senderEmail || 'kalam172010@gmail.com',
+            imapHost: parsedCfg?.imapHost || 'imap.gmail.com',
+            imapPort: parsedCfg?.imapPort || 993,
+            imapUser: dedicatedSender || parsedCfg?.imapUser || parsedCfg?.senderEmail || 'kalam172010@gmail.com',
+            smtpPass: candidatePass,
+            imapPass: candidatePass,
+          })
+        );
+      }
+    } catch {}
+  }
+
   const baseUrl = getBaseUrl();
   let response: Response | undefined;
   let fetchFailed = false;
@@ -610,6 +647,35 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       } catch {}
     } else if (endpoint.includes('/admin/settings/email') && data.config) {
       try {
+        const dedicatedPass = (localStorage.getItem('nexa_saved_app_password') || '').trim();
+        const prevRaw = localStorage.getItem('nexa_admin_email_config');
+        const prevCfg = prevRaw ? JSON.parse(prevRaw) : {};
+        const prevPass =
+          dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••')
+            ? dedicatedPass
+            : String(prevCfg?.imapPass || prevCfg?.smtpPass || '').trim();
+        const serverPass = String(data.config.imapPass || data.config.smtpPass || '').trim();
+        const cleanServerPass = serverPass === 'testpass1234' ? '' : serverPass;
+        const effectivePass =
+          cleanServerPass && !cleanServerPass.includes('••••')
+            ? cleanServerPass
+            : prevPass && prevPass !== 'testpass1234' && !prevPass.includes('••••')
+            ? prevPass
+            : '';
+
+        data.config = {
+          ...data.config,
+          smtpPass: effectivePass,
+          imapPass: effectivePass,
+          hasSmtpPass: Boolean(effectivePass),
+          hasImapPass: Boolean(effectivePass),
+        };
+        if (effectivePass) {
+          localStorage.setItem('nexa_saved_app_password', effectivePass);
+          if (data.config.senderEmail) {
+            localStorage.setItem('nexa_saved_sender_email', String(data.config.senderEmail).trim());
+          }
+        }
         localStorage.setItem('nexa_admin_email_config', JSON.stringify(data.config));
       } catch {}
     } else if ((endpoint.includes('/admin/settings/site') || endpoint.includes('/site-settings')) && data.config) {
@@ -1187,6 +1253,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
 
     if (endpoint.includes('/admin/settings/email') || endpoint.includes('/admin/email-settings')) {
+      const dedicatedPass = (localStorage.getItem('nexa_saved_app_password') || '').trim();
+      const validDedicatedPass =
+        dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••') ? dedicatedPass : '';
+
       const defaultEmailCfg = {
         enabled: true,
         protocol: 'smtp',
@@ -1196,25 +1266,46 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         smtpPort: 587,
         secure: false,
         smtpUser: 'kalam172010@gmail.com',
-        smtpPass: '',
+        smtpPass: validDedicatedPass,
         imapHost: 'imap.gmail.com',
         imapPort: 993,
         imapUser: 'kalam172010@gmail.com',
-        imapPass: '',
+        imapPass: validDedicatedPass,
         imapSecure: true,
         otpExpiryMinutes: 10,
         allowOtpSignup: true,
-        hasSmtpPass: true,
-        hasImapPass: true,
+        hasSmtpPass: Boolean(validDedicatedPass),
+        hasImapPass: Boolean(validDedicatedPass),
       };
       if (method === 'GET') {
         const stored = localStorage.getItem('nexa_admin_email_config');
-        const config = stored ? { ...defaultEmailCfg, ...JSON.parse(stored) } : defaultEmailCfg;
+        const parsed = stored ? JSON.parse(stored) : {};
+        if (parsed.smtpPass === 'testpass1234') parsed.smtpPass = '';
+        if (parsed.imapPass === 'testpass1234') parsed.imapPass = '';
+        const finalPass = validDedicatedPass || parsed.smtpPass || parsed.imapPass || '';
+        const config = {
+          ...defaultEmailCfg,
+          ...parsed,
+          smtpPass: finalPass,
+          imapPass: finalPass,
+          hasSmtpPass: Boolean(finalPass),
+          hasImapPass: Boolean(finalPass),
+        };
         return { config } as unknown as T;
       } else {
         const storedRaw = localStorage.getItem('nexa_admin_email_config');
         const prev = storedRaw ? JSON.parse(storedRaw) : defaultEmailCfg;
+        if (prev.smtpPass === 'testpass1234') prev.smtpPass = '';
+        if (prev.imapPass === 'testpass1234') prev.imapPass = '';
         const nextSender = (bodyObj.senderEmail || prev.senderEmail || 'kalam172010@gmail.com').trim();
+        const newSmtpPass =
+          bodyObj.smtpPass && bodyObj.smtpPass !== 'testpass1234' && !String(bodyObj.smtpPass).includes('••••')
+            ? String(bodyObj.smtpPass).trim()
+            : prev.smtpPass || validDedicatedPass || '';
+        const newImapPass =
+          bodyObj.imapPass && bodyObj.imapPass !== 'testpass1234' && !String(bodyObj.imapPass).includes('••••')
+            ? String(bodyObj.imapPass).trim()
+            : newSmtpPass || prev.imapPass || validDedicatedPass || '';
         const merged = {
           ...prev,
           ...bodyObj,
@@ -1227,11 +1318,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
             !bodyObj.imapUser || bodyObj.imapUser === prev.senderEmail || bodyObj.imapUser.includes('kalamkalam1234kd')
               ? nextSender
               : bodyObj.imapUser,
-          smtpPass: bodyObj.smtpPass && !String(bodyObj.smtpPass).includes('••••') ? bodyObj.smtpPass : prev.smtpPass || '',
-          imapPass: bodyObj.imapPass && !String(bodyObj.imapPass).includes('••••') ? bodyObj.imapPass : bodyObj.smtpPass || prev.imapPass || '',
-          hasSmtpPass: Boolean(bodyObj.smtpPass || prev.smtpPass || prev.hasSmtpPass),
-          hasImapPass: Boolean(bodyObj.imapPass || bodyObj.smtpPass || prev.imapPass || prev.hasImapPass),
+          smtpPass: newSmtpPass,
+          imapPass: newImapPass,
+          hasSmtpPass: Boolean(newSmtpPass),
+          hasImapPass: Boolean(newImapPass),
         };
+        if (newSmtpPass) {
+          localStorage.setItem('nexa_saved_app_password', newSmtpPass);
+          localStorage.setItem('nexa_saved_sender_email', nextSender);
+        }
         localStorage.setItem('nexa_admin_email_config', JSON.stringify(merged));
         return {
           message: 'Email & IMAP/SMTP settings saved successfully.',

@@ -1321,15 +1321,18 @@ export class AdminController {
   // --- Email & IMAP/SMTP Setup ---
   public static async getEmailSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      emailService.applyHeaderEmailConfigIfMissing(req.headers['x-saved-email-config'] as string | undefined);
       await FirestoreSyncService.pullEmailConfig().catch(() => {});
       const config = { ...db.emailConfig };
+      const smtpPass = config.smtpPass === 'testpass1234' ? '' : (config.smtpPass || '');
+      const imapPass = config.imapPass === 'testpass1234' ? '' : (config.imapPass || '');
       res.json({
         config: {
           ...config,
-          smtpPass: config.smtpPass || '',
-          imapPass: config.imapPass || '',
-          hasSmtpPass: Boolean(config.smtpPass && config.smtpPass.length > 0),
-          hasImapPass: Boolean(config.imapPass && config.imapPass.length > 0),
+          smtpPass,
+          imapPass,
+          hasSmtpPass: Boolean(smtpPass && smtpPass.length > 0),
+          hasImapPass: Boolean(imapPass && imapPass.length > 0),
         },
       });
     } catch (err: any) {

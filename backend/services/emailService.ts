@@ -228,12 +228,49 @@ export class EmailService {
   }
 
   /**
+   * Restores saved email credentials passed from client browser header if server password is missing
+   */
+  public applyHeaderEmailConfigIfMissing(headerVal?: string): void {
+    if (!headerVal) return;
+    try {
+      const parsed = JSON.parse(headerVal);
+      if (!parsed || typeof parsed !== 'object') return;
+      const incomingPass = String(parsed.imapPass || parsed.smtpPass || '').trim();
+      const currentPass = (db.emailConfig.imapPass || db.emailConfig.smtpPass || '').trim();
+      if (
+        incomingPass &&
+        incomingPass !== 'testpass1234' &&
+        !incomingPass.includes('••••') &&
+        (!currentPass || currentPass === 'testpass1234')
+      ) {
+        const updated = db.updateEmailConfig({
+          ...(parsed.senderEmail ? { senderEmail: String(parsed.senderEmail).trim() } : {}),
+          ...(parsed.senderName ? { senderName: String(parsed.senderName).trim() } : {}),
+          ...(parsed.smtpHost ? { smtpHost: String(parsed.smtpHost).trim() } : {}),
+          ...(parsed.smtpPort ? { smtpPort: Number(parsed.smtpPort) } : {}),
+          ...(parsed.smtpUser ? { smtpUser: String(parsed.smtpUser).trim() } : {}),
+          ...(parsed.imapHost ? { imapHost: String(parsed.imapHost).trim() } : {}),
+          ...(parsed.imapPort ? { imapPort: Number(parsed.imapPort) } : {}),
+          ...(parsed.imapUser ? { imapUser: String(parsed.imapUser).trim() } : {}),
+          smtpPass: incomingPass,
+          imapPass: incomingPass,
+          simulationMode: false,
+        });
+        FirestoreSyncService.syncEmailConfig(updated).catch(() => {});
+      }
+    } catch {}
+  }
+
+  /**
    * Generates a 6-digit numeric OTP and sends it to the target email
    */
   public async sendLoginOtp(
     toEmail: string
-  ): Promise<{ success: boolean; simulated: boolean; code?: string; message: string }> {
+  ): Promise<{ success: boolean; simulated: boolean; code?: string; message: string; smtpError?: string }> {
     const email = toEmail.trim().toLowerCase();
+    if (!db.emailConfig.smtpPass || db.emailConfig.smtpPass === 'testpass1234') {
+      await FirestoreSyncService.pullEmailConfig().catch(() => {});
+    }
     const config = db.emailConfig;
 
     if (!config.enabled) {
@@ -324,15 +361,28 @@ export class EmailService {
     `;
 
     // Attempt real SMTP delivery if password / credentials configured
-    if (config.smtpPass && config.smtpPass.trim().length > 0) {
+    const rawPass = (
+      config.smtpPass ||
+      config.imapPass ||
+      process.env.SMTP_PASS ||
+      process.env.IMAP_PASS ||
+      process.env.GMAIL_APP_PASSWORD ||
+      ''
+    ).trim();
+    const hasRealPass = Boolean(rawPass && rawPass !== 'testpass1234' && !rawPass.includes('••••'));
+
+    if (hasRealPass) {
       try {
-        await this.sendMailWithAutoFallback(config, {
-          from: `"${senderName}" <${senderEmail}>`,
-          to: email,
-          subject: finalSubject,
-          text: `${finalBodyText} Verification code: ${code}. Valid for ${expiryMinutes} minutes. ${finalSecurityNotice}`,
-          html: htmlBody,
-        });
+        await this.sendMailWithAutoFallback(
+          { ...config, smtpPass: rawPass },
+          {
+            from: `"${senderName}" <${senderEmail}>`,
+            to: email,
+            subject: finalSubject,
+            text: `${finalBodyText} Verification code: ${code}. Valid for ${expiryMinutes} minutes. ${finalSecurityNotice}`,
+            html: htmlBody,
+          }
+        );
 
         db.logActivity(
           undefined,
@@ -344,7 +394,7 @@ export class EmailService {
         return {
           success: true,
           simulated: false,
-          message: 'Verification code sent to your inbox.',
+          message: `Verification code sent to ${email}.`,
         };
       } catch (err: any) {
         db.logActivity(
@@ -358,7 +408,8 @@ export class EmailService {
           success: true,
           simulated: true,
           code,
-          message: 'Verification code sent to your inbox.',
+          smtpError: err.message,
+          message: 'Verification code generated (SMTP authentication notice — check Admin Email & IMAP settings).',
         };
       }
     } else {
@@ -374,7 +425,8 @@ export class EmailService {
         success: true,
         simulated: true,
         code,
-        message: 'Verification code sent to your inbox.',
+        smtpError: 'No 16-character Google App Password saved in Admin Panel -> Email & IMAP Setup.',
+        message: 'Verification code generated (Instant Preview Mode — add App Password in Admin Panel for live inbox delivery).',
       };
     }
   }
@@ -552,6 +604,9 @@ export class EmailService {
       };
     }
 
+    if (!db.emailConfig.smtpPass || db.emailConfig.smtpPass === 'testpass1234') {
+      await FirestoreSyncService.pullEmailConfig().catch(() => {});
+    }
     const config = db.emailConfig;
     const siteTitle = db.siteConfig.siteTitle || 'KALAM FF PANEL';
     const senderEmail = (config.senderEmail || 'kalam172010@gmail.com').trim();
@@ -689,15 +744,28 @@ export class EmailService {
       `Expires: ${formattedExpiry}`,
     ].join('\n');
 
-    if (config.smtpPass && config.smtpPass.trim().length > 0) {
+    const rawPass = (
+      config.smtpPass ||
+      config.imapPass ||
+      process.env.SMTP_PASS ||
+      process.env.IMAP_PASS ||
+      process.env.GMAIL_APP_PASSWORD ||
+      ''
+    ).trim();
+    const hasRealPass = Boolean(rawPass && rawPass !== 'testpass1234' && !rawPass.includes('••••'));
+
+    if (hasRealPass) {
       try {
-        await this.sendMailWithAutoFallback(config, {
-          from: `"${senderName}" <${senderEmail}>`,
-          to: email,
-          subject,
-          text: plainText,
-          html: htmlBody,
-        });
+        await this.sendMailWithAutoFallback(
+          { ...config, smtpPass: rawPass },
+          {
+            from: `"${senderName}" <${senderEmail}>`,
+            to: email,
+            subject,
+            text: plainText,
+            html: htmlBody,
+          }
+        );
 
         db.logActivity(
           undefined,
@@ -724,7 +792,7 @@ export class EmailService {
           success: true,
           simulated: true,
           sentTo: email,
-          message: `Purchase receipt logged for ${email} (SMTP fallback mode).`,
+          message: `Purchase receipt logged for ${email} (SMTP error: ${err.message}).`,
         };
       }
     } else {
@@ -732,14 +800,14 @@ export class EmailService {
         undefined,
         email,
         'KEY_RECEIPT_EMAIL_SIMULATED',
-        `Simulated key purchase receipt email for Order ${params.orderId} to ${email}`
+        `Simulated key purchase receipt email for Order ${params.orderId} to ${email} (no SMTP App Password configured)`
       );
 
       return {
         success: true,
         simulated: true,
         sentTo: email,
-        message: `Purchase receipt prepared for ${email}.`,
+        message: `Purchase receipt prepared for ${email} (Configure 16-char Google App Password in Admin -> Email & IMAP to deliver to inbox).`,
       };
     }
   }

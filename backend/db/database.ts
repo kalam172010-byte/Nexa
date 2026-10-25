@@ -90,13 +90,21 @@ export class Database {
           if (parsed.emailConfig.smtpPort === 587 && parsed.emailConfig.secure === true) {
             parsed.emailConfig.secure = false;
           }
+          if (parsed.emailConfig.smtpPass === 'testpass1234') {
+            parsed.emailConfig.smtpPass = '';
+          }
+          if (parsed.emailConfig.imapPass === 'testpass1234') {
+            parsed.emailConfig.imapPass = '';
+          }
           const envPass = (process.env.IMAP_PASS || process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').trim();
-          if (envPass && (!parsed.emailConfig.imapPass || parsed.emailConfig.imapPass === 'testpass1234')) {
+          if (envPass && !parsed.emailConfig.imapPass) {
             parsed.emailConfig.imapPass = envPass;
             parsed.emailConfig.smtpPass = envPass;
           }
           const activePass = (parsed.emailConfig.imapPass || parsed.emailConfig.smtpPass || '').trim();
-          if (activePass && activePass !== 'testpass1234' && !activePass.toLowerCase().includes('demo')) {
+          parsed.emailConfig.hasSmtpPass = Boolean(activePass);
+          parsed.emailConfig.hasImapPass = Boolean(activePass);
+          if (activePass && !activePass.toLowerCase().includes('demo')) {
             parsed.emailConfig.simulationMode = false;
           }
         }
@@ -454,12 +462,21 @@ export class Database {
     if (!this.data.emailConfig) {
       this.data.emailConfig = this.getDefaultEmailConfig();
     }
+    const cleanUpdate = { ...config };
+    if (cleanUpdate.smtpPass === 'testpass1234') cleanUpdate.smtpPass = '';
+    if (cleanUpdate.imapPass === 'testpass1234') cleanUpdate.imapPass = '';
+
     this.data.emailConfig = {
       ...this.data.emailConfig,
-      ...config,
+      ...cleanUpdate,
     };
+    if (this.data.emailConfig.smtpPass === 'testpass1234') this.data.emailConfig.smtpPass = '';
+    if (this.data.emailConfig.imapPass === 'testpass1234') this.data.emailConfig.imapPass = '';
+
     const pass = (this.data.emailConfig.imapPass || this.data.emailConfig.smtpPass || '').trim();
-    if (pass && pass !== 'testpass1234' && !pass.toLowerCase().includes('demo')) {
+    (this.data.emailConfig as any).hasSmtpPass = Boolean(pass);
+    (this.data.emailConfig as any).hasImapPass = Boolean(pass);
+    if (pass && !pass.toLowerCase().includes('demo')) {
       this.data.emailConfig.simulationMode = false;
     }
     this.saveSync();

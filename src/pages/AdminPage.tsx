@@ -212,22 +212,40 @@ export const AdminPage: React.FC = () => {
   const [resellerConfig, setResellerConfig] = useState<any>({});
   const [emailConfig, setEmailConfig] = useState<any>(() => {
     try {
+      const dedicatedPass = (localStorage.getItem('nexa_saved_app_password') || '').trim();
+      const dedicatedSender = (localStorage.getItem('nexa_saved_sender_email') || '').trim();
       const cached = localStorage.getItem('nexa_admin_email_config');
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.smtpPass === 'testpass1234') parsed.smtpPass = '';
+        if (parsed.imapPass === 'testpass1234') parsed.imapPass = '';
+        const finalPass =
+          dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••')
+            ? dedicatedPass
+            : parsed.smtpPass || parsed.imapPass || '';
+        return {
+          ...parsed,
+          senderEmail: dedicatedSender || parsed.senderEmail || 'kalam172010@gmail.com',
+          smtpPass: finalPass,
+          imapPass: finalPass,
+          hasSmtpPass: Boolean(finalPass),
+          hasImapPass: Boolean(finalPass),
+        };
+      }
     } catch {}
     return {
       enabled: true,
       protocol: 'smtp',
-      senderEmail: '',
-      senderName: 'NEXA Gaming Panel',
+      senderEmail: 'kalam172010@gmail.com',
+      senderName: 'KALAM FF PANEL',
       smtpHost: 'smtp.gmail.com',
       smtpPort: 587,
       secure: false,
-      smtpUser: '',
+      smtpUser: 'kalam172010@gmail.com',
       smtpPass: '',
       imapHost: 'imap.gmail.com',
       imapPort: 993,
-      imapUser: '',
+      imapUser: 'kalam172010@gmail.com',
       imapPass: '',
       imapSecure: true,
       otpExpiryMinutes: 10,
@@ -712,30 +730,45 @@ export const AdminPage: React.FC = () => {
       }
       if (emailRes?.config && Object.keys(emailRes.config).length > 0) {
         let finalEmailCfg = { ...emailRes.config };
+        if (finalEmailCfg.smtpPass === 'testpass1234') finalEmailCfg.smtpPass = '';
+        if (finalEmailCfg.imapPass === 'testpass1234') finalEmailCfg.imapPass = '';
         try {
+          const dedicatedPass = (localStorage.getItem('nexa_saved_app_password') || '').trim();
+          const dedicatedSender = (localStorage.getItem('nexa_saved_sender_email') || '').trim();
           const cachedRaw = localStorage.getItem('nexa_admin_email_config');
-          if (cachedRaw) {
-            const cachedCfg = JSON.parse(cachedRaw);
-            const cachedPass = (cachedCfg?.imapPass || cachedCfg?.smtpPass || '').trim();
-            const serverPass = (finalEmailCfg.imapPass || finalEmailCfg.smtpPass || '').trim();
-            if (
-              cachedPass &&
-              cachedPass !== 'testpass1234' &&
-              !cachedPass.includes('••••') &&
-              (!serverPass || serverPass === 'testpass1234')
-            ) {
-              finalEmailCfg = {
-                ...finalEmailCfg,
-                ...cachedCfg,
-                smtpPass: cachedPass,
-                imapPass: cachedPass,
-                hasSmtpPass: true,
-                hasImapPass: true,
-                simulationMode: false,
-              };
-              // Automatically heal freshly deployed backend with the saved credentials
-              api.updateEmailSettings(finalEmailCfg).catch(() => {});
-            }
+          const cachedCfg = cachedRaw ? JSON.parse(cachedRaw) : {};
+          if (cachedCfg.smtpPass === 'testpass1234') cachedCfg.smtpPass = '';
+          if (cachedCfg.imapPass === 'testpass1234') cachedCfg.imapPass = '';
+
+          const cachedPass = (
+            (dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••') ? dedicatedPass : '') ||
+            cachedCfg?.imapPass ||
+            cachedCfg?.smtpPass ||
+            ''
+          ).trim();
+          const serverPass = (finalEmailCfg.imapPass || finalEmailCfg.smtpPass || '').trim();
+
+          if (
+            cachedPass &&
+            cachedPass !== 'testpass1234' &&
+            !cachedPass.includes('••••') &&
+            (!serverPass || serverPass === 'testpass1234')
+          ) {
+            finalEmailCfg = {
+              ...finalEmailCfg,
+              ...cachedCfg,
+              senderEmail: dedicatedSender || cachedCfg.senderEmail || finalEmailCfg.senderEmail || 'kalam172010@gmail.com',
+              smtpPass: cachedPass,
+              imapPass: cachedPass,
+              hasSmtpPass: true,
+              hasImapPass: true,
+              simulationMode: false,
+            };
+            // Automatically heal freshly deployed backend with the saved credentials
+            api.updateEmailSettings(finalEmailCfg).catch(() => {});
+          } else {
+            finalEmailCfg.hasSmtpPass = Boolean(serverPass);
+            finalEmailCfg.hasImapPass = Boolean(serverPass);
           }
         } catch {}
         setEmailConfig((prev: any) => ({ ...prev, ...finalEmailCfg }));
@@ -1273,7 +1306,18 @@ export const AdminPage: React.FC = () => {
         } : null,
       });
 
-      // Update local state with sanitized masked config returned by server
+      // Save dedicated App Password in localStorage so it never gets overwritten
+      try {
+        const cleanPassToSave = String(serializedPayload.smtpPass || serializedPayload.imapPass || '').trim();
+        if (cleanPassToSave && cleanPassToSave !== 'testpass1234' && !cleanPassToSave.includes('••••')) {
+          localStorage.setItem('nexa_saved_app_password', cleanPassToSave);
+        }
+        if (serializedPayload.senderEmail) {
+          localStorage.setItem('nexa_saved_sender_email', String(serializedPayload.senderEmail).trim());
+        }
+      } catch {}
+
+      // Update local state with sanitized config returned by server
       if (res?.config) {
         setEmailConfig((prev: any) => ({ ...prev, ...res.config }));
         try {
@@ -1500,6 +1544,12 @@ export const AdminPage: React.FC = () => {
 
       setEmailConfig(updatedConfig);
       try {
+        if (cleanPass && cleanPass !== 'testpass1234') {
+          localStorage.setItem('nexa_saved_app_password', cleanPass);
+        }
+        if (updatedConfig.senderEmail) {
+          localStorage.setItem('nexa_saved_sender_email', String(updatedConfig.senderEmail).trim());
+        }
         localStorage.setItem('nexa_admin_email_config', JSON.stringify(updatedConfig));
         await setDoc(doc(db, 'settings', 'email'), { ...updatedConfig, updatedAt: new Date().toISOString() }, { merge: true });
       } catch {}
@@ -9126,17 +9176,38 @@ export const AdminPage: React.FC = () => {
                 })()}
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900/90 to-rose-950/30 border border-emerald-500/30 text-xs text-slate-200 flex items-start gap-3">
-                <Zap className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-white font-bold">
-                    🌐 Universal Any-Email Dispatch: Enter ANY Email &amp; Password!
-                  </p>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Just type <strong>any email address</strong> (Gmail, Outlook, Yahoo, Zoho, iCloud, or custom domain) and its <strong>Password / App Password</strong> below. SMTP &amp; IMAP usernames and mail servers automatically sync as you type!
-                  </p>
+              {(!emailConfig.smtpPass || emailConfig.smtpPass === 'testpass1234') ? (
+                <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-xs text-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="font-bold text-amber-300 flex items-center gap-1.5">
+                      <span>⚠️ Action Required: Enter Your 16-Character Google App Password Below</span>
+                    </p>
+                    <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                      Live Email OTPs, Password Resets, Key Purchase Receipts, and 24/7 Gmail IMAP require a real 16-letter Google App Password for <strong className="text-white font-mono">{emailConfig.senderEmail || 'kalam172010@gmail.com'}</strong>. Paste your 16-character App Password in the <strong>EMAIL PASSWORD / APP PASSWORD</strong> box below and click <strong>Save &amp; Send Test OTP Now</strong>.
+                    </p>
+                  </div>
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[11px] uppercase tracking-wider shrink-0 text-center"
+                  >
+                    Get Google App Password ↗
+                  </a>
                 </div>
-              </div>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900/90 to-rose-950/30 border border-emerald-500/30 text-xs text-slate-200 flex items-start gap-3">
+                  <Zap className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-white font-bold">
+                      ✓ App Password Active &amp; Synced to Cloud Edge + Firestore ({String(emailConfig.smtpPass).replace(/\s+/g, '').length} chars)
+                    </p>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      Email OTPs, Key Purchase Receipts, and 24/7 IMAP Inbox Synchronization are active for <strong className="text-emerald-300 font-mono">{emailConfig.senderEmail}</strong> and persisted across deployments.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Field 1: Sender Email */}

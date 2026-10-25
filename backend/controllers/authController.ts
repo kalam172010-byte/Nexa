@@ -562,11 +562,14 @@ export class AuthController {
         return;
       }
 
+      emailService.applyHeaderEmailConfigIfMissing(req.headers['x-saved-email-config'] as string | undefined);
+
       const result = await emailService.sendLoginOtp(email);
       res.json({
         success: true,
         message: result.message,
         simulated: result.simulated,
+        smtpError: result.smtpError,
         code: result.code, // Returned for dev/preview convenience when SMTP is unconfigured or in test environment
       });
     } catch (err: any) {

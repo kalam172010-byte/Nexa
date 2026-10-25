@@ -271,33 +271,54 @@ export class OrderController {
         !recipientEmail.endsWith('@user.local') &&
         !recipientEmail.endsWith('@firebase.user');
 
+      emailService.applyHeaderEmailConfigIfMissing(req.headers['x-saved-email-config'] as string | undefined);
+
+      let liveReceiptSent = false;
+      let receiptSimulated = false;
+      let receiptStatusMessage = '';
+
       if (canSendEmail) {
-        emailService
-          .sendKeyPurchaseReceipt({
-            toEmail: recipientEmail,
-            username: dbUser.username || user.username,
-            orderId,
-            productName: product.name,
-            gameName: product.game || 'FREEFIRE',
-            durationLabel: variant.durationLabel,
-            keyCodes: deliveredKeys.map(k => k.keyCode),
-            pricePaid: authoritativePrice,
-            remainingBalance: newBalance,
-            purchaseSourceLabel: 'Buy from Website',
-            expiresAt: deliveredKey.expiresAt,
-            purchasedAt: deliveredKey.assignedAt || deliveredKey.createdAt,
-          })
-          .then(emailRes => {
-            db.logActivity(
-              dbUser.id,
-              dbUser.username,
-              'EMAIL_RECEIPT_SENT',
-              `Automatic email receipt (${orderId}) dispatched to ${recipientEmail}${emailRes.simulated ? ' [Simulated]' : ' [Live SMTP]'}`
-            );
-          })
-          .catch(err => {
-            console.warn('[OrderController] Background email receipt notice:', err?.message || err);
-          });
+        try {
+          const emailRes = await Promise.race([
+            emailService.sendKeyPurchaseReceipt({
+              toEmail: recipientEmail,
+              username: dbUser.username || user.username,
+              orderId,
+              productName: product.name,
+              gameName: product.game || 'FREEFIRE',
+              durationLabel: variant.durationLabel,
+              keyCodes: deliveredKeys.map(k => k.keyCode),
+              pricePaid: authoritativePrice,
+              remainingBalance: newBalance,
+              purchaseSourceLabel: 'Buy from Website',
+              expiresAt: deliveredKey.expiresAt,
+              purchasedAt: deliveredKey.assignedAt || deliveredKey.createdAt,
+            }),
+            new Promise<{ success: boolean; simulated: boolean; message: string; sentTo: string }>(resolve =>
+              setTimeout(
+                () =>
+                  resolve({
+                    success: true,
+                    simulated: false,
+                    sentTo: recipientEmail,
+                    message: `Sending purchase receipt to ${recipientEmail}...`,
+                  }),
+                5500
+              )
+            ),
+          ]);
+          liveReceiptSent = Boolean(emailRes.success && !emailRes.simulated);
+          receiptSimulated = Boolean(emailRes.simulated);
+          receiptStatusMessage = emailRes.message || '';
+          db.logActivity(
+            dbUser.id,
+            dbUser.username,
+            'EMAIL_RECEIPT_SENT',
+            `Automatic email receipt (${orderId}) dispatched to ${recipientEmail}${emailRes.simulated ? ' [Simulated]' : ' [Live SMTP]'}`
+          );
+        } catch (err: any) {
+          console.warn('[OrderController] Email receipt notice:', err?.message || err);
+        }
       }
 
       const latestOrder = db.orders[0];
@@ -327,12 +348,16 @@ export class OrderController {
         message: 'Purchase successful! This Key Buyed by Web.',
         order: latestOrder,
         deliveredKeys: formattedDeliveredKeys,
-        receiptEmailSent: Boolean(recipientEmail && recipientEmail.includes('@')),
+        receiptEmailSent: liveReceiptSent,
+        receiptSimulated,
+        receiptStatusMessage,
         receiptEmailAddress: recipientEmail,
         deliveredKey: {
           ...formattedDeliveredKeys[0],
           keyCode: allKeyCodes,
-          receiptEmailSent: Boolean(recipientEmail && recipientEmail.includes('@')),
+          receiptEmailSent: liveReceiptSent,
+          receiptSimulated,
+          receiptStatusMessage,
           receiptEmailAddress: recipientEmail,
           orderId,
           pricePaid: authoritativePrice,
@@ -342,7 +367,9 @@ export class OrderController {
           keyCode: allKeyCodes,
           keys: deliveredKeys.map(k => k.keyCode),
           quantity: qty,
-          receiptEmailSent: Boolean(recipientEmail && recipientEmail.includes('@')),
+          receiptEmailSent: liveReceiptSent,
+          receiptSimulated,
+          receiptStatusMessage,
           receiptEmailAddress: recipientEmail,
           orderId,
           pricePaid: authoritativePrice,

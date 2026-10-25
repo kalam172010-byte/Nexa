@@ -30,6 +30,8 @@ interface KeySuccessModalProps {
     purchaseSource?: 'API' | 'WEB';
     purchaseSourceLabel?: string;
     receiptEmailSent?: boolean;
+    receiptSimulated?: boolean;
+    receiptStatusMessage?: string;
     receiptEmailAddress?: string;
   };
   onClose: () => void;
@@ -41,7 +43,10 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
   const [copied, setCopied] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [receiptSentTo, setReceiptSentTo] = useState<string>(
-    keyData.receiptEmailAddress || user?.email || ''
+    keyData.receiptEmailSent ? keyData.receiptEmailAddress || user?.email || '' : ''
+  );
+  const [receiptSimulated, setReceiptSimulated] = useState<boolean>(
+    Boolean(keyData.receiptSimulated)
   );
   const [customEmail, setCustomEmail] = useState<string>(
     keyData.receiptEmailAddress || user?.email || ''
@@ -83,6 +88,7 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
           .then(res => {
             if (res?.sentTo || targetEmail) {
               setReceiptSentTo(res?.sentTo || targetEmail);
+              setReceiptSimulated(Boolean(res?.simulated));
             }
           })
           .catch(() => {});
@@ -123,8 +129,16 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
       });
       const finalEmail = res.sentTo || emailToUse;
       setReceiptSentTo(finalEmail);
+      setReceiptSimulated(Boolean(res.simulated));
       setShowEmailInput(false);
-      showToastSuccess('Email Receipt Sent', `Key purchase receipt dispatched to ${finalEmail}`);
+      if (res.simulated) {
+        showToastError(
+          'SMTP App Password Needed for Live Inbox Delivery',
+          res.message || 'Please save your 16-character Google App Password in Admin Panel -> Email & IMAP.'
+        );
+      } else {
+        showToastSuccess('Email Receipt Sent', `Key purchase receipt dispatched to ${finalEmail}`);
+      }
     } catch (err: any) {
       showToastError('Receipt Error', err.message || 'Could not send email receipt.');
     } finally {
@@ -202,16 +216,30 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
         </div>
 
         {/* Email Receipt Confirmation & Resend Box */}
-        <div className="p-3 rounded-xl bg-emerald-950/25 border border-emerald-500/30 space-y-2">
+        <div
+          className={`p-3 rounded-xl space-y-2 border ${
+            receiptSimulated
+              ? 'bg-amber-950/25 border-amber-500/35'
+              : 'bg-emerald-950/25 border-emerald-500/30'
+          }`}
+        >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
+              <Mail
+                className={`w-4 h-4 shrink-0 ${
+                  receiptSimulated ? 'text-amber-400' : 'text-emerald-400'
+                }`}
+              />
               <div className="text-[11px] text-slate-300 truncate">
-                {receiptSentTo ? (
+                {receiptSentTo && !receiptSimulated ? (
                   <>
                     Receipt sent to{' '}
                     <span className="font-mono font-bold text-emerald-300">{receiptSentTo}</span>
                   </>
+                ) : receiptSentTo && receiptSimulated ? (
+                  <span className="text-amber-300">
+                    Receipt ready for <strong className="font-mono">{receiptSentTo}</strong> (Set App Password in Admin)
+                  </span>
                 ) : (
                   <span>Send key purchase receipt to your email</span>
                 )}

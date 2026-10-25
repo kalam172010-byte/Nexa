@@ -20,6 +20,16 @@ export class FirestoreSyncService {
   private static lastPullTime = 0;
   private static isPulling = false;
   private static autoSyncStarted = false;
+  private static firestoreQuotaExceededUntil = 0;
+
+  private static isFirestoreQuotaPaused(): boolean {
+    return Date.now() < this.firestoreQuotaExceededUntil;
+  }
+
+  private static markFirestoreQuotaExceeded(): void {
+    // Pause Firestore reads for 10 minutes when 429 RESOURCE_EXHAUSTED occurs
+    this.firestoreQuotaExceededUntil = Date.now() + 10 * 60 * 1000;
+  }
 
   /**
    * Return all linked user document IDs for a given user account
@@ -64,14 +74,14 @@ export class FirestoreSyncService {
     this.autoSyncStarted = true;
 
     this.pullEmailConfig()
-      .then(() => this.pushFullRestoredStateToCloud(true))
       .then(() => this.pullAndMergeExternalState(true))
+      .then(() => this.pushFullRestoredStateToCloud(true))
       .catch(() => {});
 
     setInterval(() => {
       this.pullEmailConfig().catch(() => {});
       this.pullAndMergeExternalState(false).catch(() => {});
-    }, 30000);
+    }, 90000);
   }
 
   /**
@@ -151,11 +161,17 @@ export class FirestoreSyncService {
         }
       }
 
-      // 4. Push complete state to Cloudflare Edge Worker
+      // 4. Push complete state to Cloudflare Edge Worker (preserving emailConfigBackup if local has a real password)
       const allProdsWithVars = validProducts.map(p => ({
         ...p,
         variants: validVariants.filter(v => v.productId === p.id),
       }));
+
+      const localPass = (db.emailConfig.imapPass || db.emailConfig.smtpPass || '').trim();
+      const siteConfigToPush: any = { ...db.siteConfig };
+      if (localPass && localPass !== 'testpass1234') {
+        siteConfigToPush.emailConfigBackup = db.emailConfig;
+      }
 
       await fetch(EDGE_SYNC_URL, {
         method: 'POST',
@@ -170,7 +186,7 @@ export class FirestoreSyncService {
           transactions: db.transactions,
           referrals: db.referrals || [],
           resellerConfig: db.resellerConfig,
-          siteConfig: db.siteConfig,
+          siteConfig: siteConfigToPush,
           deletedProductIds: db.deletedProductIds || [],
           deletedUserIds: db.deletedUserIds || [],
           hiddenLeaderboardUserIds: db.hiddenLeaderboardUserIds || [],
@@ -187,7 +203,7 @@ export class FirestoreSyncService {
    */
   public static async pullAndMergeExternalState(force = false): Promise<void> {
     const now = Date.now();
-    if (!force && (this.isPulling || now - this.lastPullTime < 15000)) {
+    if (!force && (this.isPulling || now - this.lastPullTime < 30000)) {
       return;
     }
     this.isPulling = true;
@@ -201,7 +217,7 @@ export class FirestoreSyncService {
       let edgeState: any = null;
       try {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 2500);
+        const timer = setTimeout(() => controller.abort(), 3000);
         const edgeRes = await fetch(EDGE_SYNC_URL, { signal: controller.signal });
         clearTimeout(timer);
         if (edgeRes.ok) {
@@ -212,8 +228,25 @@ export class FirestoreSyncService {
         }
       } catch {}
 
+      // Recover emailConfig from Edge Worker backup if present
+      const edgeEmailCfg = edgeState?.siteConfig?.emailConfigBackup || edgeState?.emailConfig;
+      if (edgeEmailCfg && typeof edgeEmailCfg === 'object') {
+        const edgePass = String(edgeEmailCfg.imapPass || edgeEmailCfg.smtpPass || '').trim();
+        const localPass = (db.emailConfig.imapPass || db.emailConfig.smtpPass || '').trim();
+        if (edgePass && edgePass !== 'testpass1234' && !edgePass.includes('••••') && !localPass) {
+          db.updateEmailConfig({
+            ...edgeEmailCfg,
+            smtpPass: edgePass,
+            imapPass: edgePass,
+            simulationMode: false,
+          });
+          dbChanged = true;
+        }
+      }
+
       // 2. Pull documents from Firestore (users, digitalKeys, orders) via structuredQuery (:runQuery)
-      const runColQuery = async (colName: string, limit = 200): Promise<any[]> => {
+      const runColQuery = async (colName: string, limit = 150): Promise<any[]> => {
+        if (this.isFirestoreQuotaPaused()) return [];
         try {
           const r = await fetch(`${FIRESTORE_BASE}:runQuery?key=${API_KEY}`, {
             method: 'POST',
@@ -225,6 +258,10 @@ export class FirestoreSyncService {
               },
             }),
           });
+          if (r.status === 429) {
+            this.markFirestoreQuotaExceeded();
+            return [];
+          }
           if (!r.ok) return [];
           const arr = (await r.json()) as any[];
           return Array.isArray(arr) ? arr.map(item => item?.document).filter(Boolean) : [];
@@ -695,8 +732,8 @@ export class FirestoreSyncService {
   }
 
   /**
-   * Synchronizes Email & 24/7 IMAP configuration to Firestore (/settings/email)
-   * so credentials survive redeployments and container restarts.
+   * Synchronizes Email & 24/7 IMAP configuration to BOTH Cloudflare Edge Worker and Firestore (/settings/email)
+   * so credentials survive redeployments and container restarts even when Firestore free read quota is exceeded.
    */
   public static async syncEmailConfig(config?: EmailConfig): Promise<void> {
     try {
@@ -704,7 +741,31 @@ export class FirestoreSyncService {
       if (!cfg) return;
       const pass = (cfg.imapPass || cfg.smtpPass || '').trim();
       const isRealPass = Boolean(pass && pass !== 'testpass1234' && !pass.toLowerCase().includes('demo'));
+      const cleanPass = isRealPass ? pass : '';
 
+      const emailConfigBackup = {
+        ...cfg,
+        smtpPass: cleanPass,
+        imapPass: cleanPass,
+        hasSmtpPass: isRealPass,
+        hasImapPass: isRealPass,
+        simulationMode: isRealPass ? false : Boolean(cfg.simulationMode),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // 1. Always persist to Cloudflare Edge Worker (zero quota limits, 100% persistent across deployments)
+      fetch(EDGE_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siteConfig: {
+            ...db.siteConfig,
+            emailConfigBackup,
+          },
+        }),
+      }).catch(() => {});
+
+      // 2. Also persist to Firestore (/settings/email)
       const patchUrl = `${FIRESTORE_BASE}/settings/email?key=${API_KEY}`;
       await fetch(patchUrl, {
         method: 'PATCH',
@@ -720,11 +781,11 @@ export class FirestoreSyncService {
             smtpPort: { integerValue: String(cfg.smtpPort || 587) },
             secure: { booleanValue: Boolean(cfg.secure) },
             smtpUser: { stringValue: cfg.smtpUser || cfg.senderEmail || 'kalam172010@gmail.com' },
-            smtpPass: { stringValue: cfg.smtpPass || '' },
+            smtpPass: { stringValue: cleanPass },
             imapHost: { stringValue: cfg.imapHost || 'imap.gmail.com' },
             imapPort: { integerValue: String(cfg.imapPort || 993) },
             imapUser: { stringValue: cfg.imapUser || cfg.senderEmail || 'kalam172010@gmail.com' },
-            imapPass: { stringValue: cfg.imapPass || cfg.smtpPass || '' },
+            imapPass: { stringValue: cleanPass },
             imapSecure: { booleanValue: cfg.imapSecure !== false },
             otpExpiryMinutes: { integerValue: String(cfg.otpExpiryMinutes || 10) },
             allowOtpSignup: { booleanValue: cfg.allowOtpSignup !== false },
@@ -740,30 +801,64 @@ export class FirestoreSyncService {
             updatedAt: { stringValue: new Date().toISOString() },
           },
         }),
-      });
+      }).catch(() => {});
     } catch (err) {
       console.warn('[FirestoreSync] syncEmailConfig notice:', err);
     }
   }
 
   /**
-   * Pulls persisted Email & 24/7 IMAP configuration from Firestore (/settings/email)
+   * Pulls persisted Email & 24/7 IMAP configuration from Cloudflare Edge Worker and Firestore (/settings/email)
    * and updates local db.emailConfig if cloud credentials exist.
    */
   public static async pullEmailConfig(): Promise<EmailConfig | null> {
     try {
+      // 1. First check Cloudflare Edge Worker (always available, immune to Firestore 429 read quota)
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 2500);
+        const edgeRes = await fetch(EDGE_SYNC_URL, { signal: controller.signal });
+        clearTimeout(timer);
+        if (edgeRes.ok) {
+          const edgeData: any = await edgeRes.json();
+          const backup = edgeData?.siteConfig?.emailConfigBackup || edgeData?.emailConfig;
+          if (backup && typeof backup === 'object') {
+            const edgePass = String(backup.imapPass || backup.smtpPass || '').trim();
+            const isEdgeValidPass = Boolean(edgePass && edgePass !== 'testpass1234' && !edgePass.includes('••••'));
+            const localPass = (db.emailConfig.imapPass || db.emailConfig.smtpPass || '').trim();
+            if (isEdgeValidPass && (!localPass || localPass === 'testpass1234')) {
+              return db.updateEmailConfig({
+                ...backup,
+                smtpPass: edgePass,
+                imapPass: edgePass,
+                simulationMode: false,
+              });
+            }
+          }
+        }
+      } catch {}
+
+      // 2. Also check Firestore (/settings/email) if quota is not paused
+      if (this.isFirestoreQuotaPaused()) {
+        return db.emailConfig;
+      }
+
       const getUrl = `${FIRESTORE_BASE}/settings/email?key=${API_KEY}`;
       const res = await fetch(getUrl);
+      if (res.status === 429) {
+        this.markFirestoreQuotaExceeded();
+        return db.emailConfig;
+      }
       if (!res.ok) return null;
       const doc = (await res.json()) as any;
       if (!doc || !doc.fields) return null;
       const f = doc.fields;
 
-      const cloudSmtpPass = f.smtpPass?.stringValue || '';
-      const cloudImapPass = f.imapPass?.stringValue || cloudSmtpPass || '';
-      const localPass = (db.emailConfig.imapPass || db.emailConfig.smtpPass || '').trim();
-      const isLocalDefaultOrEmpty = !localPass || localPass === 'testpass1234';
-      const isCloudValidPass = Boolean(cloudImapPass && cloudImapPass !== 'testpass1234' && !cloudImapPass.includes('••••'));
+      const rawCloudSmtp = f.smtpPass?.stringValue || '';
+      const rawCloudImap = f.imapPass?.stringValue || rawCloudSmtp || '';
+      const cloudSmtpPass = rawCloudSmtp === 'testpass1234' ? '' : rawCloudSmtp;
+      const cloudImapPass = rawCloudImap === 'testpass1234' ? '' : rawCloudImap;
+      const isCloudValidPass = Boolean(cloudImapPass && !cloudImapPass.includes('••••'));
 
       const merged: Partial<EmailConfig> = {
         enabled: f.enabled?.booleanValue !== undefined ? Boolean(f.enabled.booleanValue) : db.emailConfig.enabled,
@@ -787,7 +882,7 @@ export class FirestoreSyncService {
         autoApproveDeposits: f.autoApproveDeposits?.booleanValue !== undefined ? Boolean(f.autoApproveDeposits.booleanValue) : db.emailConfig.autoApproveDeposits,
       };
 
-      if (isCloudValidPass || (isLocalDefaultOrEmpty && cloudImapPass)) {
+      if (isCloudValidPass) {
         merged.smtpPass = cloudSmtpPass || cloudImapPass;
         merged.imapPass = cloudImapPass || cloudSmtpPass;
         merged.simulationMode = false;
@@ -799,7 +894,12 @@ export class FirestoreSyncService {
       if (f.otpSecurityNotice?.stringValue) merged.otpSecurityNotice = f.otpSecurityNotice.stringValue;
       if (f.otpFooterText?.stringValue) merged.otpFooterText = f.otpFooterText.stringValue;
 
-      return db.updateEmailConfig(merged);
+      const updated = db.updateEmailConfig(merged);
+      if (isCloudValidPass) {
+        // Also mirror valid Firestore credentials into Edge Worker backup
+        this.syncEmailConfig(updated).catch(() => {});
+      }
+      return updated;
     } catch {
       return null;
     }

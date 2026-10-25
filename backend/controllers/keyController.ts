@@ -168,6 +168,8 @@ export class KeyController {
         return;
       }
 
+      emailService.applyHeaderEmailConfigIfMissing(req.headers['x-saved-email-config'] as string | undefined);
+
       const { id } = req.params;
       const body = req.body || {};
       const headerEmail = (req.headers['x-user-email'] as string | undefined)?.toLowerCase().trim();
