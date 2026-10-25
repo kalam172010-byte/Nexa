@@ -711,12 +711,39 @@ export const AdminPage: React.FC = () => {
         if (siteRes.config.secondaryWebsiteName) setSecondaryWebsiteNameInput(siteRes.config.secondaryWebsiteName);
       }
       if (emailRes?.config && Object.keys(emailRes.config).length > 0) {
-        setEmailConfig((prev: any) => ({ ...prev, ...emailRes.config }));
+        let finalEmailCfg = { ...emailRes.config };
         try {
-          localStorage.setItem('nexa_admin_email_config', JSON.stringify(emailRes.config));
+          const cachedRaw = localStorage.getItem('nexa_admin_email_config');
+          if (cachedRaw) {
+            const cachedCfg = JSON.parse(cachedRaw);
+            const cachedPass = (cachedCfg?.imapPass || cachedCfg?.smtpPass || '').trim();
+            const serverPass = (finalEmailCfg.imapPass || finalEmailCfg.smtpPass || '').trim();
+            if (
+              cachedPass &&
+              cachedPass !== 'testpass1234' &&
+              !cachedPass.includes('••••') &&
+              (!serverPass || serverPass === 'testpass1234')
+            ) {
+              finalEmailCfg = {
+                ...finalEmailCfg,
+                ...cachedCfg,
+                smtpPass: cachedPass,
+                imapPass: cachedPass,
+                hasSmtpPass: true,
+                hasImapPass: true,
+                simulationMode: false,
+              };
+              // Automatically heal freshly deployed backend with the saved credentials
+              api.updateEmailSettings(finalEmailCfg).catch(() => {});
+            }
+          }
         } catch {}
-        if (emailRes.config.senderEmail) {
-          setTestRecipientEmail(emailRes.config.senderEmail);
+        setEmailConfig((prev: any) => ({ ...prev, ...finalEmailCfg }));
+        try {
+          localStorage.setItem('nexa_admin_email_config', JSON.stringify(finalEmailCfg));
+        } catch {}
+        if (finalEmailCfg.senderEmail) {
+          setTestRecipientEmail(finalEmailCfg.senderEmail);
         }
       }
       if (logsRes?.logs) setLogs(logsRes.logs);
@@ -1261,18 +1288,35 @@ export const AdminPage: React.FC = () => {
       // Step D: Synchronize with Firebase Firestore
       appendImapLog('FIREBASE_SYNC', 'info', 'Step 5b/5: Serializing configuration document for Firebase Firestore (/settings/email)...');
       try {
+        const effectiveSmtpPass =
+          serializedPayload.smtpPass && !String(serializedPayload.smtpPass).includes('••••')
+            ? serializedPayload.smtpPass
+            : res?.config?.smtpPass || '';
+        const effectiveImapPass =
+          serializedPayload.imapPass && !String(serializedPayload.imapPass).includes('••••')
+            ? serializedPayload.imapPass
+            : effectiveSmtpPass || res?.config?.imapPass || '';
+
         const firestoreConfigDoc = {
           id: 'email',
+          enabled: serializedPayload.enabled !== false,
+          protocol: serializedPayload.protocol || 'smtp',
           senderEmail: serializedPayload.senderEmail,
           senderName: serializedPayload.senderName,
           smtpHost: serializedPayload.smtpHost,
           smtpPort: serializedPayload.smtpPort,
           secure: serializedPayload.secure,
           smtpUser: serializedPayload.smtpUser,
+          smtpPass: effectiveSmtpPass,
           imapHost: serializedPayload.imapHost,
           imapPort: serializedPayload.imapPort,
           imapUser: serializedPayload.imapUser,
+          imapPass: effectiveImapPass,
           imapSecure: serializedPayload.imapSecure,
+          imap24x7Enabled: serializedPayload.imap24x7Enabled !== false,
+          imapPollIntervalSeconds: Number(serializedPayload.imapPollIntervalSeconds) || 25,
+          autoApproveDeposits: serializedPayload.autoApproveDeposits !== false,
+          simulationMode: false,
           otpExpiryMinutes: serializedPayload.otpExpiryMinutes,
           allowOtpSignup: serializedPayload.allowOtpSignup,
           otpSubject: serializedPayload.otpSubject,
@@ -1280,8 +1324,8 @@ export const AdminPage: React.FC = () => {
           otpMessageBody: serializedPayload.otpMessageBody,
           otpSecurityNotice: serializedPayload.otpSecurityNotice,
           otpFooterText: serializedPayload.otpFooterText,
-          hasSmtpPass: Boolean(serializedPayload.smtpPass || res?.config?.hasSmtpPass),
-          hasImapPass: Boolean(serializedPayload.imapPass || res?.config?.hasImapPass),
+          hasSmtpPass: Boolean(effectiveSmtpPass || res?.config?.hasSmtpPass),
+          hasImapPass: Boolean(effectiveImapPass || res?.config?.hasImapPass),
           updatedAt: new Date().toISOString(),
           syncedBy: currentUserEmail,
         };
@@ -1449,10 +1493,16 @@ export const AdminPage: React.FC = () => {
       const updatedConfig = {
         ...emailConfig,
         ...(newEmail ? { senderEmail: newEmail.trim(), smtpUser: newEmail.trim(), imapUser: newEmail.trim() } : {}),
-        ...(cleanPass ? { smtpPass: cleanPass, imapPass: cleanPass, hasSmtpPass: true, hasImapPass: true } : {}),
+        ...(cleanPass
+          ? { smtpPass: cleanPass, imapPass: cleanPass, hasSmtpPass: true, hasImapPass: true, simulationMode: false }
+          : {}),
       };
 
       setEmailConfig(updatedConfig);
+      try {
+        localStorage.setItem('nexa_admin_email_config', JSON.stringify(updatedConfig));
+        await setDoc(doc(db, 'settings', 'email'), { ...updatedConfig, updatedAt: new Date().toISOString() }, { merge: true });
+      } catch {}
       await api.updateEmailSettings(updatedConfig);
       showToastSuccess('Settings Updated!', 'Retesting connection now...');
 

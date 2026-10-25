@@ -86,8 +86,19 @@ export class Database {
         }
         if (!parsed.emailConfig) {
           parsed.emailConfig = this.getDefaultEmailConfig();
-        } else if (parsed.emailConfig.smtpPort === 587 && parsed.emailConfig.secure === true) {
-          parsed.emailConfig.secure = false;
+        } else {
+          if (parsed.emailConfig.smtpPort === 587 && parsed.emailConfig.secure === true) {
+            parsed.emailConfig.secure = false;
+          }
+          const envPass = (process.env.IMAP_PASS || process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').trim();
+          if (envPass && (!parsed.emailConfig.imapPass || parsed.emailConfig.imapPass === 'testpass1234')) {
+            parsed.emailConfig.imapPass = envPass;
+            parsed.emailConfig.smtpPass = envPass;
+          }
+          const activePass = (parsed.emailConfig.imapPass || parsed.emailConfig.smtpPass || '').trim();
+          if (activePass && activePass !== 'testpass1234' && !activePass.toLowerCase().includes('demo')) {
+            parsed.emailConfig.simulationMode = false;
+          }
         }
         if (!parsed.gatewayConfig) {
           parsed.gatewayConfig = this.getDefaultGatewayConfig();
@@ -233,6 +244,7 @@ export class Database {
       imap24x7Enabled: true,
       imapPollIntervalSeconds: 25,
       autoApproveDeposits: true,
+      simulationMode: false,
       otpSubject: '🔐 Your {SITE_NAME} Login Verification Code: {OTP}',
       otpHeader: 'Secure Email OTP Authentication',
       otpMessageBody: 'Use the 6-digit verification code below to log in to your {SITE_NAME} account:',
@@ -446,6 +458,10 @@ export class Database {
       ...this.data.emailConfig,
       ...config,
     };
+    const pass = (this.data.emailConfig.imapPass || this.data.emailConfig.smtpPass || '').trim();
+    if (pass && pass !== 'testpass1234' && !pass.toLowerCase().includes('demo')) {
+      this.data.emailConfig.simulationMode = false;
+    }
     this.saveSync();
     return this.data.emailConfig;
   }

@@ -4,6 +4,7 @@ import net from 'net';
 import { db } from '../db/database';
 import { EmailConfig } from '../models/types';
 import { PaymentGatewayAdapter } from './paymentAdapter';
+import { FirestoreSyncService } from './firestoreSync';
 
 interface StoredOtp {
   code: string;
@@ -1020,10 +1021,18 @@ export class EmailService {
             }
           } else if (step === 'SELECT') {
             if (line.startsWith('a003 OK')) {
-              // Save working password to database if alternate worked
-              if (hasTriedAltPass && currentPass) {
-                db.emailConfig.imapPass = currentPass;
-                db.saveSync();
+              // Save working password & config to database and Firestore
+              if (currentPass && !currentPass.includes('••••')) {
+                const updated = db.updateEmailConfig({
+                  imapHost: host,
+                  imapPort: port,
+                  imapSecure: secure,
+                  imapUser: user,
+                  imapPass: currentPass,
+                  smtpPass: db.emailConfig.smtpPass || currentPass,
+                  simulationMode: false,
+                });
+                FirestoreSyncService.syncEmailConfig(updated).catch(() => {});
               }
 
               this.imapTelemetry.status = 'ACTIVE_24_7';
@@ -1102,6 +1111,10 @@ export class EmailService {
       }
     }
 
+    // Pull latest cloud Email/IMAP credentials and pending deposits before scanning
+    await FirestoreSyncService.pullEmailConfig().catch(() => {});
+    await FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
+
     const {
       host,
       port,
@@ -1110,7 +1123,6 @@ export class EmailService {
       imapPass,
       altSmtpPass,
       isGmail,
-      isLikelyInvalidGmailAppPass,
       isStandard16LetterAppPass,
       autoApproveDeposits,
       imap24x7Enabled,
@@ -1132,12 +1144,12 @@ export class EmailService {
     const pass = imapPass || altSmtpPass;
     const isTestPass =
       !pass ||
-      pass.toLowerCase().includes('test') ||
+      pass.toLowerCase() === 'testpass1234' ||
       pass.toLowerCase().includes('demo') ||
-      (isGmail && !isStandard16LetterAppPass);
+      (isGmail && !isStandard16LetterAppPass && pass.toLowerCase().includes('test'));
 
-    if (isTestPass || simulationMode) {
-      // Execute Cloud-Safe Auto-Deposit Engine!
+    if (isTestPass || (simulationMode && isTestPass)) {
+      // Execute Cloud-Safe Auto-Deposit Engine when no real IMAP App Password is set yet
       this.imapTelemetry.status = 'ACTIVE_24_7';
       this.imapTelemetry.lastError = null;
       this.imapTelemetry.lastScanTime = new Date().toISOString();
@@ -1209,11 +1221,11 @@ export class EmailService {
             this.imapTelemetry.utrsDetectedTotal += result.results.length;
             this.imapTelemetry.depositsAutoApprovedTotal += result.matchedCount;
           } else {
-            // Keep daemon active in Cloud-Safe Fallback mode so dashboard never breaks
+            // Keep daemon active and record diagnostic hint
             this.imapTelemetry.status = 'ACTIVE_24_7';
-            this.imapTelemetry.lastError = null;
+            this.imapTelemetry.lastError = result.message;
             this.imapTelemetry.lastSuccessTime = new Date().toISOString();
-            this.imapTelemetry.diagnosticHint = '24/7 Auto-Deposit Engine active with Cloud-Safe Instant UTR Verification & Real-Time Gateway Webhooks enabled.';
+            this.imapTelemetry.diagnosticHint = `IMAP Notice: ${result.message} (Cloud-Safe Instant UTR Verification & Gateway Webhooks remain active 24/7).`;
           }
 
           resolve(result);
@@ -1223,12 +1235,12 @@ export class EmailService {
       timer = setTimeout(() => {
         finishScan({
           success: false,
-          message: `IMAP 24/7 scan timed out after 12s (${host}:${port}). Check network firewall.`,
+          message: `IMAP 24/7 scan timed out after 18s (${host}:${port}).`,
           scannedCount: 0,
           matchedCount: 0,
           results: this.recentScannedDeposits,
         });
-      }, 12000);
+      }, 18000);
 
       try {
         socket = secure
@@ -1238,9 +1250,9 @@ export class EmailService {
               servername: host,
               rejectUnauthorized: false,
               minVersion: 'TLSv1.2',
-              timeout: 10000,
+              timeout: 15000,
             })
-          : net.connect({ host, port, timeout: 10000 });
+          : net.connect({ host, port, timeout: 15000 });
       } catch (err: any) {
         return finishScan({
           success: false,
@@ -1251,7 +1263,7 @@ export class EmailService {
         });
       }
 
-      socket.setTimeout(10000);
+      socket.setTimeout(15000);
       socket.on('timeout', () => {
         finishScan({
           success: false,
@@ -1264,12 +1276,22 @@ export class EmailService {
 
       let imapState: 'GREET' | 'LOGIN' | 'SELECT' | 'FETCH' = 'GREET';
       let buffer = '';
+      let retriedFullFetch = false;
 
       socket.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
         if (imapState === 'FETCH') {
           rawFetchBuffer += text;
-          const isFetchFinished = /(\r\n|\n)a003 (OK|NO|BAD)\b/i.test(rawFetchBuffer);
+          if (!retriedFullFetch && /(\r\n|\n)a003 (NO|BAD)\b/i.test(rawFetchBuffer)) {
+            retriedFullFetch = true;
+            rawFetchBuffer = '';
+            const fetchFrom = Math.max(1, totalExists - 14);
+            socket.write(
+              `a004 FETCH ${fetchFrom}:${totalExists} (BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)] BODY.PEEK[TEXT])\r\n`
+            );
+            return;
+          }
+          const isFetchFinished = /(\r\n|\n)a00[34] (OK|NO|BAD)\b/i.test(rawFetchBuffer);
           if (isFetchFinished) {
             // Finished fetching messages, now parse UPI receipts!
             discoveredBatch = this.parseUpiEmailsAndAutoCredit(rawFetchBuffer, autoApproveDeposits);
@@ -1288,8 +1310,8 @@ export class EmailService {
 
             finishScan({
               success: true,
-              message: `24/7 IMAP scan completed. Scanned ${totalExists} messages, found ${discoveredBatch.length} payment receipts, auto-credited ${matchedCount} deposits!`,
-              scannedCount: totalExists,
+              message: `24/7 IMAP scan completed. Scanned ${Math.min(20, totalExists)} recent messages (of ${totalExists} in INBOX), found ${discoveredBatch.length} payment receipts, auto-credited ${matchedCount} deposits!`,
+              scannedCount: Math.min(20, totalExists),
               matchedCount,
               results: this.recentScannedDeposits,
             });
@@ -1342,10 +1364,10 @@ export class EmailService {
               }
 
               imapState = 'FETCH';
-              // Fetch the most recent 15 messages using standard RFC 3501 syntax
-              const fetchFrom = Math.max(1, totalExists - 14);
+              // Fetch the most recent 20 messages using RFC 3501 partial fetch (<0.20000>) so large attachments never block or time out
+              const fetchFrom = Math.max(1, totalExists - 19);
               socket.write(
-                `a003 FETCH ${fetchFrom}:${totalExists} (BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)] BODY.PEEK[TEXT])\r\n`
+                `a003 FETCH ${fetchFrom}:${totalExists} (BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)] BODY.PEEK[TEXT]<0.20000>)\r\n`
               );
             } else if (line.startsWith('a002 NO') || line.startsWith('a002 BAD')) {
               finishScan({
@@ -1455,6 +1477,70 @@ Transaction Note: ${targetDeposit ? targetDeposit.id : 'NEXA-PANEL-DEPOSIT'}
   }
 
   /**
+   * Decodes Quoted-Printable, Base64 MIME sections, RFC 2047 headers, and HTML tags
+   * so UTR numbers and INR amounts inside bank/UPI HTML emails are cleanly extracted.
+   */
+  private decodeEmailBlock(raw: string): string {
+    let text = raw || '';
+
+    // 1. Decode RFC 2047 encoded words in Subject/From: =?UTF-8?B?...?= or =?UTF-8?Q?...?=
+    text = text.replace(/=\?([^?]+)\?([BbQq])\?([^?]+)\?=/g, (_, _charset, enc, payload) => {
+      try {
+        if (enc.toUpperCase() === 'B') {
+          return Buffer.from(payload, 'base64').toString('utf-8');
+        }
+        const qStr = payload.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, (__: string, hex: string) =>
+          String.fromCharCode(parseInt(hex, 16))
+        );
+        return Buffer.from(qStr, 'binary').toString('utf-8');
+      } catch {
+        return payload;
+      }
+    });
+
+    // 2. Unfold Quoted-Printable soft line breaks (=\r\n or =\n)
+    text = text.replace(/=\r?\n/g, '');
+
+    // 3. Decode Quoted-Printable hex sequences (e.g. =E2=82=B9 -> ₹, =3D -> =)
+    text = text.replace(/(?:=[0-9A-Fa-f]{2})+/g, match => {
+      try {
+        const bytes = match
+          .slice(1)
+          .split('=')
+          .map(h => parseInt(h, 16));
+        return Buffer.from(bytes).toString('utf-8');
+      } catch {
+        return match;
+      }
+    });
+
+    // 4. Decode Base64 MIME blocks if present
+    const b64Matches = text.match(/(?:[A-Za-z0-9+/]{60,}\r?\n){2,}[A-Za-z0-9+/=]{16,}/g);
+    if (b64Matches) {
+      for (const b64Block of b64Matches) {
+        try {
+          const decoded = Buffer.from(b64Block.replace(/\s+/g, ''), 'base64').toString('utf-8');
+          if (/[a-zA-Z0-9]{4,}/.test(decoded)) {
+            text += '\n' + decoded;
+          }
+        } catch {}
+      }
+    }
+
+    // 5. Strip HTML style/script blocks and tags, and decode common entities
+    text = text
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&#8377;|&#x20b9;|&inr;/gi, '₹')
+      .replace(/&amp;/gi, '&')
+      .replace(/\s+/g, ' ');
+
+    return text;
+  }
+
+  /**
    * Parses fetched raw email text for UPI amounts, UTR numbers, and matches with pending deposits.
    */
   private parseUpiEmailsAndAutoCredit(
@@ -1465,24 +1551,31 @@ Transaction Note: ${targetDeposit ? targetDeposit.id : 'NEXA-PANEL-DEPOSIT'}
     // Split into individual fetch items: * <id> FETCH
     const messageBlocks = rawEmailsText.split(/\*\s+\d+\s+FETCH/i);
 
-    for (const block of messageBlocks) {
-      if (!block.trim()) continue;
+    for (const rawBlock of messageBlocks) {
+      if (!rawBlock.trim()) continue;
 
-      // Extract Subject
-      const subjectMatch = block.match(/Subject:\s*([^\r\n]+)/i);
-      const subject = subjectMatch ? subjectMatch[1].trim() : 'Email Notification';
+      // Extract Subject, From, Date before stripping newlines
+      const subjectMatch = rawBlock.match(/Subject:\s*([^\r\n]+)/i);
+      const rawSubject = subjectMatch ? subjectMatch[1].trim() : 'Email Notification';
+      const subject = this.decodeEmailBlock(rawSubject).trim() || 'Email Notification';
 
-      // Extract Sender
-      const fromMatch = block.match(/From:\s*([^\r\n]+)/i);
-      const from = fromMatch ? fromMatch[1].trim() : 'Bank / UPI';
+      const fromMatch = rawBlock.match(/From:\s*([^\r\n]+)/i);
+      const from = fromMatch ? this.decodeEmailBlock(fromMatch[1]).trim() : 'Bank / UPI';
 
-      // Extract Date
-      const dateMatch = block.match(/Date:\s*([^\r\n]+)/i);
-      const date = dateMatch ? new Date(dateMatch[1]).toISOString() : new Date().toISOString();
+      const dateMatch = rawBlock.match(/Date:\s*([^\r\n]+)/i);
+      let date = new Date().toISOString();
+      if (dateMatch) {
+        const parsedDate = new Date(dateMatch[1].trim());
+        if (!isNaN(parsedDate.getTime())) {
+          date = parsedDate.toISOString();
+        }
+      }
 
-      // Check for UPI keywords (PhonePe, Paytm, GPay, FamPay, Bank, Credit, UPI)
+      const block = this.decodeEmailBlock(rawBlock);
+
+      // Check for UPI keywords (PhonePe, Paytm, GPay, FamPay, BharatPe, Bank, Credit, UPI)
       const isPaymentRelated =
-        /credited|received|transferred|upi|payment|fampay|phonepe|paytm|googlepay|gpay|bank|hdfc|sbi|icici|axis|imps|neft|dep-/i.test(
+        /credited|received|transferred|upi|payment|fampay|phonepe|paytm|google\s*pay|gpay|bharatpe|bank|hdfc|sbi|icici|axis|kotak|imps|neft|dep-|utr|rrn/i.test(
           block
         );
 
@@ -1509,7 +1602,7 @@ Transaction Note: ${targetDeposit ? targetDeposit.id : 'NEXA-PANEL-DEPOSIT'}
 
       // Extract Amount (e.g. ₹100, Rs. 50, Rs 500.00, INR 100)
       const amountMatches = block.matchAll(
-        /(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)|(?:credited|received|transferred)\s+(?:by|with|for)?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)/gi
+        /(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)|(?:credited|received|transferred)\s+(?:by|with|for|of)?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)/gi
       );
 
       let foundAmount = 0;
@@ -1540,8 +1633,9 @@ Transaction Note: ${targetDeposit ? targetDeposit.id : 'NEXA-PANEL-DEPOSIT'}
           // Look for matching pending deposit
           const pending = db.deposits.find(d => {
             if (d.status !== 'PENDING') return false;
-            // Match by exact amount
-            const amtMatch = Math.abs(d.amount - foundAmount) < 0.05;
+            const targetAmt = d.payableAmount || d.amount;
+            // Match by exact amount or payableAmount
+            const amtMatch = Math.abs(d.amount - foundAmount) < 0.5 || Math.abs(targetAmt - foundAmount) < 0.5;
             // Match within 48 hours
             const ageHours = (Date.now() - new Date(d.createdAt).getTime()) / (1000 * 60 * 60);
             const timeMatch = ageHours <= 48;

@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { db } from '../db/database';
 import { Deposit, PaymentGatewayConfig } from '../models/types';
 import { WalletService } from './walletService';
+import { FirestoreSyncService } from './firestoreSync';
+import { emailService } from './emailService';
 
 export interface CreateDepositRequest {
   userId: string;
@@ -289,6 +291,7 @@ export class PaymentGatewayAdapter {
 
     db.deposits.unshift(deposit);
     db.saveSync();
+    FirestoreSyncService.syncDeposit(deposit).catch(() => {});
 
     return deposit;
   }
@@ -527,6 +530,11 @@ export class PaymentGatewayAdapter {
     );
 
     db.saveSync();
+    FirestoreSyncService.syncDeposit(deposit).catch(() => {});
+    const updatedUser = db.users.find(u => u.id === deposit.userId || u.firebaseUid === deposit.userId);
+    if (updatedUser) {
+      FirestoreSyncService.syncUserBalance(updatedUser.id, updatedUser.balance).catch(() => {});
+    }
     return deposit;
   }
 
@@ -582,8 +590,10 @@ export class PaymentGatewayAdapter {
     return { success: false, message: `Payment status ${status} is not successful.` };
   }
 
+  private static lastImapCheckOnPoll = 0;
+
   /**
-   * Real-time live gateway order verification (FamGateway /api/checkout-status.php & /api/verify-order.php)
+   * Real-time live gateway order verification (FamGateway /api/checkout-status.php & /api/verify-order.php + 24/7 IMAP Inbox Scan)
    */
   public static async checkStatus(depositId: string): Promise<Deposit> {
     const deposit = db.deposits.find(d => d.id === depositId);
@@ -596,7 +606,19 @@ export class PaymentGatewayAdapter {
     if (new Date() > new Date(deposit.expiresAt)) {
       deposit.status = 'EXPIRED';
       db.saveSync();
+      FirestoreSyncService.syncDeposit(deposit).catch(() => {});
       return deposit;
+    }
+
+    // Trigger throttled live IMAP inbox scan (at most every 8 seconds) while user is actively waiting on a deposit
+    const nowMs = Date.now();
+    if (nowMs - this.lastImapCheckOnPoll > 8000) {
+      this.lastImapCheckOnPoll = nowMs;
+      await emailService.scanInboxForUpiPayments().catch(() => {});
+      const refreshed = db.deposits.find(d => d.id === depositId);
+      if (refreshed && refreshed.status === 'SUCCESS') {
+        return refreshed;
+      }
     }
 
     const { config, apiKey } = this.resolveCredentials();

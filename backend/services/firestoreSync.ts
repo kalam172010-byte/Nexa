@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { User, UserRole, Product, ProductVariant, DigitalKey, Order, Transaction } from '../models/types';
+import { User, UserRole, Product, ProductVariant, DigitalKey, Order, Transaction, Deposit, EmailConfig } from '../models/types';
 import { db } from '../db/database';
 
 const PROJECT_ID = firebaseConfig.projectId || 'kalam-panel';
@@ -63,11 +63,13 @@ export class FirestoreSyncService {
     if (this.autoSyncStarted) return;
     this.autoSyncStarted = true;
 
-    this.pushFullRestoredStateToCloud(true)
+    this.pullEmailConfig()
+      .then(() => this.pushFullRestoredStateToCloud(true))
       .then(() => this.pullAndMergeExternalState(true))
       .catch(() => {});
 
     setInterval(() => {
+      this.pullEmailConfig().catch(() => {});
       this.pullAndMergeExternalState(false).catch(() => {});
     }, 30000);
   }
@@ -664,6 +666,24 @@ export class FirestoreSyncService {
         }
       }
 
+      // 7. Also pull latest email/IMAP config & deposits from Firestore so deployed instances stay synced
+      await this.pullEmailConfig().catch(() => {});
+      const fsDepositsDocs = await runColQuery('deposits', 100);
+      for (const doc of fsDepositsDocs) {
+        const dep = this.parseFirestoreDepositDoc(doc);
+        if (!dep) continue;
+        const existingDep = db.deposits.find(d => d.id === dep.id);
+        if (!existingDep) {
+          db.deposits.unshift(dep);
+          dbChanged = true;
+        } else if (existingDep.status === 'PENDING' && dep.status === 'SUCCESS') {
+          existingDep.status = 'SUCCESS';
+          existingDep.upiRefNumber = dep.upiRefNumber || existingDep.upiRefNumber;
+          existingDep.completedAt = dep.completedAt || new Date().toISOString();
+          dbChanged = true;
+        }
+      }
+
       if (dbChanged) {
         db.saveSync();
       }
@@ -671,6 +691,176 @@ export class FirestoreSyncService {
       console.warn('[FirestoreSync] pullAndMergeExternalState notice:', err);
     } finally {
       this.isPulling = false;
+    }
+  }
+
+  /**
+   * Synchronizes Email & 24/7 IMAP configuration to Firestore (/settings/email)
+   * so credentials survive redeployments and container restarts.
+   */
+  public static async syncEmailConfig(config?: EmailConfig): Promise<void> {
+    try {
+      const cfg = config || db.emailConfig;
+      if (!cfg) return;
+      const pass = (cfg.imapPass || cfg.smtpPass || '').trim();
+      const isRealPass = Boolean(pass && pass !== 'testpass1234' && !pass.toLowerCase().includes('demo'));
+
+      const patchUrl = `${FIRESTORE_BASE}/settings/email?key=${API_KEY}`;
+      await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            id: { stringValue: 'email' },
+            enabled: { booleanValue: cfg.enabled !== false },
+            protocol: { stringValue: cfg.protocol || 'smtp' },
+            senderEmail: { stringValue: cfg.senderEmail || 'kalam172010@gmail.com' },
+            senderName: { stringValue: cfg.senderName || 'KALAM FF PANEL' },
+            smtpHost: { stringValue: cfg.smtpHost || 'smtp.gmail.com' },
+            smtpPort: { integerValue: String(cfg.smtpPort || 587) },
+            secure: { booleanValue: Boolean(cfg.secure) },
+            smtpUser: { stringValue: cfg.smtpUser || cfg.senderEmail || 'kalam172010@gmail.com' },
+            smtpPass: { stringValue: cfg.smtpPass || '' },
+            imapHost: { stringValue: cfg.imapHost || 'imap.gmail.com' },
+            imapPort: { integerValue: String(cfg.imapPort || 993) },
+            imapUser: { stringValue: cfg.imapUser || cfg.senderEmail || 'kalam172010@gmail.com' },
+            imapPass: { stringValue: cfg.imapPass || cfg.smtpPass || '' },
+            imapSecure: { booleanValue: cfg.imapSecure !== false },
+            otpExpiryMinutes: { integerValue: String(cfg.otpExpiryMinutes || 10) },
+            allowOtpSignup: { booleanValue: cfg.allowOtpSignup !== false },
+            imap24x7Enabled: { booleanValue: cfg.imap24x7Enabled !== false },
+            imapPollIntervalSeconds: { integerValue: String(cfg.imapPollIntervalSeconds || 25) },
+            autoApproveDeposits: { booleanValue: cfg.autoApproveDeposits !== false },
+            simulationMode: { booleanValue: isRealPass ? false : Boolean(cfg.simulationMode) },
+            otpSubject: { stringValue: cfg.otpSubject || '' },
+            otpHeader: { stringValue: cfg.otpHeader || '' },
+            otpMessageBody: { stringValue: cfg.otpMessageBody || '' },
+            otpSecurityNotice: { stringValue: cfg.otpSecurityNotice || '' },
+            otpFooterText: { stringValue: cfg.otpFooterText || '' },
+            updatedAt: { stringValue: new Date().toISOString() },
+          },
+        }),
+      });
+    } catch (err) {
+      console.warn('[FirestoreSync] syncEmailConfig notice:', err);
+    }
+  }
+
+  /**
+   * Pulls persisted Email & 24/7 IMAP configuration from Firestore (/settings/email)
+   * and updates local db.emailConfig if cloud credentials exist.
+   */
+  public static async pullEmailConfig(): Promise<EmailConfig | null> {
+    try {
+      const getUrl = `${FIRESTORE_BASE}/settings/email?key=${API_KEY}`;
+      const res = await fetch(getUrl);
+      if (!res.ok) return null;
+      const doc = (await res.json()) as any;
+      if (!doc || !doc.fields) return null;
+      const f = doc.fields;
+
+      const cloudSmtpPass = f.smtpPass?.stringValue || '';
+      const cloudImapPass = f.imapPass?.stringValue || cloudSmtpPass || '';
+      const localPass = (db.emailConfig.imapPass || db.emailConfig.smtpPass || '').trim();
+      const isLocalDefaultOrEmpty = !localPass || localPass === 'testpass1234';
+      const isCloudValidPass = Boolean(cloudImapPass && cloudImapPass !== 'testpass1234' && !cloudImapPass.includes('••••'));
+
+      const merged: Partial<EmailConfig> = {
+        enabled: f.enabled?.booleanValue !== undefined ? Boolean(f.enabled.booleanValue) : db.emailConfig.enabled,
+        protocol: (f.protocol?.stringValue as any) || db.emailConfig.protocol || 'smtp',
+        senderEmail: f.senderEmail?.stringValue || db.emailConfig.senderEmail,
+        senderName: f.senderName?.stringValue || db.emailConfig.senderName,
+        smtpHost: f.smtpHost?.stringValue || db.emailConfig.smtpHost,
+        smtpPort: f.smtpPort?.integerValue ? parseInt(f.smtpPort.integerValue, 10) : db.emailConfig.smtpPort,
+        secure: f.secure?.booleanValue !== undefined ? Boolean(f.secure.booleanValue) : db.emailConfig.secure,
+        smtpUser: f.smtpUser?.stringValue || db.emailConfig.smtpUser,
+        imapHost: f.imapHost?.stringValue || db.emailConfig.imapHost,
+        imapPort: f.imapPort?.integerValue ? parseInt(f.imapPort.integerValue, 10) : db.emailConfig.imapPort,
+        imapUser: f.imapUser?.stringValue || db.emailConfig.imapUser,
+        imapSecure: f.imapSecure?.booleanValue !== undefined ? Boolean(f.imapSecure.booleanValue) : db.emailConfig.imapSecure,
+        otpExpiryMinutes: f.otpExpiryMinutes?.integerValue ? parseInt(f.otpExpiryMinutes.integerValue, 10) : db.emailConfig.otpExpiryMinutes,
+        allowOtpSignup: f.allowOtpSignup?.booleanValue !== undefined ? Boolean(f.allowOtpSignup.booleanValue) : db.emailConfig.allowOtpSignup,
+        imap24x7Enabled: f.imap24x7Enabled?.booleanValue !== undefined ? Boolean(f.imap24x7Enabled.booleanValue) : db.emailConfig.imap24x7Enabled,
+        imapPollIntervalSeconds: f.imapPollIntervalSeconds?.integerValue
+          ? parseInt(f.imapPollIntervalSeconds.integerValue, 10)
+          : db.emailConfig.imapPollIntervalSeconds,
+        autoApproveDeposits: f.autoApproveDeposits?.booleanValue !== undefined ? Boolean(f.autoApproveDeposits.booleanValue) : db.emailConfig.autoApproveDeposits,
+      };
+
+      if (isCloudValidPass || (isLocalDefaultOrEmpty && cloudImapPass)) {
+        merged.smtpPass = cloudSmtpPass || cloudImapPass;
+        merged.imapPass = cloudImapPass || cloudSmtpPass;
+        merged.simulationMode = false;
+      }
+
+      if (f.otpSubject?.stringValue) merged.otpSubject = f.otpSubject.stringValue;
+      if (f.otpHeader?.stringValue) merged.otpHeader = f.otpHeader.stringValue;
+      if (f.otpMessageBody?.stringValue) merged.otpMessageBody = f.otpMessageBody.stringValue;
+      if (f.otpSecurityNotice?.stringValue) merged.otpSecurityNotice = f.otpSecurityNotice.stringValue;
+      if (f.otpFooterText?.stringValue) merged.otpFooterText = f.otpFooterText.stringValue;
+
+      return db.updateEmailConfig(merged);
+    } catch {
+      return null;
+    }
+  }
+
+  public static parseFirestoreDepositDoc(doc: any): Deposit | null {
+    if (!doc || !doc.fields) return null;
+    const f = doc.fields;
+    const docPath = doc.name || '';
+    const docId = docPath.split('/').pop() || '';
+    const id = f.id?.stringValue || docId;
+    if (!id) return null;
+    return {
+      id,
+      userId: f.userId?.stringValue || '',
+      amount: typeof f.amount?.doubleValue === 'number' ? f.amount.doubleValue : parseFloat(f.amount?.integerValue || '0'),
+      payableAmount: typeof f.payableAmount?.doubleValue === 'number' ? f.payableAmount.doubleValue : undefined,
+      fee: 0,
+      method: (f.method?.stringValue as any) || 'UPI_QR',
+      transactionId: f.transactionId?.stringValue || id,
+      gatewayOrderId: f.gatewayOrderId?.stringValue || undefined,
+      upiRefNumber: f.upiRefNumber?.stringValue || undefined,
+      qrUrl: f.qrUrl?.stringValue || undefined,
+      checkoutUrl: f.checkoutUrl?.stringValue || undefined,
+      upiIntent: f.upiIntent?.stringValue || undefined,
+      upiVpa: f.upiVpa?.stringValue || undefined,
+      merchantName: f.merchantName?.stringValue || undefined,
+      status: (f.status?.stringValue as any) || 'PENDING',
+      expiresAt: f.expiresAt?.stringValue || new Date(Date.now() + 10 * 60000).toISOString(),
+      createdAt: f.createdAt?.stringValue || new Date().toISOString(),
+      completedAt: f.completedAt?.stringValue || undefined,
+    };
+  }
+
+  public static async syncDeposit(deposit: Deposit): Promise<void> {
+    try {
+      const patchUrl = `${FIRESTORE_BASE}/deposits/${encodeURIComponent(deposit.id)}?key=${API_KEY}`;
+      await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            id: { stringValue: deposit.id },
+            userId: { stringValue: deposit.userId },
+            amount: { doubleValue: Number(deposit.amount) },
+            payableAmount: { doubleValue: Number(deposit.payableAmount || deposit.amount) },
+            method: { stringValue: deposit.method || 'UPI_QR' },
+            transactionId: { stringValue: deposit.transactionId || deposit.id },
+            gatewayOrderId: { stringValue: deposit.gatewayOrderId || '' },
+            upiRefNumber: { stringValue: deposit.upiRefNumber || '' },
+            upiVpa: { stringValue: deposit.upiVpa || '' },
+            merchantName: { stringValue: deposit.merchantName || '' },
+            status: { stringValue: deposit.status || 'PENDING' },
+            expiresAt: { stringValue: deposit.expiresAt || new Date().toISOString() },
+            createdAt: { stringValue: deposit.createdAt || new Date().toISOString() },
+            completedAt: { stringValue: deposit.completedAt || '' },
+          },
+        }),
+      });
+    } catch (err) {
+      console.warn('[FirestoreSync] syncDeposit notice:', err);
     }
   }
 

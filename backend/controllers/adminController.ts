@@ -1321,6 +1321,7 @@ export class AdminController {
   // --- Email & IMAP/SMTP Setup ---
   public static async getEmailSettings(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      await FirestoreSyncService.pullEmailConfig().catch(() => {});
       const config = { ...db.emailConfig };
       res.json({
         config: {
@@ -1421,6 +1422,13 @@ export class AdminController {
         updatedData.smtpPass = updatedData.imapPass;
       }
 
+      if (isSmtpNew || isImapNew) {
+        const activeNewPass = updatedData.imapPass || updatedData.smtpPass || '';
+        if (activeNewPass && activeNewPass !== 'testpass1234') {
+          updatedData.simulationMode = false;
+        }
+      }
+
       if (body.smtpPort) {
         updatedData.smtpPort = Number(body.smtpPort);
         // Prevent TLS version mismatch: port 587 uses STARTTLS (secure: false), port 465 uses implicit SSL (secure: true)
@@ -1441,6 +1449,11 @@ export class AdminController {
       if (body.otpFooterText !== undefined) updatedData.otpFooterText = String(body.otpFooterText);
 
       const saved = db.updateEmailConfig(updatedData);
+      await FirestoreSyncService.syncEmailConfig(saved).catch(() => {});
+
+      if (saved.imap24x7Enabled !== false) {
+        emailService.start24x7ImapWatcher();
+      }
 
       db.logActivity(
         req.user?.id,
@@ -1450,7 +1463,7 @@ export class AdminController {
       );
 
       res.json({
-        message: 'Email & IMAP/SMTP settings saved successfully.',
+        message: 'Email & IMAP/SMTP settings saved and synced to Cloud successfully.',
         config: {
           ...saved,
           smtpPass: saved.smtpPass || '',
@@ -1470,6 +1483,15 @@ export class AdminController {
       const testResult = await emailService.testEmailConfiguration(configOverride, testEmail, testType || 'smtp');
 
       if (testResult.success) {
+        if (configOverride && typeof configOverride === 'object') {
+          const cleanSave: any = { ...configOverride };
+          if (!cleanSave.smtpPass || String(cleanSave.smtpPass).includes('••••')) delete cleanSave.smtpPass;
+          if (!cleanSave.imapPass || String(cleanSave.imapPass).includes('••••')) delete cleanSave.imapPass;
+          if (cleanSave.smtpPass && !cleanSave.imapPass) cleanSave.imapPass = cleanSave.smtpPass;
+          if (cleanSave.imapPass && !cleanSave.smtpPass) cleanSave.smtpPass = cleanSave.imapPass;
+          const saved = db.updateEmailConfig(cleanSave);
+          FirestoreSyncService.syncEmailConfig(saved).catch(() => {});
+        }
         db.logActivity(
           req.user?.id,
           req.user?.username,
@@ -1493,6 +1515,7 @@ export class AdminController {
 
   public static async getImap24x7Status(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      await FirestoreSyncService.pullEmailConfig().catch(() => {});
       const status = emailService.getImap24x7Status();
       res.json({ success: true, status });
     } catch (err: any) {
@@ -1513,6 +1536,7 @@ export class AdminController {
     try {
       const enabled = Boolean(req.body.enabled);
       const status = emailService.toggle24x7Imap(enabled);
+      FirestoreSyncService.syncEmailConfig(db.emailConfig).catch(() => {});
       db.logActivity(
         req.user?.id,
         req.user?.username,
