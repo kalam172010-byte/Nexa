@@ -1720,10 +1720,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       }
       saveCachedKeys([...newKeyRecords, ...getCachedKeys()]);
 
+      const buyerEmail = (bodyObj.email || storedUser?.email || '').trim().toLowerCase();
       const order = {
         id: orderId,
         userId: storedUser?.id || 'USR-KALAM-172010',
-        userEmail: storedUser?.email ? String(storedUser.email).toLowerCase() : undefined,
+        userEmail: buyerEmail || undefined,
         apiKey: storedUser?.apiKey,
         productId: matchedProd?.id,
         variantId: matchedVar?.id,
@@ -1746,22 +1747,35 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       return {
         message: 'Purchase successful! This Key Buyed by Web.',
         order,
+        receiptEmailSent: false,
+        receiptEmailAddress: buyerEmail || undefined,
         deliveredKey: {
           id: newKeyRecords[0]?.id,
+          orderId,
           keyCode: generatedKeys[0],
           durationLabel: order.durationLabel,
           expiresAt: newKeyRecords[0]?.expiresAt,
           productName: order.productName,
+          gameName: matchedProd?.game || 'FREEFIRE',
+          pricePaid: total,
+          receiptEmailSent: false,
+          receiptEmailAddress: buyerEmail || undefined,
           purchaseSource: 'WEB',
           purchaseSourceLabel: 'Buy from Website',
         },
         key: {
           id: newKeyRecords[0]?.id,
+          orderId,
           keyCode: generatedKeys.join('\n'),
           keys: generatedKeys,
           quantity: qty,
           productName: order.productName,
+          gameName: matchedProd?.game || 'FREEFIRE',
           durationLabel: order.durationLabel,
+          pricePaid: total,
+          expiresAt: newKeyRecords[0]?.expiresAt,
+          receiptEmailSent: false,
+          receiptEmailAddress: buyerEmail || undefined,
           purchaseSource: 'WEB',
           purchaseSourceLabel: 'Buy from Website',
           updateFileUrl: matchedProd?.updateFileUrl,

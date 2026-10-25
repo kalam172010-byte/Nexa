@@ -107,19 +107,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (rawCached) {
         const parsedCached = JSON.parse(rawCached);
         if (Array.isArray(parsedCached)) {
-          const updatedCached = parsedCached.map((u: any) =>
-            u.id === userData.id || (u.email && userData.email && u.email.toLowerCase() === userData.email.toLowerCase())
-              ? { ...u, balance: userData.balance, apiKey: (userData as any).apiKey || u.apiKey }
-              : u
-          );
+          let found = false;
+          const updatedCached = parsedCached.map((u: any) => {
+            if (
+              u.id === userData.id ||
+              (u.email && userData.email && u.email.toLowerCase() === userData.email.toLowerCase())
+            ) {
+              found = true;
+              return { ...u, ...userData, balance: userData.balance, apiKey: (userData as any).apiKey || u.apiKey };
+            }
+            return u;
+          });
+          if (!found) {
+            updatedCached.push(userData);
+          }
           localStorage.setItem('nexa_cached_users', JSON.stringify(updatedCached));
         }
+      } else {
+        localStorage.setItem('nexa_cached_users', JSON.stringify([userData]));
       }
     } catch {}
     localStorage.setItem('nexa_auth_token', userToken);
     localStorage.setItem('nexa_user_data', JSON.stringify(userData));
     setToken(userToken);
     setUser(userData);
+
+    // Sync user profile directly to Firestore for instant live Admin Panel updates
+    if (userData?.id) {
+      try {
+        const userRef = doc(db, 'users', userData.id);
+        setDoc(
+          userRef,
+          {
+            id: userData.id,
+            username: userData.username || 'user',
+            email: userData.email || '',
+            role: userData.role || 'USER',
+            balance: typeof userData.balance === 'number' ? userData.balance : 0,
+            apiKey: (userData as any).apiKey || '',
+            referralCode: userData.referralCode || `NX${userData.id.slice(0, 4).toUpperCase()}`,
+            isBanned: Boolean(userData.isBanned),
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        ).catch(() => {});
+      } catch {}
+    }
   }, []);
 
   const clearUserSession = useCallback(() => {

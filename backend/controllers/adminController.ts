@@ -92,9 +92,19 @@ export class AdminController {
       const { search } = req.query;
       let users = db.users.map(({ passwordHash: _, ...safeUser }) => {
         const fullUser = db.users.find(u => u.id === safeUser.id);
-        const userOrders = db.orders.filter(o => o.userId === safeUser.id);
-        const userDeposits = db.deposits.filter(d => d.userId === safeUser.id && d.status === 'SUCCESS');
-        const userKeys = db.digitalKeys.filter(k => k.assignedUserId === safeUser.id);
+        const linkedIds = new Set<string>([safeUser.id, safeUser.firebaseUid || ''].filter(Boolean));
+        const cleanUserEmail = (safeUser.email || '').toLowerCase().trim();
+        const userOrders = db.orders.filter(
+          o =>
+            linkedIds.has(o.userId) ||
+            (cleanUserEmail && o.userEmail && o.userEmail.toLowerCase().trim() === cleanUserEmail)
+        );
+        const userDeposits = db.deposits.filter(d => linkedIds.has(d.userId) && d.status === 'SUCCESS');
+        const userKeys = db.digitalKeys.filter(
+          k =>
+            (k.assignedUserId && linkedIds.has(k.assignedUserId)) ||
+            (cleanUserEmail && k.assignedUserEmail && k.assignedUserEmail.toLowerCase().trim() === cleanUserEmail)
+        );
         const totalSpent = userOrders.reduce((sum, o) => sum + (o.pricePaid || 0), 0);
         const totalDeposited = userDeposits.reduce((sum, d) => sum + (d.amount || 0), 0);
 
@@ -796,12 +806,20 @@ export class AdminController {
   // Key Management & Bulk Import
   public static async getAllKeys(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      await FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
       const { variantId, productId, status } = req.query;
 
       let keys = db.digitalKeys.map(k => {
         const prod = db.products.find(p => p.id === k.productId);
         const variant = db.productVariants.find(v => v.id === k.variantId);
-        const assignedUser = k.assignedUserId ? db.users.find(u => u.id === k.assignedUserId) : null;
+        const assignedUser = k.assignedUserId
+          ? db.users.find(
+              u =>
+                u.id === k.assignedUserId ||
+                u.firebaseUid === k.assignedUserId ||
+                (k.assignedUserEmail && u.email.toLowerCase() === k.assignedUserEmail.toLowerCase())
+            )
+          : null;
 
         const order = db.orders.find(o => o.id === k.assignedOrderId || o.deliveredKeyId === k.id);
         const isApi =
@@ -811,9 +829,9 @@ export class AdminController {
 
         return {
           ...k,
-          productName: prod?.name || 'Unknown',
-          durationLabel: variant?.durationLabel || 'Unknown',
-          assignedUsername: assignedUser?.username,
+          productName: k.productName || prod?.name || 'Unknown',
+          durationLabel: k.durationLabel || variant?.durationLabel || 'Unknown',
+          assignedUsername: assignedUser?.username || (k.assignedUserEmail ? k.assignedUserEmail.split('@')[0] : undefined),
           purchaseSource: k.isUsed || k.assignedUserId ? (isApi ? ('API' as const) : ('WEB' as const)) : k.purchaseSource,
           purchaseSourceLabel:
             k.isUsed || k.assignedUserId
@@ -891,8 +909,9 @@ export class AdminController {
   // Deposits & Orders Management
   public static async getDeposits(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      await FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
       const deposits = db.deposits.map(d => {
-        const user = db.users.find(u => u.id === d.userId);
+        const user = db.users.find(u => u.id === d.userId || u.firebaseUid === d.userId);
         return {
           ...d,
           username: user?.username || 'Unknown',
@@ -919,12 +938,18 @@ export class AdminController {
 
   public static async getOrders(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      await FirestoreSyncService.pullAndMergeExternalState(false).catch(() => {});
       const orders = db.orders.map(o => {
-        const user = db.users.find(u => u.id === o.userId);
+        const user = db.users.find(
+          u =>
+            u.id === o.userId ||
+            u.firebaseUid === o.userId ||
+            (o.userEmail && u.email.toLowerCase() === o.userEmail.toLowerCase())
+        );
         const isApi = o.purchaseSource === 'API' || String(o.id || '').startsWith('API-ORD-');
         return {
           ...o,
-          username: user?.username || 'Unknown',
+          username: user?.username || (o.userEmail ? o.userEmail.split('@')[0] : 'Unknown'),
           purchaseSource: isApi ? ('API' as const) : ('WEB' as const),
           purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
         };

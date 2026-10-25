@@ -28,6 +28,7 @@ export class OrderController {
         durationLabel: bodyDurationLabel,
         durationHours: bodyDurationHours,
         price: bodyPrice,
+        email: bodyEmail,
       } = req.body;
       if (!variantId) {
         res.status(400).json({ error: 'Product duration variant ID is required.' });
@@ -122,7 +123,19 @@ export class OrderController {
 
       const dbUser = verification.user || user;
       const headerEmail = (req.headers['x-user-email'] as string | undefined)?.toLowerCase().trim();
-      const userEmail = (dbUser.email || user.email || headerEmail || '').toLowerCase().trim();
+      const candidateEmails = [
+        typeof bodyEmail === 'string' ? bodyEmail.toLowerCase().trim() : '',
+        headerEmail || '',
+        (dbUser.email || '').toLowerCase().trim(),
+        (user.email || '').toLowerCase().trim(),
+      ].filter(Boolean);
+      const realEmail = candidateEmails.find(
+        e => e.includes('@') && !e.endsWith('@user.local') && !e.endsWith('@firebase.user')
+      );
+      const userEmail = realEmail || candidateEmails[0] || '';
+      if (realEmail && (!dbUser.email || dbUser.email.endsWith('@user.local') || dbUser.email.endsWith('@firebase.user'))) {
+        dbUser.email = realEmail;
+      }
       const userApiKey = dbUser.apiKey || user.apiKey || '';
 
       // 5. Instant Key Allocation: Check local inventory first, then fast upstream or instant auto-generation
@@ -226,6 +239,7 @@ export class OrderController {
 
       const newBalance = verification.remainingBalance;
       FirestoreSyncService.syncUserBalance(dbUser.id, newBalance).catch(() => {});
+      FirestoreSyncService.syncUserProfile(dbUser).catch(() => {});
 
       const latestTx = db.transactions.find(t => t.referenceId === orderId);
       if (latestTx) {
@@ -251,8 +265,13 @@ export class OrderController {
       );
 
       // 9. Automatically dispatch Email Receipt to the buyer's email address
-      const recipientEmail = (userEmail || dbUser.email || '').trim().toLowerCase();
-      if (recipientEmail && recipientEmail.includes('@')) {
+      const recipientEmail = (realEmail || userEmail || dbUser.email || '').trim().toLowerCase();
+      const canSendEmail =
+        Boolean(recipientEmail && recipientEmail.includes('@')) &&
+        !recipientEmail.endsWith('@user.local') &&
+        !recipientEmail.endsWith('@firebase.user');
+
+      if (canSendEmail) {
         emailService
           .sendKeyPurchaseReceipt({
             toEmail: recipientEmail,
@@ -267,6 +286,14 @@ export class OrderController {
             purchaseSourceLabel: 'Buy from Website',
             expiresAt: deliveredKey.expiresAt,
             purchasedAt: deliveredKey.assignedAt || deliveredKey.createdAt,
+          })
+          .then(emailRes => {
+            db.logActivity(
+              dbUser.id,
+              dbUser.username,
+              'EMAIL_RECEIPT_SENT',
+              `Automatic email receipt (${orderId}) dispatched to ${recipientEmail}${emailRes.simulated ? ' [Simulated]' : ' [Live SMTP]'}`
+            );
           })
           .catch(err => {
             console.warn('[OrderController] Background email receipt notice:', err?.message || err);

@@ -73,7 +73,7 @@ export class AuthController {
       db.users.push(newUser);
       db.logActivity(newUser.id, newUser.username, 'USER_REGISTER', `New user registered via referral: ${referralCode || 'None'}`);
       db.save();
-      FirestoreSyncService.syncUserApiKey(newUser.id, newUser.apiKey!).catch(() => {});
+      FirestoreSyncService.syncUserProfile(newUser).catch(() => {});
 
       const token = generateToken(newUser);
       const { passwordHash, ...safeUser } = newUser;
@@ -132,7 +132,7 @@ export class AuthController {
         user.apiKey = `nexa_live_${crypto.randomBytes(16).toString('hex')}`;
         db.saveSync();
       }
-      FirestoreSyncService.syncUserApiKey(user.id, user.apiKey).catch(() => {});
+      FirestoreSyncService.syncUserProfile(user).catch(() => {});
 
       db.logActivity(user.id, user.username, 'USER_LOGIN', 'User logged in successfully');
       const token = generateToken(user);
@@ -305,7 +305,7 @@ export class AuthController {
         db.users.push(user);
         db.logActivity(user.id, user.username, 'FIREBASE_AUTH_SIGNUP', `Registered via Firebase: ${normalizedEmail}`);
         db.saveSync();
-        FirestoreSyncService.syncUserApiKey(user.id, user.apiKey!).catch(() => {});
+        FirestoreSyncService.syncUserProfile(user).catch(() => {});
       } else {
         if (isAdminEmail && user.role !== 'ADMIN' && user.role !== 'SUPER ADMIN') {
           user.role = 'ADMIN';
@@ -331,7 +331,7 @@ export class AuthController {
               user!.role = liveRole;
             }
             db.saveSync();
-            await FirestoreSyncService.syncUserApiKey(user!.id, user!.apiKey!);
+            await FirestoreSyncService.syncUserProfile(user!);
           } catch {}
         })();
       }
@@ -628,7 +628,7 @@ export class AuthController {
           db.users.push(user);
           db.logActivity(user.id, user.username, 'OTP_SIGNUP', `Registered via Email OTP: ${normalizedEmail}`);
           db.save();
-          FirestoreSyncService.syncUserApiKey(user.id, user.apiKey!).catch(() => {});
+          FirestoreSyncService.syncUserProfile(user).catch(() => {});
         } else {
           res.status(404).json({ error: 'No account registered with this email. Please sign up first.' });
           return;
@@ -644,6 +644,7 @@ export class AuthController {
           db.save();
         }
         db.logActivity(user.id, user.username, 'OTP_LOGIN', `Logged in via Email OTP: ${normalizedEmail}`);
+        FirestoreSyncService.syncUserProfile(user).catch(() => {});
       }
 
       const token = generateToken(user);

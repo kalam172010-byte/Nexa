@@ -58,9 +58,17 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const res = await api.createOrder(variant.id);
+      const res = await api.createOrder(variant.id, undefined, 1, {
+        productId: product.id,
+        productName: product.name,
+        game: product.game,
+        durationLabel: variant.durationLabel,
+        durationHours: variant.durationHours,
+        price,
+        email: user.email,
+      });
       updateBalanceLocally(res.newBalance);
-      onSuccess(res.key, res.newBalance);
+      onSuccess(res.key || res.deliveredKey, res.newBalance);
     } catch (err: any) {
       showToastError('Order Failed', err.message || 'Could not complete key purchase.');
     } finally {

@@ -769,11 +769,18 @@ export const AdminPage: React.FC = () => {
               for (const fu of liveFsUsers) {
                 const existing = existingMap.get(fu.id) || Array.from(existingMap.values()).find(u => u.email && fu.email && u.email.toLowerCase() === fu.email.toLowerCase());
                 if (existing) {
+                  const cleanUsername = fu.username && fu.username !== 'user' ? fu.username : existing.username;
+                  const cleanEmail = fu.email && !fu.email.endsWith('@user.local') ? fu.email : existing.email;
                   existingMap.set(existing.id, {
                     ...existing,
                     ...fu,
+                    username: cleanUsername,
+                    email: cleanEmail,
                     balance: typeof fu.balance === 'number' ? fu.balance : existing.balance,
                     apiKey: fu.apiKey || existing.apiKey,
+                    keysCount: Math.max(Number(existing.keysCount) || 0, Number(fu.keysCount) || 0),
+                    totalSpent: Math.max(Number(existing.totalSpent) || 0, Number(fu.totalSpent) || 0),
+                    totalDeposited: Math.max(Number(existing.totalDeposited) || 0, Number(fu.totalDeposited) || 0),
                   });
                 } else {
                   existingMap.set(fu.id, fu);
@@ -795,6 +802,72 @@ export const AdminPage: React.FC = () => {
       );
     } catch (e) {
       console.warn('[AdminPage] Real-time users listener setup note:', e);
+    }
+
+    let unsubscribeOrders: (() => void) | undefined;
+    let unsubscribeKeys: (() => void) | undefined;
+    try {
+      unsubscribeOrders = onSnapshot(
+        collection(db, 'orders'),
+        snapshot => {
+          const liveOrders: any[] = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const isApi = data.purchaseSource === 'API' || String(data.id || docSnap.id).startsWith('API-ORD-');
+            liveOrders.push({
+              ...data,
+              id: data.id || docSnap.id,
+              username: data.username || (data.userEmail ? String(data.userEmail).split('@')[0] : 'User'),
+              purchaseSource: isApi ? 'API' : 'WEB',
+              purchaseSourceLabel: isApi ? 'Buy from API' : 'Buy from Website',
+              createdAt: data.createdAt || new Date().toISOString(),
+            });
+          });
+          if (liveOrders.length > 0) {
+            setOrders(prev => {
+              const map = new Map<string, any>(prev.map(o => [o.id, o]));
+              for (const lo of liveOrders) {
+                const ex = map.get(lo.id);
+                map.set(lo.id, ex ? { ...ex, ...lo, username: ex.username !== 'Unknown' ? ex.username : lo.username } : lo);
+              }
+              return Array.from(map.values()).sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+            });
+          }
+        },
+        () => {}
+      );
+
+      unsubscribeKeys = onSnapshot(
+        collection(db, 'digitalKeys'),
+        snapshot => {
+          const liveKeys: any[] = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            liveKeys.push({
+              ...data,
+              id: data.id || docSnap.id,
+              createdAt: data.createdAt || new Date().toISOString(),
+            });
+          });
+          if (liveKeys.length > 0) {
+            setKeys(prev => {
+              const map = new Map<string, any>(prev.map(k => [k.id, k]));
+              for (const lk of liveKeys) {
+                const ex = map.get(lk.id);
+                map.set(lk.id, ex ? { ...ex, ...lk } : lk);
+              }
+              return Array.from(map.values()).sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+            });
+          }
+        },
+        () => {}
+      );
+    } catch (e) {
+      console.warn('[AdminPage] Real-time orders/keys listener note:', e);
     }
 
     let unsubscribeProds: (() => void) | undefined;
@@ -827,7 +900,7 @@ export const AdminPage: React.FC = () => {
       console.warn('[AdminPage] Real-time products listener setup note:', e);
     }
 
-    // Auto-poll admin data every 4 seconds so preview and deployed instances stay synchronized
+    // Auto-poll admin data every 4 seconds so all Admin Panel tabs update live in real-time
     const pollInterval = setInterval(() => {
       api.getAdminStats().then(statsRes => {
         if (statsRes && typeof statsRes === 'object' && !('error' in statsRes)) {
@@ -854,12 +927,38 @@ export const AdminPage: React.FC = () => {
           });
         }
       }).catch(() => {});
+
+      api.getAdminOrders().then(ordersRes => {
+        if (ordersRes?.orders && Array.isArray(ordersRes.orders)) {
+          setOrders(ordersRes.orders);
+        }
+      }).catch(() => {});
+
+      api.getAdminKeys().then(keysRes => {
+        if (keysRes?.keys && Array.isArray(keysRes.keys)) {
+          setKeys(keysRes.keys);
+        }
+      }).catch(() => {});
+
+      api.getAdminDeposits().then(depsRes => {
+        if (depsRes?.deposits && Array.isArray(depsRes.deposits)) {
+          setDeposits(depsRes.deposits);
+        }
+      }).catch(() => {});
+
+      api.getAdminLogs().then(logsRes => {
+        if (logsRes?.logs && Array.isArray(logsRes.logs)) {
+          setLogs(logsRes.logs);
+        }
+      }).catch(() => {});
     }, 4000);
 
     return () => {
       window.removeEventListener('nexa_products_updated', handleProdUpdate);
       window.removeEventListener('storage', handleProdUpdate);
       if (unsubscribeUsers) unsubscribeUsers();
+      if (unsubscribeOrders) unsubscribeOrders();
+      if (unsubscribeKeys) unsubscribeKeys();
       if (unsubscribeProds) unsubscribeProds();
       if (unsubscribeVars) unsubscribeVars();
       clearInterval(pollInterval);

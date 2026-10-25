@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   CheckCircle2,
@@ -47,12 +47,47 @@ export const KeySuccessModal: React.FC<KeySuccessModalProps> = ({ keyData, onClo
     keyData.receiptEmailAddress || user?.email || ''
   );
   const [showEmailInput, setShowEmailInput] = useState(false);
+  const autoSentRef = useRef(false);
   const { success: showToastSuccess, error: showToastError } = useToast();
 
   useEffect(() => {
     try {
       triggerConfetti();
     } catch (e) {}
+
+    // Automatically guarantee email receipt delivery when key is purchased
+    if (!autoSentRef.current) {
+      autoSentRef.current = true;
+      const targetEmail = (keyData.receiptEmailAddress || user?.email || '').trim();
+      const isValidRealEmail =
+        targetEmail.includes('@') &&
+        !targetEmail.endsWith('@user.local') &&
+        !targetEmail.endsWith('@firebase.user');
+
+      if (isValidRealEmail && !keyData.receiptEmailSent) {
+        api
+          .sendKeyReceipt(keyData.id || keyData.orderId || 'receipt', {
+            email: targetEmail,
+            keyCode: keyData.keyCode,
+            orderId: keyData.orderId,
+            productName: keyData.productName,
+            gameName: keyData.gameName,
+            durationLabel: keyData.durationLabel,
+            pricePaid: keyData.pricePaid,
+            purchaseSourceLabel:
+              keyData.purchaseSourceLabel ||
+              (keyData.purchaseSource === 'API' ? 'Buy from API' : 'Buy from Website'),
+            expiresAt: keyData.expiresAt,
+            assignedAt: keyData.assignedAt,
+          })
+          .then(res => {
+            if (res?.sentTo || targetEmail) {
+              setReceiptSentTo(res?.sentTo || targetEmail);
+            }
+          })
+          .catch(() => {});
+      }
+    }
   }, []);
 
   const handleCopy = () => {
