@@ -1482,6 +1482,7 @@ export class AdminController {
 
   public static async testEmailConnection(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      emailService.applyHeaderEmailConfigIfMissing(req.headers['x-saved-email-config'] as string | undefined);
       const { testEmail, configOverride, testType } = req.body;
       const testResult = await emailService.testEmailConfiguration(configOverride, testEmail, testType || 'smtp');
 
@@ -1518,6 +1519,7 @@ export class AdminController {
 
   public static async getImap24x7Status(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      emailService.applyHeaderEmailConfigIfMissing(req.headers['x-saved-email-config'] as string | undefined);
       await FirestoreSyncService.pullEmailConfig().catch(() => {});
       const status = emailService.getImap24x7Status();
       res.json({ success: true, status });
@@ -1528,6 +1530,7 @@ export class AdminController {
 
   public static async triggerImapScan(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      emailService.applyHeaderEmailConfigIfMissing(req.headers['x-saved-email-config'] as string | undefined);
       const result = await emailService.triggerImapScan();
       res.json(result);
     } catch (err: any) {

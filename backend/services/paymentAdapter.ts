@@ -595,7 +595,7 @@ export class PaymentGatewayAdapter {
   /**
    * Real-time live gateway order verification (FamGateway /api/checkout-status.php & /api/verify-order.php + 24/7 IMAP Inbox Scan)
    */
-  public static async checkStatus(depositId: string): Promise<Deposit> {
+  public static async checkStatus(depositId: string, skipImapTrigger: boolean = false): Promise<Deposit> {
     const deposit = db.deposits.find(d => d.id === depositId);
     if (!deposit) throw new Error('Deposit not found.');
 
@@ -612,7 +612,7 @@ export class PaymentGatewayAdapter {
 
     // Trigger throttled live IMAP inbox scan (at most every 8 seconds) while user is actively waiting on a deposit
     const nowMs = Date.now();
-    if (nowMs - this.lastImapCheckOnPoll > 8000) {
+    if (!skipImapTrigger && nowMs - this.lastImapCheckOnPoll > 8000) {
       this.lastImapCheckOnPoll = nowMs;
       await emailService.scanInboxForUpiPayments().catch(() => {});
       const refreshed = db.deposits.find(d => d.id === depositId);

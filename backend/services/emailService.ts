@@ -60,7 +60,7 @@ export class EmailService {
     pollIntervalSeconds: 25,
     host: 'imap.gmail.com',
     port: 993,
-    user: 'kalam172010@gmail.com',
+    user: 'kalamffpanel@gmail.com',
     recentScannedDeposits: [],
   };
 
@@ -92,7 +92,7 @@ export class EmailService {
    * is paired with `secure: true`.
    */
   private resolveSmtpSettings(rawConfig: EmailConfig) {
-    const senderEmail = (rawConfig.senderEmail || 'kalamkalam1234kd@gmail.com').trim();
+    let senderEmail = (rawConfig.senderEmail || 'kalamffpanel@gmail.com').trim();
     const senderName = (rawConfig.senderName || 'KALAM FF PANEL').trim();
     const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1].toLowerCase() : '';
 
@@ -115,18 +115,13 @@ export class EmailService {
     const port = Number(rawConfig.smtpPort) || (rawConfig.secure ? 465 : 587);
     const rawUser = (rawConfig.smtpUser || '').trim();
     // Always use senderEmail if smtpUser is blank OR still stuck on default while senderEmail changed
-    const smtpUser =
+    let smtpUser =
       !rawUser || (rawUser.toLowerCase() === 'kalamkalam1234kd@gmail.com' && senderEmail.toLowerCase() !== 'kalamkalam1234kd@gmail.com')
         ? senderEmail
         : rawUser;
 
     // Safely normalize passwords for ANY email provider:
-    // If it is a 16-character App Password (Gmail / Yahoo / Apple iCloud with or without spaces),
-    // strip the spacing and normalize case for Gmail.
-    // If it is a standard email password (cPanel, Webmail, Private SMTP, Outlook, Zoho, etc.),
-    // only strip enclosing quotes and leading/trailing whitespace so special chars, underscores (_),
-    // and hyphens (-) remain 100% intact!
-    const rawPass = (rawConfig.smtpPass || '').trim();
+    const rawPass = (rawConfig.smtpPass || rawConfig.imapPass || 'mprj bnhz iliz tqoc').trim();
     const noSpacePass = rawPass.replace(/[\s\u00a0]+/g, '');
     let smtpPass = rawPass;
 
@@ -134,6 +129,13 @@ export class EmailService {
       smtpPass = smtpHost.toLowerCase().includes('gmail') ? noSpacePass.toLowerCase() : noSpacePass;
     } else {
       smtpPass = rawPass.replace(/^["']+|["']+$/g, '').trim();
+    }
+
+    // Auto-heal email/password mismatch if using kalamffpanel@gmail.com's verified App Password
+    if (smtpPass.toLowerCase() === 'mprjbnhziliztqoc') {
+      senderEmail = 'kalamffpanel@gmail.com';
+      smtpUser = 'kalamffpanel@gmail.com';
+      smtpHost = 'smtp.gmail.com';
     }
 
     // Port 465 uses implicit SSL/TLS (secure: true).
@@ -826,7 +828,7 @@ export class EmailService {
       ...(overrideConfig || {}),
     };
 
-    const senderEmail = (config.senderEmail || 'kalam172010@gmail.com').trim();
+    const senderEmail = (config.senderEmail || 'kalamffpanel@gmail.com').trim();
     const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1].toLowerCase() : '';
     let host = (config.imapHost || 'imap.gmail.com').trim();
 
@@ -847,14 +849,14 @@ export class EmailService {
     const port = Number(config.imapPort) || 993;
     const secure = config.imapSecure !== false && port !== 143;
     const rawImapUser = (config.imapUser || '').trim();
-    const user =
+    let user =
       !rawImapUser || rawImapUser.toLowerCase().includes('kalamkalam1234kd') || rawImapUser.toLowerCase().includes('kk7953926')
         ? senderEmail
         : rawImapUser;
 
     let pass = (config.imapPass || config.smtpPass || '').trim();
     if (!pass || pass.includes('••••')) {
-      pass = db.emailConfig.imapPass || db.emailConfig.smtpPass || '';
+      pass = db.emailConfig.imapPass || db.emailConfig.smtpPass || 'mprj bnhz iliz tqoc';
     }
 
     const cleanPassword = (raw: string) => {
@@ -866,7 +868,13 @@ export class EmailService {
     };
 
     const imapPass = cleanPassword(pass);
-    const altSmtpPass = cleanPassword(config.smtpPass || db.emailConfig.smtpPass || '');
+    const altSmtpPass = cleanPassword(config.smtpPass || db.emailConfig.smtpPass || 'mprj bnhz iliz tqoc');
+
+    // Auto-heal email/password mismatch if using kalamffpanel@gmail.com's verified App Password
+    if (imapPass.toLowerCase() === 'mprjbnhziliztqoc' || altSmtpPass.toLowerCase() === 'mprjbnhziliztqoc') {
+      user = 'kalamffpanel@gmail.com';
+      host = 'imap.gmail.com';
+    }
 
     const isGmail = host.toLowerCase().includes('gmail') || user.toLowerCase().endsWith('@gmail.com');
     const effectivePass = imapPass || altSmtpPass;
@@ -1216,6 +1224,24 @@ export class EmailService {
       pass.toLowerCase().includes('demo') ||
       (isGmail && !isStandard16LetterAppPass && pass.toLowerCase().includes('test'));
 
+    // Always run real-time Gateway / UPI order verification for any PENDING deposits during the 24/7 loop!
+    let gatewayMatchedCount = 0;
+    const pendingDeposits = db.deposits.filter(d => d.status === 'PENDING');
+    if (pendingDeposits.length > 0 && autoApproveDeposits) {
+      for (const dep of pendingDeposits) {
+        try {
+          const checked = await PaymentGatewayAdapter.checkStatus(dep.id, true);
+          if (checked && checked.status === 'SUCCESS') {
+            gatewayMatchedCount += 1;
+            const utrVal = checked.upiRefNumber || checked.gatewayOrderId || checked.id;
+            if (!this.recentScannedDeposits.some(r => r.depositId === checked.id || r.utr === utrVal)) {
+              this.recordExternalUpiDeposit(utrVal, checked.amount, 'FamGateway / UPI Live Verification', checked.id);
+            }
+          }
+        } catch {}
+      }
+    }
+
     if (isTestPass || (simulationMode && isTestPass)) {
       // Execute Cloud-Safe Auto-Deposit Engine when no real IMAP App Password is set yet
       this.imapTelemetry.status = 'ACTIVE_24_7';
@@ -1225,24 +1251,12 @@ export class EmailService {
       this.imapTelemetry.diagnosticHint =
         '24/7 Cloud Auto-Deposit Engine active. Real-time UPI verification & webhook matching operational.';
 
-      // Check any pending deposits in database
-      const pendingDeposits = db.deposits.filter(d => d.status === 'PENDING');
-      let matchedCount = 0;
-      if (pendingDeposits.length > 0 && autoApproveDeposits) {
-        for (const dep of pendingDeposits) {
-          const ref = (dep as any).utr || dep.upiRefNumber;
-          if (ref && ref.length >= 10) {
-            PaymentGatewayAdapter.checkStatus(dep.id).catch(() => {});
-          }
-        }
-      }
-
       this.isScanningImap = false;
       return {
         success: true,
         message: '24/7 Cloud-Safe Auto-Deposit Engine active. Monitoring INBOX & UPI transactions 24/7.',
         scannedCount: Math.max(1, db.deposits.length),
-        matchedCount,
+        matchedCount: gatewayMatchedCount,
         results: this.recentScannedDeposits,
       };
     }
@@ -1251,6 +1265,9 @@ export class EmailService {
     this.lastScanStartTime = now;
     this.imapTelemetry.status = 'SCANNING';
     this.imapTelemetry.lastScanTime = new Date().toISOString();
+    this.imapTelemetry.host = host;
+    this.imapTelemetry.port = port;
+    this.imapTelemetry.user = user;
 
     return new Promise((resolve) => {
       let isResolved = false;
@@ -1258,7 +1275,7 @@ export class EmailService {
       let timer: any = null;
       let totalExists = 0;
       let rawFetchBuffer = '';
-      let matchedCount = 0;
+      let matchedCount = gatewayMatchedCount;
       let discoveredBatch: DiscoveredTransaction[] = [];
 
       const finishScan = (result: {
@@ -1363,7 +1380,7 @@ export class EmailService {
           if (isFetchFinished) {
             // Finished fetching messages, now parse UPI receipts!
             discoveredBatch = this.parseUpiEmailsAndAutoCredit(rawFetchBuffer, autoApproveDeposits);
-            matchedCount = discoveredBatch.filter(d => d.status === 'AUTO_CREDITED').length;
+            matchedCount = gatewayMatchedCount + discoveredBatch.filter(d => d.status === 'AUTO_CREDITED').length;
 
             // Merge into recent deposits feed (keep last 30)
             for (const item of discoveredBatch) {
@@ -1378,7 +1395,7 @@ export class EmailService {
 
             finishScan({
               success: true,
-              message: `24/7 IMAP scan completed. Scanned ${Math.min(20, totalExists)} recent messages (of ${totalExists} in INBOX), found ${discoveredBatch.length} payment receipts, auto-credited ${matchedCount} deposits!`,
+              message: `24/7 IMAP scan completed (${user}). Scanned ${Math.min(20, totalExists)} recent messages (of ${totalExists} in INBOX), found ${discoveredBatch.length} email receipts, auto-credited ${matchedCount} deposits!`,
               scannedCount: Math.min(20, totalExists),
               matchedCount,
               results: this.recentScannedDeposits,

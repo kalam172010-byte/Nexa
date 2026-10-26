@@ -409,13 +409,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('X-User-Role', String(storedUser.role));
   }
 
-  // Pass saved admin email/App Password header on email/OTP/order endpoints so backend self-heals if redeployed
+  // Pass saved admin email/App Password header on email/OTP/order/imap endpoints so backend self-heals if redeployed
   if (
     endpoint.includes('/auth/otp') ||
     endpoint.includes('/auth/forgot-password') ||
     endpoint.includes('/orders') ||
     endpoint.includes('/receipt') ||
-    endpoint.includes('/admin/settings/email')
+    endpoint.includes('/admin/settings/email') ||
+    endpoint.includes('/imap')
   ) {
     try {
       const dedicatedPass = (localStorage.getItem('nexa_saved_app_password') || '').trim();
@@ -425,19 +426,23 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const candidatePass =
         dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••')
           ? dedicatedPass
-          : String(parsedCfg?.imapPass || parsedCfg?.smtpPass || '').trim();
+          : String(parsedCfg?.imapPass || parsedCfg?.smtpPass || 'mprj bnhz iliz tqoc').trim();
       if (candidatePass && candidatePass !== 'testpass1234' && !candidatePass.includes('••••')) {
+        const isKalamFfPass = candidatePass.replace(/[\s\u00a0-]+/g, '').toLowerCase() === 'mprjbnhziliztqoc';
+        const resolvedSender = isKalamFfPass
+          ? 'kalamffpanel@gmail.com'
+          : dedicatedSender || parsedCfg?.senderEmail || 'kalamffpanel@gmail.com';
         headers.set(
           'X-Saved-Email-Config',
           JSON.stringify({
-            senderEmail: dedicatedSender || parsedCfg?.senderEmail || 'kalam172010@gmail.com',
+            senderEmail: resolvedSender,
             senderName: parsedCfg?.senderName || 'KALAM FF PANEL',
             smtpHost: parsedCfg?.smtpHost || 'smtp.gmail.com',
             smtpPort: parsedCfg?.smtpPort || 587,
-            smtpUser: dedicatedSender || parsedCfg?.smtpUser || parsedCfg?.senderEmail || 'kalam172010@gmail.com',
+            smtpUser: isKalamFfPass ? 'kalamffpanel@gmail.com' : resolvedSender,
             imapHost: parsedCfg?.imapHost || 'imap.gmail.com',
             imapPort: parsedCfg?.imapPort || 993,
-            imapUser: dedicatedSender || parsedCfg?.imapUser || parsedCfg?.senderEmail || 'kalam172010@gmail.com',
+            imapUser: isKalamFfPass ? 'kalamffpanel@gmail.com' : resolvedSender,
             smtpPass: candidatePass,
             imapPass: candidatePass,
           })
@@ -1255,21 +1260,23 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     if (endpoint.includes('/admin/settings/email') || endpoint.includes('/admin/email-settings')) {
       const dedicatedPass = (localStorage.getItem('nexa_saved_app_password') || '').trim();
       const validDedicatedPass =
-        dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••') ? dedicatedPass : '';
+        dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••')
+          ? dedicatedPass
+          : 'mprj bnhz iliz tqoc';
 
       const defaultEmailCfg = {
         enabled: true,
         protocol: 'smtp',
-        senderEmail: 'kalam172010@gmail.com',
+        senderEmail: 'kalamffpanel@gmail.com',
         senderName: 'KALAM FF PANEL',
         smtpHost: 'smtp.gmail.com',
         smtpPort: 587,
         secure: false,
-        smtpUser: 'kalam172010@gmail.com',
+        smtpUser: 'kalamffpanel@gmail.com',
         smtpPass: validDedicatedPass,
         imapHost: 'imap.gmail.com',
         imapPort: 993,
-        imapUser: 'kalam172010@gmail.com',
+        imapUser: 'kalamffpanel@gmail.com',
         imapPass: validDedicatedPass,
         imapSecure: true,
         otpExpiryMinutes: 10,
@@ -1282,10 +1289,18 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         const parsed = stored ? JSON.parse(stored) : {};
         if (parsed.smtpPass === 'testpass1234') parsed.smtpPass = '';
         if (parsed.imapPass === 'testpass1234') parsed.imapPass = '';
-        const finalPass = validDedicatedPass || parsed.smtpPass || parsed.imapPass || '';
+        const finalPass = validDedicatedPass || parsed.smtpPass || parsed.imapPass || 'mprj bnhz iliz tqoc';
+        const isKalamFfPass = finalPass.replace(/[\s\u00a0-]+/g, '').toLowerCase() === 'mprjbnhziliztqoc';
         const config = {
           ...defaultEmailCfg,
           ...parsed,
+          ...(isKalamFfPass
+            ? {
+                senderEmail: 'kalamffpanel@gmail.com',
+                smtpUser: 'kalamffpanel@gmail.com',
+                imapUser: 'kalamffpanel@gmail.com',
+              }
+            : {}),
           smtpPass: finalPass,
           imapPass: finalPass,
           hasSmtpPass: Boolean(finalPass),
@@ -1297,25 +1312,28 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         const prev = storedRaw ? JSON.parse(storedRaw) : defaultEmailCfg;
         if (prev.smtpPass === 'testpass1234') prev.smtpPass = '';
         if (prev.imapPass === 'testpass1234') prev.imapPass = '';
-        const nextSender = (bodyObj.senderEmail || prev.senderEmail || 'kalam172010@gmail.com').trim();
+        let nextSender = (bodyObj.senderEmail || prev.senderEmail || 'kalamffpanel@gmail.com').trim();
         const newSmtpPass =
           bodyObj.smtpPass && bodyObj.smtpPass !== 'testpass1234' && !String(bodyObj.smtpPass).includes('••••')
             ? String(bodyObj.smtpPass).trim()
-            : prev.smtpPass || validDedicatedPass || '';
+            : prev.smtpPass || validDedicatedPass || 'mprj bnhz iliz tqoc';
         const newImapPass =
           bodyObj.imapPass && bodyObj.imapPass !== 'testpass1234' && !String(bodyObj.imapPass).includes('••••')
             ? String(bodyObj.imapPass).trim()
-            : newSmtpPass || prev.imapPass || validDedicatedPass || '';
+            : newSmtpPass || prev.imapPass || validDedicatedPass || 'mprj bnhz iliz tqoc';
+        if (newSmtpPass.replace(/[\s\u00a0-]+/g, '').toLowerCase() === 'mprjbnhziliztqoc') {
+          nextSender = 'kalamffpanel@gmail.com';
+        }
         const merged = {
           ...prev,
           ...bodyObj,
           senderEmail: nextSender,
           smtpUser:
-            !bodyObj.smtpUser || bodyObj.smtpUser === prev.senderEmail || bodyObj.smtpUser.includes('kalamkalam1234kd')
+            !bodyObj.smtpUser || bodyObj.smtpUser === prev.senderEmail || bodyObj.smtpUser.includes('kalamkalam1234kd') || nextSender === 'kalamffpanel@gmail.com'
               ? nextSender
               : bodyObj.smtpUser,
           imapUser:
-            !bodyObj.imapUser || bodyObj.imapUser === prev.senderEmail || bodyObj.imapUser.includes('kalamkalam1234kd')
+            !bodyObj.imapUser || bodyObj.imapUser === prev.senderEmail || bodyObj.imapUser.includes('kalamkalam1234kd') || nextSender === 'kalamffpanel@gmail.com'
               ? nextSender
               : bodyObj.imapUser,
           smtpPass: newSmtpPass,

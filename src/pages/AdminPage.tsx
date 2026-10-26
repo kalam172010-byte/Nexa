@@ -222,10 +222,16 @@ export const AdminPage: React.FC = () => {
         const finalPass =
           dedicatedPass && dedicatedPass !== 'testpass1234' && !dedicatedPass.includes('••••')
             ? dedicatedPass
-            : parsed.smtpPass || parsed.imapPass || '';
+            : parsed.smtpPass || parsed.imapPass || 'mprj bnhz iliz tqoc';
+        const isKalamFfPass = finalPass.replace(/[\s\u00a0-]+/g, '').toLowerCase() === 'mprjbnhziliztqoc';
+        const resolvedEmail = isKalamFfPass
+          ? 'kalamffpanel@gmail.com'
+          : dedicatedSender || parsed.senderEmail || 'kalamffpanel@gmail.com';
         return {
           ...parsed,
-          senderEmail: dedicatedSender || parsed.senderEmail || 'kalam172010@gmail.com',
+          senderEmail: resolvedEmail,
+          smtpUser: isKalamFfPass ? 'kalamffpanel@gmail.com' : parsed.smtpUser || resolvedEmail,
+          imapUser: isKalamFfPass ? 'kalamffpanel@gmail.com' : parsed.imapUser || resolvedEmail,
           smtpPass: finalPass,
           imapPass: finalPass,
           hasSmtpPass: Boolean(finalPass),
@@ -236,17 +242,17 @@ export const AdminPage: React.FC = () => {
     return {
       enabled: true,
       protocol: 'smtp',
-      senderEmail: 'kalam172010@gmail.com',
+      senderEmail: 'kalamffpanel@gmail.com',
       senderName: 'KALAM FF PANEL',
       smtpHost: 'smtp.gmail.com',
       smtpPort: 587,
       secure: false,
-      smtpUser: 'kalam172010@gmail.com',
-      smtpPass: '',
+      smtpUser: 'kalamffpanel@gmail.com',
+      smtpPass: 'mprj bnhz iliz tqoc',
       imapHost: 'imap.gmail.com',
       imapPort: 993,
-      imapUser: 'kalam172010@gmail.com',
-      imapPass: '',
+      imapUser: 'kalamffpanel@gmail.com',
+      imapPass: 'mprj bnhz iliz tqoc',
       imapSecure: true,
       otpExpiryMinutes: 10,
       allowOtpSignup: true,
@@ -255,8 +261,8 @@ export const AdminPage: React.FC = () => {
       otpMessageBody: 'Use the 6-digit verification code below to log in to your {SITE_NAME} account:',
       otpSecurityNotice: '🔒 Security Notice: Never share this code with anyone, including staff. Our administrators will never ask for your OTP.',
       otpFooterText: 'Automated Gaming Reseller Infrastructure · Secure OTP Delivery',
-      hasSmtpPass: false,
-      hasImapPass: false,
+      hasSmtpPass: true,
+      hasImapPass: true,
     };
   });
   const [isSavingEmail, setIsSavingEmail] = useState(false);
@@ -747,6 +753,8 @@ export const AdminPage: React.FC = () => {
             ''
           ).trim();
           const serverPass = (finalEmailCfg.imapPass || finalEmailCfg.smtpPass || '').trim();
+          const activePass = serverPass || cachedPass || 'mprj bnhz iliz tqoc';
+          const isKalamFfPass = activePass.replace(/[\s\u00a0-]+/g, '').toLowerCase() === 'mprjbnhziliztqoc';
 
           if (
             cachedPass &&
@@ -754,10 +762,15 @@ export const AdminPage: React.FC = () => {
             !cachedPass.includes('••••') &&
             (!serverPass || serverPass === 'testpass1234')
           ) {
+            const resolvedSender = isKalamFfPass
+              ? 'kalamffpanel@gmail.com'
+              : dedicatedSender || cachedCfg.senderEmail || finalEmailCfg.senderEmail || 'kalamffpanel@gmail.com';
             finalEmailCfg = {
               ...finalEmailCfg,
               ...cachedCfg,
-              senderEmail: dedicatedSender || cachedCfg.senderEmail || finalEmailCfg.senderEmail || 'kalam172010@gmail.com',
+              senderEmail: resolvedSender,
+              smtpUser: isKalamFfPass ? 'kalamffpanel@gmail.com' : resolvedSender,
+              imapUser: isKalamFfPass ? 'kalamffpanel@gmail.com' : resolvedSender,
               smtpPass: cachedPass,
               imapPass: cachedPass,
               hasSmtpPass: true,
@@ -767,8 +780,14 @@ export const AdminPage: React.FC = () => {
             // Automatically heal freshly deployed backend with the saved credentials
             api.updateEmailSettings(finalEmailCfg).catch(() => {});
           } else {
-            finalEmailCfg.hasSmtpPass = Boolean(serverPass);
-            finalEmailCfg.hasImapPass = Boolean(serverPass);
+            if (isKalamFfPass) {
+              finalEmailCfg.senderEmail = 'kalamffpanel@gmail.com';
+              finalEmailCfg.smtpUser = 'kalamffpanel@gmail.com';
+              finalEmailCfg.imapUser = 'kalamffpanel@gmail.com';
+              localStorage.setItem('nexa_saved_sender_email', 'kalamffpanel@gmail.com');
+            }
+            finalEmailCfg.hasSmtpPass = Boolean(activePass);
+            finalEmailCfg.hasImapPass = Boolean(activePass);
           }
         } catch {}
         setEmailConfig((prev: any) => ({ ...prev, ...finalEmailCfg }));

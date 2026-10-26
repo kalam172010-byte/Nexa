@@ -96,14 +96,23 @@ export class Database {
           if (parsed.emailConfig.imapPass === 'testpass1234') {
             parsed.emailConfig.imapPass = '';
           }
-          const envPass = (process.env.IMAP_PASS || process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').trim();
-          if (envPass && !parsed.emailConfig.imapPass) {
+          const envPass = (process.env.IMAP_PASS || process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || 'mprj bnhz iliz tqoc').trim();
+          if (envPass && !parsed.emailConfig.imapPass && !parsed.emailConfig.smtpPass) {
             parsed.emailConfig.imapPass = envPass;
             parsed.emailConfig.smtpPass = envPass;
           }
           const activePass = (parsed.emailConfig.imapPass || parsed.emailConfig.smtpPass || '').trim();
+          const strippedPass = activePass.replace(/[\s\u00a0-]+/g, '').toLowerCase();
+          // Ensure verified kalamffpanel@gmail.com App Password is never paired with a mismatched Gmail address
+          if (strippedPass === 'mprjbnhziliztqoc') {
+            parsed.emailConfig.senderEmail = 'kalamffpanel@gmail.com';
+            parsed.emailConfig.smtpUser = 'kalamffpanel@gmail.com';
+            parsed.emailConfig.imapUser = 'kalamffpanel@gmail.com';
+          }
           parsed.emailConfig.hasSmtpPass = Boolean(activePass);
           parsed.emailConfig.hasImapPass = Boolean(activePass);
+          parsed.emailConfig.imap24x7Enabled = parsed.emailConfig.imap24x7Enabled !== false;
+          parsed.emailConfig.autoApproveDeposits = parsed.emailConfig.autoApproveDeposits !== false;
           if (activePass && !activePass.toLowerCase().includes('demo')) {
             parsed.emailConfig.simulationMode = false;
           }
@@ -235,17 +244,17 @@ export class Database {
     return {
       enabled: true,
       protocol: 'smtp',
-      senderEmail: 'kalam172010@gmail.com',
+      senderEmail: 'kalamffpanel@gmail.com',
       senderName: 'KALAM FF PANEL',
       smtpHost: 'smtp.gmail.com',
       smtpPort: 587,
       secure: false,
-      smtpUser: 'kalam172010@gmail.com',
-      smtpPass: '',
+      smtpUser: 'kalamffpanel@gmail.com',
+      smtpPass: 'mprj bnhz iliz tqoc',
       imapHost: 'imap.gmail.com',
       imapPort: 993,
-      imapUser: 'kalam172010@gmail.com',
-      imapPass: '',
+      imapUser: 'kalamffpanel@gmail.com',
+      imapPass: 'mprj bnhz iliz tqoc',
       imapSecure: true,
       otpExpiryMinutes: 10,
       allowOtpSignup: true,
@@ -473,7 +482,20 @@ export class Database {
     if (this.data.emailConfig.smtpPass === 'testpass1234') this.data.emailConfig.smtpPass = '';
     if (this.data.emailConfig.imapPass === 'testpass1234') this.data.emailConfig.imapPass = '';
 
-    const pass = (this.data.emailConfig.imapPass || this.data.emailConfig.smtpPass || '').trim();
+    let pass = (this.data.emailConfig.imapPass || this.data.emailConfig.smtpPass || '').trim();
+    if (!pass) {
+      pass = 'mprj bnhz iliz tqoc';
+      this.data.emailConfig.smtpPass = pass;
+      this.data.emailConfig.imapPass = pass;
+    }
+    const strippedPass = pass.replace(/[\s\u00a0-]+/g, '').toLowerCase();
+    // Auto-heal username mismatch when using kalamffpanel@gmail.com's App Password
+    if (strippedPass === 'mprjbnhziliztqoc') {
+      this.data.emailConfig.senderEmail = 'kalamffpanel@gmail.com';
+      this.data.emailConfig.smtpUser = 'kalamffpanel@gmail.com';
+      this.data.emailConfig.imapUser = 'kalamffpanel@gmail.com';
+    }
+
     (this.data.emailConfig as any).hasSmtpPass = Boolean(pass);
     (this.data.emailConfig as any).hasImapPass = Boolean(pass);
     if (pass && !pass.toLowerCase().includes('demo')) {
